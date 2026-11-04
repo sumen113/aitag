@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3ecdc">
+  <meta name="description" content="Tag Rush is a free online game of tag. Pick a character with its own power, jump into a lobby of up to 15 players and try not to be IT.">
+  <meta property="og:title" content="Tag Rush · free online tag">
+  <meta property="og:description" content="Eight characters, five arenas, up to 15 players. Don't be IT.">
+  <title>Tag Rush · free online tag</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/dm-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="is-site">
+
+  <div id="curtain" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><p id="curtainMsg" class="mono"></p></div>
+
+  <!-- =============================== SITE =============================== -->
+  <div id="site">
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="Tag Rush home">
+        <span class="brand-mark">IT</span><span class="brand-name">Tag Rush</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#cast">Characters</a><a href="#arenas">Arenas</a><a href="#how">How to play</a>
+      </nav>
+      <span class="live-pill"><i class="live-dot"></i><span id="onlineNav">–</span></span>
+    </header>
+
+    <main id="top">
+      <!-- ---------------------------- hero ---------------------------- -->
+      <section class="hero" id="play">
+        <div class="stickers" id="stickers" aria-hidden="true"></div>
+
+        <div class="hero-copy">
+          <p class="eyebrow"><span>Free</span><span>In your browser</span><span>Up to 15 players</span></p>
+          <h1 class="display" id="h1" aria-label="Don't be IT.">
+            <span class="h1-line" id="h1a">Don't be</span>
+            <span class="h1-it" id="h1b">IT.</span>
+          </h1>
+          <p class="lede">A fast game of tag with eight characters, each with a power that changes how you run, hide and chase. Pick a name, pick a fighter, go.</p>
+
+          <form id="joinForm" class="join card" autocomplete="off" novalidate>
+            <label for="name" class="mono">Your name</label>
+            <div class="field">
+              <input id="name" name="nickname" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Type your name" aria-describedby="formErr">
+              <span class="count mono" id="nameCount">0/14</span>
+            </div>
+            <p class="form-err" id="formErr" role="alert"></p>
+            <button type="submit" id="btnPlay" class="btn btn-primary magnetic">
+              <span class="btn-label">Play online</span>
+              <svg viewBox="0 0 24 24" class="btn-arrow" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+            <div class="bots-row">
+              <button type="button" id="btnBots" class="btn btn-ghost magnetic"><span class="btn-label">Practice vs bots</span></button>
+              <div class="seg" id="diff" role="radiogroup" aria-label="Bot difficulty">
+                <button type="button" role="radio" data-d="easy">Easy</button>
+                <button type="button" role="radio" data-d="normal">Normal</button>
+                <button type="button" role="radio" data-d="hard">Hard</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <aside class="stage card" id="stage" aria-label="Choose your character">
+          <div class="stage-view" id="stageView">
+            <div class="stage-dots"></div>
+            <svg class="ring" id="ring" viewBox="0 0 400 400" aria-hidden="true">
+              <defs><path id="ringPath" d="M200,200 m-170,0 a170,170 0 1,1 340,0 a170,170 0 1,1 -340,0"/></defs>
+              <text><textPath href="#ringPath" startOffset="0">RUN · DODGE · TAG · DON'T BE IT · RUN · DODGE · TAG · DON'T BE IT · RUN · DODGE · TAG · DON'T BE IT ·</textPath></text>
+            </svg>
+            <canvas id="preview" width="560" height="560"></canvas>
+            <span class="role-sticker mono" id="stRole">Skirmisher</span>
+            <div class="ab-sticker" id="abSticker"><span class="ab-ico" id="stIcon"></span><div><b id="stAb">Dash</b><small id="stCd">7s recharge</small></div></div>
+          </div>
+          <div class="stage-panel">
+            <div class="stage-head"><h2 id="stName">Ziggy the Fox</h2></div>
+            <p class="stage-desc" id="stDesc"></p>
+            <div class="picker" id="picker" role="radiogroup" aria-label="Character"></div>
+            <div class="swatch-row"><span class="mono">Colour</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Colour"></div></div>
+          </div>
+        </aside>
+      </section>
+
+      <!-- ---------------------------- marquee ---------------------------- -->
+      <div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
+
+      <!-- ---------------------------- cast ---------------------------- -->
+      <section class="section" id="cast">
+        <header class="section-head">
+          <p class="mono kicker">01 / Characters</p>
+          <h2 class="h2" data-split>Eight fighters.<br>Eight ways to dodge.</h2>
+          <p class="section-lede">Every character has one power on a cooldown. None is best — they trade speed, size and tricks. Learn yours, then learn how to beat the rest.</p>
+        </header>
+        <div class="cast-grid" id="castGrid"></div>
+      </section>
+
+      <!-- ---------------------------- arenas ---------------------------- -->
+      <section class="section dark" id="arenas">
+        <header class="section-head">
+          <p class="mono kicker">02 / Arenas</p>
+          <h2 class="h2" data-split>Five arenas.<br>New one every round.</h2>
+          <p class="section-lede">Mud slows you, ice won't let you stop, boost pads fling you across the map, and teleporters drop you behind the tagger. Use the terrain.</p>
+        </header>
+        <div class="arena-grid" id="arenaGrid"></div>
+      </section>
+
+      <!-- ---------------------------- how ---------------------------- -->
+      <section class="section" id="how">
+        <header class="section-head">
+          <p class="mono kicker">03 / How to play</p>
+          <h2 class="h2" data-split>Easy to learn.<br>Hard to stay un-IT.</h2>
+        </header>
+        <ol class="steps" id="steps">
+          <li class="step card"><span class="step-n">1</span><h3>One player is IT</h3><p>Touch someone and they become IT. The player you just tagged is protected for a moment so you can't be tagged right back.</p></li>
+          <li class="step card"><span class="step-n">2</span><h3>Every second counts</h3><p>You earn a point for every second you are <em>not</em> IT. A round lasts 90 seconds, then the next arena loads and everybody resets.</p></li>
+          <li class="step card"><span class="step-n">3</span><h3>Use your power</h3><p>Time your ability. Cooldowns are long on purpose; a good dodge is worth more than a panicked one.</p></li>
+        </ol>
+        <div class="controls card" id="controls">
+          <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="keys-label">or arrow keys to move</span></div>
+          <div><span class="keys"><kbd class="wide">Space</kbd></span><span class="keys-label">use your ability</span></div>
+          <div><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd></span><span class="keys-label">emotes</span></div>
+          <div><span class="keys"><kbd class="wide">Touch</kbd></span><span class="keys-label">drag left to move, tap the button</span></div>
+        </div>
+      </section>
+
+      <section class="final" id="final">
+        <h2 class="h2">Ready? Don't be IT.</h2>
+        <button class="btn btn-primary magnetic" id="btnTop"><span class="btn-label">Back to the lobby</span></button>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span class="brand-name">Tag Rush</span>
+      <span class="mono">Built with canvas, WebSockets &amp; GSAP</span>
+    </footer>
+  </div>
+
+  <!-- ================================ GAME ================================ -->
+  <div id="app" class="hidden">
+    <canvas id="game"></canvas>
+    <div id="vignette"></div>
+    <div id="flash"></div>
+
+    <div id="hud">
+      <div class="hud-tools card">
+        <button id="btnLeave" class="tool" aria-label="Leave game"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span>Leave</span></button>
+        <span class="tool-info mono" id="lobbyInfo"><b id="lobbyCount">1/15</b> <span id="lobbyLbl">players</span></span>
+        <span class="tool-info mono" id="pingChip"><span id="ping">--</span> ms</span>
+        <button id="btnMute" class="tool icon" aria-label="Toggle sound"></button>
+      </div>
+
+      <div class="hud-top">
+        <div id="timerBox" class="card"><span id="stateLbl" class="mono">Waiting</span><b id="timer">--</b></div>
+        <div id="role" class="role"></div>
+      </div>
+
+      <aside id="boardWrap" class="card">
+        <div class="board-head mono"><span id="mapName">Arena</span><span id="boardLbl">Score</span></div>
+        <div id="board"></div>
+      </aside>
+
+      <div id="feed"></div>
+      <div id="toasts"></div>
+      <div id="banner"></div>
+      <div id="countdown"></div>
+      <div id="waiting" class="card hidden"></div>
+
+      <canvas id="mini"></canvas>
+
+      <div class="hud-bottom">
+        <div id="emotes" class="card"></div>
+        <button id="abilityBtn" class="ability-btn" aria-label="Use ability">
+          <span class="ring"></span>
+          <span class="ab-body">
+            <span class="ico-wrap" id="abIcon"></span>
+            <span class="nm" id="abName">Dash</span>
+          </span>
+          <span class="cdn" id="abCd"></span>
+          <span class="key">SPACE</span>
+        </button>
+      </div>
+
+      <div id="joy" class="hidden"><div id="joyKnob"></div></div>
+    </div>
+
+    <div id="results" class="hidden">
+      <div class="results-card card">
+        <p class="mono kicker">Round over</p>
+        <h2 id="resTitle">Round over</h2>
+        <div id="podium"></div>
+        <div id="resList"></div>
+        <p id="resNext" class="mono"></p>
+      </div>
+    </div>
+
+    <div id="overlay" class="hidden">
+      <div class="overlay-card card">
+        <p id="overlayMsg">Connection lost.</p>
+        <button id="overlayBtn" class="btn btn-primary"><span class="btn-label">Back to the site</span></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/gsap.min.js"></script>
+  <script src="vendor/ScrollTrigger.min.js"></script>
+  <script src="vendor/Flip.min.js"></script>
+  <script src="vendor/SplitText.min.js"></script>
+  <script src="shared.js"></script>
+  <script src="chars.js"></script>
+  <script src="render.js"></script>
+  <script src="audio.js"></script>
+  <script src="site.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
