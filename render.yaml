@@ -1,0 +1,14 @@
+# Render Blueprint: one Node web service serves the site AND the WebSocket game server.
+services:
+  - type: web
+    name: tag-rush
+    runtime: node
+    plan: free            # free instances sleep after ~15 min idle; use "starter" for always-on
+    region: oregon        # pick the region closest to your players
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22

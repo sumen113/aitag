@@ -1,0 +1,25 @@
+{
+  "name": "tag-rush",
+  "version": "1.0.0",
+  "description": "Tag Rush - a real-time multiplayer game of tag with unique characters and abilities.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node tools/fuzz.js",
+    "balance": "node tools/balance.js 120"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
+    "gsap": "^3.15.1"
+  }
+}
