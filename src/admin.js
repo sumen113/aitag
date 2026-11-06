@@ -27,7 +27,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   if (admins.size && !passcode) console.warn('ADMIN_USERS is set but ADMIN_PASSCODE is not: the admin panel stays locked until you set ADMIN_PASSCODE.');
   if (!admins.size) console.log('Admin panel: no admin usernames configured (set ADMIN_USERS or edit src/admin.js).');
 
-  let st = { bans: {}, mutes: {}, banner: '' };           // persisted
+  let st = { bans: {}, mutes: {}, banner: '', lbBase: {} };           // persisted
   const guestMutes = new Set();                           // guests only, lost on restart
   const log = [];                                         // last admin actions (memory)
   const fails = new Map();                                // ip -> [timestamps] of wrong passcodes
@@ -42,6 +42,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   const banReason = (name) => { const b = st.bans[lower(name)]; return b ? b.reason || 'No reason given.' : null; };
   const isMuted = (name, isAccount) => (isAccount ? !!st.mutes[lower(name)] : guestMutes.has(lower(name)));
   const banner = () => st.banner || '';
+  const lbBase = (name) => (st.lbBase && st.lbBase[lower(name)]) || 0;     // wins that no longer count toward the leaderboard
 
   /* ------------------------------- helpers ------------------------------- */
   const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(obj)); };
@@ -162,6 +163,12 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         record(me, 'wins', `${u.username} ${d > 0 ? '+' : ''}${d} -> ${n.wins}`); return json(res, 200, { ok: true, user: await userRow(n) }), true;
       }
 
+      if (act === 'lbreset') {                               // zero someone's leaderboard score; characters and balance stay
+        const u = await target(); if (!u) return noUser(), true;
+        st.lbBase = st.lbBase || {}; st.lbBase[lower(u.username)] = u.wins; await save();
+        record(me, 'leaderboard-reset', u.username); return json(res, 200, { ok: true }), true;
+      }
+
       if (act === 'item') {
         const u = await target(); if (!u) return noUser(), true;
         const item = T.SHOP_BY_ID[String(body.item)]; if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
@@ -195,7 +202,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, admins };
+  return { handle, load, isAdmin, banReason, isMuted, banner, lbBase, admins };
 }
 
 module.exports = { create, ADMIN_USERNAMES };
