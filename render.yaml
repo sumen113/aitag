@@ -10,16 +10,16 @@ services:
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
-    envVars:
+        envVars:
       - key: NODE_VERSION
         value: 22
-      - key: postgresql://neondb_owner:npg_37xtOmREAkCd@ep-long-mode-a78npgla-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require       # postgres://user:pass@host/db  (Neon / Supabase / Render Postgres)
-        sync: false              # you enter the value in the Render dashboard, it is never stored in git
-      - key: sumen         # comma-separated usernames allowed into /admin, e.g. alice,bob  (register these accounts first!)
+      - key: DATABASE_URL
         sync: false
-      - key: superdupertuff      # second lock for /admin: any long secret phrase. The panel refuses to work without it.
+      - key: ADMIN_USERS
         sync: false
-      # - key: MIN_WIN_PLAYERS   # humans needed in a public lobby for a win to count (default 3)
-      #   value: 3
+      - key: ADMIN_PASSCODE
+        sync: false
+      - key: MIN_WIN_PLAYERS   # humans needed in a public lobby for a win to count (default 3)
+        value: 3
       # - key: SNAP_HZ           # snapshots per second sent to each player (default 30; 20 uses 1/3 less bandwidth)
       #   value: 30
