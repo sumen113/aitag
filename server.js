@@ -73,7 +73,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/leaderboard' && req.method === 'GET') {
     try {
       if (!store) throw new Error('no store');
-      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(25)).filter((r) => !(admin && admin.banReason(r.username))).slice(0, 10); board.at = Date.now(); }
+      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(100)).map((r) => ({ username: r.username, wins: r.wins - (admin ? admin.lbBase(r.username) : 0) })).filter((r) => r.wins > 0 && !(admin && admin.banReason(r.username))).sort((a, b) => b.wins - a.wins).slice(0, 10); board.at = Date.now(); }
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify({ top: board.list }));
     } catch (e) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end('{"top":[]}'); }
   }
