@@ -20,4 +20,4 @@ services:
       - key: ADMIN_PASSCODE
         sync: false
       - key: MIN_WIN_PLAYERS
-        value: 3
+        value: 2
