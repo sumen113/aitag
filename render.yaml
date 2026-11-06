@@ -15,9 +15,9 @@ services:
         value: 22
       - key: postgresql://neondb_owner:npg_37xtOmREAkCd@ep-long-mode-a78npgla-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require       # postgres://user:pass@host/db  (Neon / Supabase / Render Postgres)
         sync: false              # you enter the value in the Render dashboard, it is never stored in git
-      - key: ADMIN_USERS         # comma-separated usernames allowed into /admin, e.g. alice,bob  (register these accounts first!)
+      - key: sumen         # comma-separated usernames allowed into /admin, e.g. alice,bob  (register these accounts first!)
         sync: false
-      - key: ADMIN_PASSCODE      # second lock for /admin: any long secret phrase. The panel refuses to work without it.
+      - key: superdupertuff      # second lock for /admin: any long secret phrase. The panel refuses to work without it.
         sync: false
       # - key: MIN_WIN_PLAYERS   # humans needed in a public lobby for a win to count (default 3)
       #   value: 3
