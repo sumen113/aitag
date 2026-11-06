@@ -1,0 +1,25 @@
+# Render Blueprint: one Node web service serves the site AND the WebSocket game server.
+# You also need a free Postgres for accounts (Neon or Supabase, see README) and must paste its URL into DATABASE_URL.
+services:
+  - type: web
+    name: daymap
+    runtime: node
+    plan: free            # free instances sleep after ~15 min idle; use "starter" for always-on
+    region: singapore     # closest Render region to Australia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: postgresql://neondb_owner:npg_37xtOmREAkCd@ep-long-mode-a78npgla-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require       # postgres://user:pass@host/db  (Neon / Supabase / Render Postgres)
+        sync: false              # you enter the value in the Render dashboard, it is never stored in git
+      - key: ADMIN_USERS         # comma-separated usernames allowed into /admin, e.g. alice,bob  (register these accounts first!)
+        sync: false
+      - key: ADMIN_PASSCODE      # second lock for /admin: any long secret phrase. The panel refuses to work without it.
+        sync: false
+      # - key: MIN_WIN_PLAYERS   # humans needed in a public lobby for a win to count (default 3)
+      #   value: 3
+      # - key: SNAP_HZ           # snapshots per second sent to each player (default 30; 20 uses 1/3 less bandwidth)
+      #   value: 30
