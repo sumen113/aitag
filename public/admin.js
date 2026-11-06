@@ -162,6 +162,9 @@
     const pw = el('button', 'ad-btn', 'Reset password'); pw.type = 'button';
     pw.onclick = async () => { const p = prompt(`New password for ${u.username} (8+ characters). Tell them to log in with it.`); if (p) done(await api('password', { username: u.username, password: p }), `Password changed for ${u.username}`); };
     r2.append(pw);
+    const lb = el('button', 'ad-btn', 'Reset leaderboard score'); lb.type = 'button';
+    lb.onclick = async () => { if (confirm(`Set ${u.username}'s leaderboard score to 0? Their characters and spendable wins are not touched.`)) done(await api('lbreset', { username: u.username }), `${u.username} reset on the leaderboard`); };
+    r2.append(lb);
     if (u.muted) { const um = el('button', 'ad-btn', 'Unmute'); um.type = 'button'; um.onclick = async () => done(await api('unmute', { username: u.username }), `${u.username} unmuted`); r2.append(um); }
     if (!u.admin) {
       if (u.banned) { const ub = el('button', 'ad-btn', 'Unban'); ub.type = 'button'; ub.onclick = async () => done(await api('ban', { username: u.username, on: false }), `${u.username} unbanned`); r2.append(ub); }
