@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Daymap</title>
+  <link rel="icon" href="favicon.ico" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body class="ad-body">
+  <header class="ad-top">
+    <a class="ad-brand" href="/"><span>Daymap</span><b class="mono">Admin</b></a>
+    <div class="ad-me"><span id="adMe" class="mono"></span><a class="btn-nav" href="/">Back to game</a></div>
+  </header>
+
+  <main class="ad-main">
+    <!-- gate: shown until the server accepts us -->
+    <section id="adGate" class="card ad-gate">
+      <h1 id="adGateTitle">Checking access…</h1>
+      <p id="adGateMsg"></p>
+      <form id="adCodeForm" class="hidden" autocomplete="off">
+        <label class="mono" for="adCode">Admin passcode</label>
+        <input id="adCode" class="inp" type="password" autocomplete="off" spellcheck="false">
+        <button class="btn btn-primary" type="submit"><span class="btn-label">Unlock</span></button>
+      </form>
+      <a id="adLogin" class="btn btn-primary hidden" href="/">Log in on the main page</a>
+    </section>
+
+    <div id="adPanel" class="hidden">
+      <nav class="ad-tabs" id="adTabs" role="tablist">
+        <button type="button" data-tab="live" aria-selected="true">Live</button>
+        <button type="button" data-tab="accounts" aria-selected="false">Accounts</button>
+        <button type="button" data-tab="broadcast" aria-selected="false">Broadcast &amp; bans</button>
+        <button type="button" data-tab="log" aria-selected="false">Log</button>
+      </nav>
+      <p id="adToast" class="ad-toast" role="status"></p>
+
+      <!-- LIVE -->
+      <section data-pane="live">
+        <div class="ad-tiles" id="adTiles"></div>
+        <h2>Players online</h2>
+        <div class="ad-table-wrap"><table class="ad-table" id="adPlayers"><thead><tr><th>Name</th><th>Room</th><th>Char</th><th>Ping</th><th>Flags</th><th></th></tr></thead><tbody></tbody></table></div>
+        <h2>Rooms</h2>
+        <div class="ad-table-wrap"><table class="ad-table" id="adRooms"><thead><tr><th>Room</th><th>Arena</th><th>Type</th><th>Players</th><th>State</th><th>Time</th></tr></thead><tbody></tbody></table></div>
+      </section>
+
+      <!-- ACCOUNTS -->
+      <section data-pane="accounts" class="hidden">
+        <form id="adSearch" class="ad-search"><input id="adQ" class="inp" placeholder="Search usernames (starts with…) or leave empty for newest" autocomplete="off" maxlength="20"><button class="btn btn-ghost" type="submit"><span class="btn-label">Search</span></button></form>
+        <div id="adUsers" class="ad-users"></div>
+      </section>
+
+      <!-- BROADCAST -->
+      <section data-pane="broadcast" class="hidden">
+        <div class="ad-two">
+          <form id="adAnnounce" class="card ad-box"><h2>Announce to players now</h2><p>Pops up inside every open game and in its chat.</p>
+            <input id="adAnnTxt" class="inp" maxlength="140" placeholder="e.g. Server restarting in 5 minutes" autocomplete="off"><button class="btn btn-primary" type="submit"><span class="btn-label">Send</span></button></form>
+          <form id="adBanner" class="card ad-box"><h2>Website banner</h2><p>A strip at the top of the home page for everyone. Leave empty to remove it.</p>
+            <input id="adBanTxt" class="inp" maxlength="160" placeholder="e.g. Double-win weekend!" autocomplete="off"><button class="btn btn-primary" type="submit"><span class="btn-label">Set banner</span></button></form>
+        </div>
+        <h2>Banned accounts</h2><div id="adBans" class="ad-chips"></div>
+        <h2>Muted</h2><div id="adMutes" class="ad-chips"></div>
+        <p class="ad-note" id="adAdmins"></p>
+      </section>
+
+      <!-- LOG -->
+      <section data-pane="log" class="hidden"><h2>Recent admin actions</h2><ul id="adLog" class="ad-log"></ul></section>
+    </div>
+  </main>
+  <script src="shared.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
