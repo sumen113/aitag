@@ -1,0 +1,23 @@
+# Render Blueprint: one Node web service serves the site AND the WebSocket game server.
+# Accounts need a free Postgres (Neon or Supabase, see README); its URL goes in DATABASE_URL in the Render dashboard.
+services:
+  - type: web
+    name: daymap
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_USERS
+        sync: false
+      - key: ADMIN_PASSCODE
+        sync: false
+      - key: MIN_WIN_PLAYERS
+        value: 2
