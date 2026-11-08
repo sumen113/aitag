@@ -17,10 +17,12 @@
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
   const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0'];   // one per character, same order as CHARS
+  const BASIC = 8;   // the colour row is always one row of the basic colours
+  const basicColor = (k) => { k = C.cleanColor(k); return k < BASIC ? k : 0; };
   const sel = {
     name: String(store.get('name', '') || '').slice(0, 14),
     c: clamp(store.get('c', 0) | 0, 0, CHARS.length - 1),
-    k: C.cleanColor(store.get('k', 0)),
+    k: basicColor(store.get('k', 0)),
     h: C.cleanHat(store.get('h', 0)),
     diff: ['easy', 'normal', 'hard'].includes(store.get('diff', 'normal')) ? store.get('diff', 'normal') : 'normal',
   };
@@ -183,29 +185,15 @@
       b.addEventListener('click', () => pick(i));
       pic.appendChild(b);
     });
-    COLORS.forEach((_, k) => {
+    for (let k = 0; k < BASIC; k++) {
       const b = el('button', 'swatch'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.k = k; b.title = C.COLOR_NAMES[k]; b.setAttribute('aria-label', C.COLOR_NAMES[k]);
       b.addEventListener('click', () => { setLook({ k }); });
       sw.appendChild(b);
-    });
-    // custom colour: a rainbow swatch that opens the hue slider + three tones
-    const cb = el('button', 'swatch custom'); cb.type = 'button'; cb.setAttribute('role', 'radio'); cb.title = 'Custom colour'; cb.setAttribute('aria-label', 'Custom colour');
-    cb.addEventListener('click', () => setLook({ k: C.customK(+hueEl.value, customTone()) }));
-    sw.appendChild(cb);
-    C.CUSTOM_TONES.forEach((_, i) => {
-      const b = el('button', 'tone'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.tone = i; b.setAttribute('aria-label', ['Vivid', 'Pastel', 'Deep'][i]); b.title = ['Vivid', 'Pastel', 'Deep'][i];
-      b.addEventListener('click', () => setLook({ k: C.customK(+hueEl.value, i) }));
-      tonesEl.appendChild(b);
-    });
-    hueEl.addEventListener('input', () => setLook({ k: C.customK(+hueEl.value, customTone()) }, true));
-    C.HATS.forEach((name, h) => {
-      const b = el('button', 'hat-pill', name); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.h = h;
-      b.addEventListener('click', () => setLook({ h }));
-      hatsEl.appendChild(b);
-    });
+    }
+    const stepHat = (d) => setLook({ h: (sel.h + d + C.HATS.length) % C.HATS.length });
+    $('hatPrev').addEventListener('click', () => stepHat(-1));
+    $('hatNext').addEventListener('click', () => stepHat(1));
   }
-  const hueEl = $('hue'), tonesEl = $('tones'), hatsEl = $('hats'), customRow = $('customRow');
-  const customTone = () => (sel.k >= C.CUSTOM_BASE ? Math.floor((sel.k - C.CUSTOM_BASE) / 360) : 0);
   /** change colour and/or hat: save, repaint, and let the character react (quietly while dragging the slider) */
   function setLook(p, quiet) {
     if (p.k !== undefined) { sel.k = p.k; store.set('k', sel.k); }
@@ -217,13 +205,8 @@
     const def = CHARS[sel.c];
     pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.k, 96, sel.h); });
     paintLockSticker();
-    const isCustom = sel.k >= C.CUSTOM_BASE;
-    sw.querySelectorAll('.swatch:not(.custom)').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
-    const cs = sw.querySelector('.custom'); cs.classList.toggle('on', isCustom); cs.setAttribute('aria-checked', String(isCustom)); cs.style.background = isCustom ? C.colorFor(sel.k) : '';
-    customRow.classList.toggle('hidden', !isCustom);
-    if (isCustom) { const n = sel.k - C.CUSTOM_BASE; if (document.activeElement !== hueEl) hueEl.value = n % 360; }
-    tonesEl.querySelectorAll('.tone').forEach((b, i) => { const t = C.CUSTOM_TONES[i]; b.style.background = C.hslHex(+hueEl.value, t[0], t[1]); b.setAttribute('aria-checked', String(isCustom && customTone() === i)); });
-    hatsEl.querySelectorAll('.hat-pill').forEach((b, h) => b.setAttribute('aria-checked', String(h === sel.h)));
+    sw.querySelectorAll('.swatch').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
+    $('hatName').textContent = C.HATS[sel.h];
     $('stage').style.setProperty('--stage', STAGE[sel.c]);
     $('stRole').textContent = def.role;
     $('stAb').textContent = def.ability; $('stCd').textContent = def.cd + 's recharge';
@@ -443,7 +426,7 @@
     if (u && restoreChar && u.settings) {
       const i = CHARS.findIndex((c) => c.id === u.settings.c);
       if (i >= 0 && owns(i)) { sel.c = i; store.set('c', i); }
-      if (Number.isInteger(u.settings.k)) { sel.k = C.cleanColor(u.settings.k); store.set('k', sel.k); }
+      if (Number.isInteger(u.settings.k)) { sel.k = basicColor(u.settings.k); store.set('k', sel.k); }
       if (Number.isInteger(u.settings.h)) { sel.h = C.cleanHat(u.settings.h); store.set('h', sel.h); }
     }
     if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
@@ -607,7 +590,7 @@
   const NEWS = [
     { v: 'Update 6 · Character update', tag: 'Newest', items: [
       ['Starfish Andy', 'A new character. Ricochet curls Andy into a spinning star that bounces off every wall while you steer it.'],
-      ['Make it yours', '16 colours plus a custom colour picker (any hue, vivid, pastel or deep) and 8 hats: party, crown, top hat, wizard, halo, cap, flower and chef.'],
+      ['Make it yours', '8 colours and 8 hats: party, crown, top hat, wizard, halo, cap, flower and chef.'],
       ['Everyone moves differently', 'Frogs hop, penguins waddle, cats sneak, bears plod, robots roll and the starfish tumbles. Abilities and getting tagged have their own little animations now. Click your character on the home page to see its move.'],
       ['Fixes', 'No more clipped bat, fox and raccoon in the picker and showcase, and the newest characters finally have their own background colour.'],
     ] },

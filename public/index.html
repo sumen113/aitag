@@ -100,11 +100,8 @@
             <p class="stage-desc" id="stDesc"></p>
             <div class="picker" id="picker" role="radiogroup" aria-label="Character"></div>
             <div class="swatch-row"><span class="mono">Colour</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Colour"></div></div>
-            <div class="custom-row hidden" id="customRow">
-              <label class="mono" for="hue">Hue</label><input type="range" id="hue" min="0" max="359" value="200" aria-label="Custom colour hue">
-              <div class="tones" id="tones" role="radiogroup" aria-label="Colour tone"></div>
-            </div>
-            <div class="swatch-row"><span class="mono">Hat</span><div class="hats" id="hats" role="radiogroup" aria-label="Hat"></div></div>
+            <div class="swatch-row"><span class="mono">Hat</span>
+              <div class="hat-cycle" id="hats"><button type="button" class="hat-btn" id="hatPrev" aria-label="Previous hat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="hat-name" id="hatName" aria-live="polite">None</span><button type="button" class="hat-btn" id="hatNext" aria-label="Next hat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div></div>
           </div>
         </aside>
       </section>
@@ -343,7 +340,7 @@
 
   <aside id="newsCard" class="news-card hidden" aria-label="Update notice">
     <span class="mono">New update</span>
-    <p><b>the character update</b><br>new starfish, hats, custom colours and way more animations</p>
+    <p><b>the character update</b><br>new starfish, hats and way more animations</p>
     <div><button type="button" class="btn-nav solid" id="newsOpen">full logs</button><button type="button" class="news-x" id="newsClose" aria-label="Dismiss">×</button></div>
   </aside>
   <script src="vendor/gsap.min.js"></script>

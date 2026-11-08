@@ -122,7 +122,7 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 
 ### Customisation and animation
 
-- **Colours:** `COLORS` (16 presets, only ever append) plus custom colours: index `100 + tone*360 + hue` (see `colorFor` / `customK` in `public/shared.js`). Servers only validate the range.
+- **Colours:** `COLORS` (only ever append). The site shows the first 8 as the basic colour row; the rest (and custom indexes `100 + tone*360 + hue`, see `colorFor` / `customK` in `public/shared.js`) stay valid for old saves and the server only validates the range.
 - **Hats:** `HATS` in `shared.js`, drawn in `drawHat` (`public/chars.js`) at each character's `HEAD` anchor. Free for everyone.
 - **Walk styles:** the `GAIT` table in `chars.js` (step rate, hop height, squash, waddle, lean, crouch).
 - **Poses:** `POSES` in `chars.js`, GSAP timelines on a small `{up, rot, sq}` object that `draw()` reads. Triggered by ability events and tags in `game.js`, and by clicking the character on the home page. Skipped when the OS asks for reduced motion.
