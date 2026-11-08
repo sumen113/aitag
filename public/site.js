@@ -5,7 +5,10 @@
   const C = TagShared, { CHARS, COLORS } = C;
   const $ = (id) => document.getElementById(id);
   const clamp = C.clamp, TAU = Math.PI * 2;
-  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // kept live (and used by gsap.matchMedia below) so toggling the OS setting takes effect without a reload
+  const reduceMQ = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  let reduce = reduceMQ.matches;
+  if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', () => { reduce = reduceMQ.matches; });
   const fine = window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches;
   gsap.registerPlugin(ScrollTrigger, Flip, SplitText);
 
@@ -32,12 +35,12 @@
     return new Promise((res) => gsap.fromTo(bars, { scaleY: 0, transformOrigin: 'top' }, { scaleY: 1, duration: 0.42, ease: 'power3.inOut', stagger: 0.045, onComplete: res }));
   }
   function curtainOut() {
-    gsap.to(curtainMsg, { opacity: 0, duration: 0.15 });
+    gsap.to(curtainMsg, { autoAlpha: 0, duration: 0.15 });
     const done = () => curtain.classList.remove('on');
     if (reduce) { gsap.set(bars, { scaleY: 0 }); done(); return Promise.resolve(); }
     return new Promise((res) => gsap.to(bars, { scaleY: 0, transformOrigin: 'bottom', duration: 0.5, ease: 'power3.inOut', stagger: 0.045, onComplete: () => { done(); res(); } }));
   }
-  App.curtainMsg = (m) => { curtainMsg.textContent = m || ''; gsap.to(curtainMsg, { opacity: m ? 1 : 0, duration: 0.3 }); };
+  App.curtainMsg = (m) => { curtainMsg.textContent = m || ''; gsap.to(curtainMsg, { autoAlpha: m ? 1 : 0, duration: 0.3 }); };
 
   /* ================================ the form =============================== */
   const form = $('joinForm'), nameEl = $('name'), errEl = $('formErr'), fieldEl = nameEl.parentElement;
@@ -196,8 +199,8 @@
     const swap = () => { $('stName').textContent = `${def.name} the ${def.species}`; $('stDesc').textContent = def.desc; };
     if (animate && !reduce) {
       gsap.to(['#stName', '#stDesc'], { yPercent: -30, opacity: 0, duration: 0.12, ease: 'power2.in', onComplete: () => { swap(); gsap.fromTo(['#stName', '#stDesc'], { yPercent: 30, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 0.3, stagger: 0.04, ease: 'power3.out' }); } });
-      gsap.fromTo('#abSticker', { scale: 0.7, rotate: -8 }, { scale: 1, rotate: 2, duration: 0.5, ease: 'back.out(3)' });
-      gsap.fromTo('#stRole', { scale: 0.7, rotate: 8 }, { scale: 1, rotate: -3, duration: 0.5, ease: 'back.out(3)' });
+      gsap.fromTo('#abSticker', { scale: 0.7, rotation: -8 }, { scale: 1, rotation: 2, duration: 0.5, ease: 'back.out(3)' });
+      gsap.fromTo('#stRole', { scale: 0.7, rotation: 8 }, { scale: 1, rotation: -3, duration: 0.5, ease: 'back.out(3)' });
     } else swap();
   }
   function paintLockSticker() {
@@ -306,14 +309,14 @@
     const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
     const a = SplitText.create('#h1a', { type: 'chars', mask: 'chars' }), b = SplitText.create('#h1b', { type: 'chars', mask: 'chars' });
     tl.from('.nav', { yPercent: -100, duration: 0.7 }, 0)
-      .from('.eyebrow span', { y: 20, opacity: 0, rotate: -6, stagger: 0.08, duration: 0.6 }, 0.15)
-      .from(a.chars, { yPercent: 115, rotate: 10, duration: 0.9, ease: 'expo.out', stagger: 0.035 }, 0.2)
-      .from(b.chars, { yPercent: 130, scale: 0.4, rotate: -14, duration: 1.1, ease: 'back.out(2.2)', stagger: 0.09 }, 0.45)
+      .from('.eyebrow span', { y: 20, opacity: 0, rotation: -6, stagger: 0.08, duration: 0.6 }, 0.15)
+      .from(a.chars, { yPercent: 115, rotation: 10, duration: 0.9, ease: 'expo.out', stagger: 0.035 }, 0.2)
+      .from(b.chars, { yPercent: 130, scale: 0.4, rotation: -14, duration: 1.1, ease: 'back.out(2.2)', stagger: 0.09 }, 0.45)
       .from('.lede', { y: 24, opacity: 0, duration: 0.7 }, 0.7)
       .from('.join', { y: 50, opacity: 0, scale: 0.96, duration: 0.8 }, 0.8)
-      .from('.stage', { x: 80, y: 20, opacity: 0, rotate: 4, duration: 1, ease: 'expo.out' }, 0.45)
-      .from('.pick', { scale: 0, rotate: -20, stagger: 0.04, duration: 0.5, ease: 'back.out(3)', onComplete: () => { gsap.set('.pick', { clearProps: 'transform' }); releasePick(); } }, 1)
-      .from('.sticker', { scale: 0, rotate: '+=120', stagger: 0.08, duration: 0.8, ease: 'back.out(2)' }, 0.9);
+      .from('.stage', { x: 80, yPercent: 4, opacity: 0, rotation: 4, duration: 1, ease: 'expo.out' }, 0.45)   // yPercent, so the scroll parallax (which owns `y`) never fights the intro
+      .from('.pick', { scale: 0, rotation: -20, stagger: 0.04, duration: 0.5, ease: 'back.out(3)', onComplete: () => { gsap.set('.pick', { clearProps: 'transform' }); releasePick(); } }, 1)
+      .from('.sticker', { scale: 0, rotation: '+=120', stagger: 0.08, duration: 0.8, ease: 'back.out(2)' }, 0.9);
     return tl;
   }
 
@@ -327,14 +330,14 @@
     });
     gsap.utils.toArray('.section-lede, .kicker').forEach((e) => gsap.from(e, { y: 24, opacity: 0, duration: 0.8, ease: 'power3.out', scrollTrigger: { trigger: e, start: 'top 92%', once: true } }));
     const batch = (sel, vars) => ScrollTrigger.batch(sel, { start: 'top 92%', once: true, onEnter: (els) => { const rel = own(els); gsap.from(els, Object.assign({ stagger: 0.09, ease: 'power3.out', duration: 0.8, clearProps: 'transform,opacity', onComplete: rel }, vars)); } });
-    batch('.cast-card', { y: 70, opacity: 0, rotate: 2 });
+    batch('.cast-card', { y: 70, opacity: 0, rotation: 2 });
     batch('.arena-card', { y: 60, opacity: 0, scale: 0.95 });
-    batch('.step', { y: 60, opacity: 0, rotate: -2 });
+    batch('.step', { y: 60, opacity: 0, rotation: -2 });
     gsap.from('#controls', { y: 40, opacity: 0, duration: 0.8, ease: 'power3.out', scrollTrigger: { trigger: '#controls', start: 'top 92%', once: true } });
     gsap.from('#final .h2', { scale: 0.85, opacity: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: '#final', start: 'top 80%', once: true } });
     gsap.from('#btnTop', { y: 30, opacity: 0, duration: 0.8, ease: 'back.out(2)', scrollTrigger: { trigger: '#final', start: 'top 70%', once: true } });
     // step numbers spin in
-    gsap.utils.toArray('.step-n').forEach((n) => gsap.from(n, { rotate: -180, scale: 0, duration: 0.8, ease: 'back.out(2)', scrollTrigger: { trigger: n, start: 'top 92%', once: true } }));
+    gsap.utils.toArray('.step-n').forEach((n) => gsap.from(n, { rotation: -180, scale: 0, duration: 0.8, ease: 'back.out(2)', scrollTrigger: { trigger: n, start: 'top 92%', once: true } }));
     // dark section: arenas panel grows in
     gsap.fromTo('#arenas', { borderRadius: 120, scale: 0.96 }, { borderRadius: 40, scale: 1, ease: 'none', scrollTrigger: { trigger: '#arenas', start: 'top 100%', end: 'top 55%', scrub: true } });
     // hero decoration drifts as you scroll
@@ -343,9 +346,9 @@
     // marquee: infinite loop that speeds up with scroll velocity
     const track = $('marquee');
     const loop = gsap.to(track, { xPercent: -25, duration: 22, ease: 'none', repeat: -1 });
-    ScrollTrigger.create({ trigger: '.marquee', start: 'top bottom', end: 'bottom top', onUpdate: (s) => { const v = clamp(s.getVelocity() / 300, -6, 6); gsap.to(loop, { timeScale: 1 + Math.abs(v) * (s.direction > 0 ? 1 : 1), duration: 0.25, overwrite: true }); gsap.to(loop, { timeScale: 1, duration: 1.2, delay: 0.25 }); } });
+    ScrollTrigger.create({ trigger: '.marquee', start: 'top bottom', end: 'bottom top', onUpdate: (s) => { const v = clamp(s.getVelocity() / 300, -6, 6); gsap.to(loop, { timeScale: 1 + Math.abs(v), duration: 0.25, overwrite: true }); gsap.to(loop, { timeScale: 1, duration: 1.2, delay: 0.25 }); } });
     // the ring of text around the character slowly turns
-    gsap.to('#ring', { rotate: 360, duration: 40, ease: 'none', repeat: -1, transformOrigin: '50% 50%' });
+    gsap.to('#ring', { rotation: 360, duration: 40, ease: 'none', repeat: -1, transformOrigin: '50% 50%' });
     // nav pill shadow after scrolling
     ScrollTrigger.create({ start: 60, onToggle: (s) => document.querySelector('.nav').style.boxShadow = s.isActive ? '0 4px 0 rgba(20,18,43,.9)' : 'none' });
   }
@@ -366,8 +369,8 @@
       const art = c.querySelector('.cast-art img');
       const rx = gsap.quickTo(art, 'x', { duration: 0.4, ease: 'power3.out' }), ry = gsap.quickTo(art, 'y', { duration: 0.4, ease: 'power3.out' });
       c.addEventListener('pointermove', (e) => { const r = c.getBoundingClientRect(); rx(((e.clientX - r.left) / r.width - 0.5) * 22); ry(((e.clientY - r.top) / r.height - 0.5) * 14); });
-      c.addEventListener('pointerenter', () => gsap.to(art, { scale: 1.1, rotate: -4, duration: 0.45, ease: 'back.out(2)', overwrite: 'auto' }));
-      c.addEventListener('pointerleave', () => { rx(0); ry(0); gsap.to(art, { scale: 1, rotate: 0, duration: 0.4, ease: 'power3.out', overwrite: 'auto' }); });
+      c.addEventListener('pointerenter', () => gsap.to(art, { scale: 1.1, rotation: -4, duration: 0.45, ease: 'back.out(2)', overwrite: 'auto' }));
+      c.addEventListener('pointerleave', () => { rx(0); ry(0); gsap.to(art, { scale: 1, rotation: 0, duration: 0.4, ease: 'power3.out', overwrite: 'auto' }); });
     });
   }
 
@@ -453,7 +456,7 @@
     document.body.style.overflow = 'hidden';
     if (!reduce) {
       gsap.fromTo(back, { opacity: 0 }, { opacity: 1, duration: 0.25 });
-      gsap.fromTo(m, { y: 50, scale: 0.92, rotate: -1.5, opacity: 0 }, { y: 0, scale: 1, rotate: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.8)', clearProps: 'transform,opacity' });
+      gsap.fromTo(m, { y: 50, scale: 0.92, rotation: -1.5, opacity: 0 }, { y: 0, scale: 1, rotation: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.8)', clearProps: 'transform,opacity' });
     }
     Sfx.play('click');
     setTimeout(() => (focusEl || m.querySelector('input, button:not(.modal-x)') || m).focus({ preventScroll: true }), 60);
@@ -557,7 +560,7 @@
     paintAccount();
     if (!reduce) {
       const c2 = grid.querySelector(`[data-id="${item.id}"]`);
-      if (c2) gsap.fromTo(c2, { scale: 0.92, rotate: -2 }, { scale: 1, rotate: 0, duration: 0.7, ease: 'elastic.out(1.2,.4)', clearProps: 'transform' });
+      if (c2) gsap.fromTo(c2, { scale: 0.92, rotation: -2 }, { scale: 1, rotation: 0, duration: 0.7, ease: 'elastic.out(1.2,.4)', clearProps: 'transform' });
     }
     siteToast(`Unlocked ${item.name}! It's selected for your next game.`);
   }
@@ -625,7 +628,8 @@
     document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => { const t = document.querySelector(a.getAttribute('href')); if (!t) return; e.preventDefault(); t.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' }); }));
     let last = performance.now();
     gsap.ticker.add(() => { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; drawPreview(dt, now / 1000); });
-    if (!reduce) { scrollAnims(); floaty(); intro(); }
+    // gsap.matchMedia: entrance + scroll animation only run (and are fully reverted when they stop matching) with motion allowed
+    gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => { scrollAnims(); floaty(); intro(); });
     loadMe(); pollStats(); setInterval(pollStats, 8000); initNews();
     gsap.ticker.lagSmoothing(0);
   }

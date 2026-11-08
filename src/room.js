@@ -158,7 +158,7 @@ class Room {
   }
 
   endRound() {
-    const list = [...this.players.values()].map((p) => ({ id: p.id, s: p.score, t: p.tags })).sort((a, b) => b.s - a.s);
+    const list = [...this.players.values()].map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // ties: more tags, then a coin flip (never "whoever joined first")
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
     // wins are paid out in online servers with enough real players and no bots (custom servers: a few more players), to registered accounts that were actually playing
     const need = this.regular ? MIN_WIN_PLAYERS : this.botTarget === 0 ? CUSTOM_MIN_WIN_PLAYERS : Infinity;

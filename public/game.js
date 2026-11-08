@@ -156,15 +156,18 @@
   /* ============================ HUD feedback (GSAP) ========================== */
   const rname = (id) => { const r = G.roster.get(id); return r ? r.n : '???'; };
 
+  // enter, hold, leave as ONE timeline (rather than chaining a second tween with `delay`)
   function pop(node, ms, then) {
-    gsap.fromTo(node, { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, ease: 'back.out(2)' });
-    gsap.to(node, { opacity: 0, y: -8, duration: 0.4, delay: ms / 1000, onComplete: () => { node.remove(); if (then) then(); } });
+    gsap.timeline({ onComplete: () => { node.remove(); if (then) then(); } })
+      .fromTo(node, { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, ease: 'back.out(2)' })
+      .to(node, { opacity: 0, y: -8, duration: 0.4 }, `+=${Math.max(0, ms / 1000 - 0.35)}`);
   }
   function toast(text) {
     const box = $('toasts'), t = el('div', 'toast', text); box.appendChild(t);
     while (box.children.length > 3) box.firstChild.remove();
-    gsap.fromTo(t, { y: -14, opacity: 0, scale: 0.9 }, { y: 0, opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(2)' });
-    gsap.to(t, { opacity: 0, duration: 0.4, delay: 2.6, onComplete: () => t.remove() });
+    gsap.timeline({ onComplete: () => t.remove() })
+      .fromTo(t, { y: -14, opacity: 0, scale: 0.9 }, { y: 0, opacity: 1, scale: 1, duration: 0.35, ease: 'back.out(2)' })
+      .to(t, { opacity: 0, duration: 0.4 }, '+=2.25');
   }
   function feed(nodes, mine) {
     const box = $('feed'), f = el('div', 'feed-item' + (mine ? ' me' : '')); f.append(...nodes); box.appendChild(f);
@@ -176,14 +179,15 @@
     const box = $('banner'); if (bannerTl) bannerTl.kill(); box.innerHTML = '';
     const b = el('div', 'bn ' + (cls || ''), text); box.appendChild(b);
     bannerTl = gsap.timeline()
-      .fromTo(b, { scale: 0.3, rotate: -14, y: 60, opacity: 0 }, { scale: 1, rotate: -2, y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2.6)' })
+      .fromTo(b, { scale: 0.3, rotation: -14, y: 60, opacity: 0 }, { scale: 1, rotation: -2, y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2.6)' })
       .to(b, { y: -24, opacity: 0, duration: 0.35, ease: 'power2.in' }, '+=1.1').add(() => b.remove());
   }
-  function flash() { gsap.fromTo('#flash', { opacity: 0.45 }, { opacity: 0, duration: 0.45, ease: 'power2.out' }); }
+  function flash() { gsap.fromTo('#flash', { autoAlpha: 0.45 }, { autoAlpha: 0, duration: 0.45, ease: 'power2.out', overwrite: true }); }
   function countNum(n) {
     const cd = $('countdown'); cd.textContent = n; gsap.killTweensOf(cd);
-    gsap.fromTo(cd, { scale: 2.2, opacity: 0, rotate: -8 }, { scale: 1, opacity: 1, rotate: 0, duration: 0.4, ease: 'back.out(2)' });
-    gsap.to(cd, { opacity: 0, scale: 0.8, duration: 0.22, delay: 0.72 });
+    gsap.timeline()
+      .fromTo(cd, { scale: 2.2, opacity: 0, rotation: -8 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.4, ease: 'back.out(2)' })
+      .to(cd, { opacity: 0, scale: 0.8, duration: 0.22 }, 0.72);
   }
   const near = (x, y) => G.me && Math.hypot(x - G.me.x, y - G.me.y) < 900;
 
@@ -712,9 +716,9 @@
     const myRank = res.findIndex((x) => x.r.id === G.id);
     if (myRank > 5) { const x = res[myRank], d = el('div', 'brow me'); d.append(el('span', 'rk', String(myRank + 1)), el('span', '', ''), el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); }
     const box = $('results'); box.classList.remove('hidden');
-    gsap.killTweensOf(box); gsap.fromTo(box, { opacity: 0 }, { opacity: 1, duration: 0.3 });
+    gsap.killTweensOf(box); gsap.fromTo(box, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 });
     const tl = gsap.timeline();
-    tl.from('.results-card', { y: 90, scale: 0.9, rotate: 2, opacity: 0, duration: 0.6, ease: 'back.out(1.7)' })
+    tl.from('.results-card', { y: 90, scale: 0.9, rotation: 2, opacity: 0, duration: 0.6, ease: 'back.out(1.7)' })
       .from('#resTitle', { yPercent: 60, opacity: 0, duration: 0.5, ease: 'power3.out' }, '-=0.3');
     [2, 1, 0].forEach((rank, n) => {
       const p = pod.querySelector(`[data-rank="${rank}"]`); if (!p) return;
@@ -728,7 +732,7 @@
   }
   function hideResults() {
     const box = $('results');
-    gsap.to(box, { opacity: 0, duration: 0.25, onComplete: () => { if (G.state !== STATE.RESULTS) box.classList.add('hidden'); } });
+    gsap.to(box, { autoAlpha: 0, duration: 0.25, overwrite: true, onComplete: () => { if (G.state !== STATE.RESULTS) box.classList.add('hidden'); } });
   }
 
   function overlay(msg) { $('overlayMsg').textContent = msg || ''; $('overlay').classList.toggle('hidden', !msg); if (msg) gsap.fromTo('.overlay-card', { y: 30, scale: 0.92, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' }); }
@@ -742,7 +746,7 @@
       .from('.hud-top', { y: -50, opacity: 0, duration: 0.6 }, 0.15)
       .from('#mini', { x: -120, opacity: 0, duration: 0.6 }, 0.2)
       .from('#chat', { x: -80, opacity: 0, duration: 0.6, clearProps: 'transform,opacity' }, 0.25)
-      .from('#abilityBtn', { scale: 0, rotate: -90, duration: 0.7, ease: 'back.out(2.4)' }, 0.3);
+      .from('#abilityBtn', { scale: 0, rotation: -90, duration: 0.7, ease: 'back.out(2.4)' }, 0.3);
     const def = CHARS[G.sel.c];
     setTimeout(() => { if (G.inGame) toast(touchy ? `Drag to move · tap ${def.ability}` : `WASD to move · SPACE for ${def.ability} · ENTER to chat`); }, 900);
   };

@@ -90,19 +90,20 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   ok(/starter/i.test(gc.err || ''), 'guest cannot join with a locked character: ' + gc.err);
   const pr = await client({ name: 'TryIt', mode: 'bots', diff: 'easy', c: lockedIdx, k: 0 });
   ok(pr.init && pr.init.solo, 'practice mode lets anyone try a locked character'); pr.ws.close();
-  const alex = await account('Alexa', { wins: 5 });
+  const FP = T.SHOP_BY_ID['char:frog'].price;   // Alexa can afford exactly the frog, so everything else is unaffordable
+  const alex = await account('Alexa', { wins: FP });
   gc = await client({ name: 'Alexa', mode: 'online', c: STI[0], k: 0 });
   ok(/registered/i.test(gc.err || ''), 'guest cannot take a registered name: ' + gc.err);
   let ac = await client({ name: 'IgnoredName', mode: 'online', c: lockedIdx, k: 0 }, { cookie: alex.cookie });
   ok(/shop|unlocked/i.test(ac.err || ''), 'account cannot use a character it has not bought: ' + ac.err);
   const b1 = await post('/api/shop/buy', { item: 'char:frog' }, alex.cookie), j1 = await b1.json();
-  ok(b1.status === 200 && j1.user.balance === 2 && j1.user.owned.includes('char:frog'), 'buy frog for 3 wins -> balance 2');
+  ok(b1.status === 200 && j1.user.balance === 0 && j1.user.owned.includes('char:frog'), 'buy frog for ' + FP + ' win(s) -> balance 0');
   const b2 = await post('/api/shop/buy', { item: 'char:frog' }, alex.cookie);
   ok(b2.status === 400, 'cannot buy the same item twice');
   const b3 = await post('/api/shop/buy', { item: 'char:bat' }, alex.cookie);
   ok(b3.status === 400, 'cannot buy what you cannot afford');
   const race = await Promise.all([1, 2, 3, 4].map(() => post('/api/shop/buy', { item: 'char:cat' }, alex.cookie).then((r) => r.status)));
-  ok(race.filter((x) => x === 200).length === 0 && (await (await fetch(BASE + '/api/me', { headers: { cookie: alex.cookie } })).json()).user.balance === 2, 'cat costs 3 > balance 2: all concurrent buys refused, balance intact');
+  ok(race.filter((x) => x === 200).length === 0 && (await (await fetch(BASE + '/api/me', { headers: { cookie: alex.cookie } })).json()).user.balance === 0, 'cat costs more than balance 0: all concurrent buys refused, balance intact');
   ac = await client({ name: 'IgnoredName', mode: 'online', c: lockedIdx, k: 2 }, { cookie: alex.cookie });
   ok(ac.init && ac.init.name === 'Alexa' && ac.init.acct === true, 'account joins as its own username with the bought frog');
   const ac2 = await client({ name: 'x', mode: 'online', c: STI[0], k: 0 }, { cookie: alex.cookie });
@@ -113,7 +114,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   const pa = [...roomA.players.values()].find((p) => p.name === 'Alexa' && p.ws);
   let award = null; ac.ws.on('message', (d) => { const m = JSON.parse(d); if (m.t === 'award') award = m; });
   roomA.onWin(pa); await sleep(250);
-  ok(award && award.wins === 6 && award.balance === 3, 'win is saved and reported: ' + JSON.stringify(award));
+  ok(award && award.wins === FP + 1 && award.balance === 1, 'win is saved and reported: ' + JSON.stringify(award));
   const badLogin = await post('/api/login', { username: 'Alexa', password: 'nope-nope-nope' });
   ok(badLogin.status === 401, 'wrong password rejected');
   const csrf = await fetch(BASE + '/api/logout', { method: 'POST', headers: { 'content-type': 'text/plain', origin: 'http://evil.example' }, body: '{}' });
