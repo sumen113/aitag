@@ -125,6 +125,20 @@ a { color: inherit; }
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 30px; height: 30px; border-radius: 50%; border: var(--bw) solid var(--ink); padding: 0; transition: transform .2s var(--ease), box-shadow .2s; }
 .swatch:hover { transform: scale(1.18); }
+.swatch.custom { background: conic-gradient(#ff5d73, #ffb142, #ffe66d, #3ddc97, #4cc9f0, #7c6cff, #ff78c4, #ff5d73); position: relative; }
+.swatch.custom::after { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font: 800 16px/1 var(--display); color: var(--ink); text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.swatch.custom.on::after { content: ''; }
+.custom-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 10px; background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 14px; }
+.custom-row input[type=range] { flex: 1 1 160px; min-width: 120px; height: 22px; appearance: none; -webkit-appearance: none; border-radius: 999px; border: var(--bw) solid var(--ink); background: linear-gradient(90deg, #f33, #fc3, #7f3, #3fc, #38f, #93f, #f3c, #f33); }
+.custom-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; border: var(--bw) solid var(--ink); cursor: grab; }
+.custom-row input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: var(--bw) solid var(--ink); cursor: grab; }
+.tones { display: flex; gap: 6px; }
+.tone { width: 26px; height: 26px; border-radius: 50%; border: var(--bw) solid var(--ink); padding: 0; }
+.tone[aria-checked="true"] { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+.hats { display: flex; gap: 6px; flex-wrap: wrap; }
+.hat-pill { padding: 4px 11px; border: var(--bw) solid var(--ink); border-radius: 999px; background: var(--paper); font: 700 13px var(--body); color: var(--ink); transition: transform .2s var(--ease), background .2s; }
+.hat-pill:hover { transform: translateY(-2px); background: #fff; }
+.hat-pill[aria-checked="true"] { background: var(--yellow); box-shadow: 2px 2px 0 var(--ink); }
 .swatch[aria-checked="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); transform: scale(1.05); }
 
 /* ------------------------------- marquee --------------------------------- */

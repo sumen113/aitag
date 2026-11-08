@@ -60,6 +60,8 @@ const Sfx = (() => {
     click() { tone(500, 0.05, 'triangle', 0.1); },
     chat() { tone(1040, 0.05, 'triangle', 0.08); tone(1320, 0.06, 'triangle', 0.07, null, 0.04); },
     slide() { noise(0.5, 0.2, 2500, 0, 700); tone(520, 0.4, 'triangle', 0.08, 220); },
+    spin() { noise(0.3, 0.22, 700, 0, 2600); tone(420, 0.26, 'triangle', 0.1, 900); tone(630, 0.16, 'sine', 0.06, 1100, 0.05); },
+    boing() { tone(220, 0.16, 'sine', 0.14, 520); tone(440, 0.09, 'triangle', 0.06, 700, 0.03); },
     bowl() { tone(260, 0.2, 'square', 0.16, 90); noise(0.14, 0.24, 1200, 0, 300); tone(660, 0.08, 'triangle', 0.1, null, 0.05); },
     swap() { tone(400, 0.18, 'sine', 0.16, 900); tone(900, 0.18, 'sine', 0.16, 400, 0.12); noise(0.1, 0.1, 2000, 0.1); },
     echo() { tone(1100, 0.5, 'sine', 0.1, 600); tone(1100, 0.5, 'sine', 0.06, 600, 0.18); tone(1100, 0.5, 'sine', 0.03, 600, 0.36); },

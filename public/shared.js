@@ -27,15 +27,40 @@
 
   /* ----------------------------- characters ----------------------------- */
   // color index 0 = the character's natural color
-  const COLORS = [null, '#ff5d73', '#ffb142', '#ffe66d', '#3ddc97', '#4cc9f0', '#7c6cff', '#ff78c4'];
-  const COLOR_NAMES = ['Natural', 'Cherry', 'Mango', 'Lemon', 'Mint', 'Sky', 'Grape', 'Bubblegum'];
+  // NEW entries are only ever appended (saved accounts store the index). 100+ = a custom colour, see colorFor().
+  const COLORS = [null, '#ff5d73', '#ffb142', '#ffe66d', '#3ddc97', '#4cc9f0', '#7c6cff', '#ff78c4',
+    '#2f80ed', '#ff4d2e', '#a4e82f', '#ffb39b', '#c5a8ff', '#14b8a6', '#f4f7ff', '#3b3560', '#e8b923'];
+  const COLOR_NAMES = ['Natural', 'Cherry', 'Mango', 'Lemon', 'Mint', 'Sky', 'Grape', 'Bubblegum',
+    'Ocean', 'Lava', 'Lime', 'Peach', 'Lavender', 'Teal', 'Snow', 'Shadow', 'Gold'];
+  // Custom colours: k = CUSTOM_BASE + tone * 360 + hue (hue 0-359, tone 0 vivid / 1 pastel / 2 deep). Tiny to send, nothing to validate but the range.
+  const CUSTOM_BASE = 100, CUSTOM_TONES = [[0.78, 0.58], [0.72, 0.8], [0.62, 0.36]], CUSTOM_MAX = CUSTOM_BASE + 360 * CUSTOM_TONES.length - 1;
+  function hslHex(h, s, l) {
+    const a = s * Math.min(l, 1 - l), f = (n) => { const k = (n + h / 30) % 12, v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(v * 255).toString(16).padStart(2, '0'); };
+    return '#' + f(0) + f(8) + f(4);
+  }
+  /** Any saved/received colour index -> the sanitised index (0 = natural). */
+  const cleanColor = (k) => { k = Math.trunc(+k); if (!Number.isFinite(k) || k < 0) return 0; if (k < COLORS.length) return k; return k >= CUSTOM_BASE && k <= CUSTOM_MAX ? k : 0; };
+  /** colour index -> hex string, or null for the character's natural colour. */
+  function colorFor(k) {
+    k = cleanColor(k);
+    if (k === 0) return null;
+    if (k < COLORS.length) return COLORS[k];
+    const n = k - CUSTOM_BASE, tone = Math.floor(n / 360), t = CUSTOM_TONES[tone];
+    return hslHex(n % 360, t[0], t[1]);
+  }
+  const customK = (hue, tone) => CUSTOM_BASE + (tone | 0) * 360 + (((Math.round(hue) % 360) + 360) % 360);
+  const colorName = (k) => { k = cleanColor(k); return k < COLORS.length ? COLOR_NAMES[k] : 'Custom'; };
+
+  // Hats: purely cosmetic, free for everyone. 0 = none. Drawn by chars.js.
+  const HATS = ['None', 'Party hat', 'Crown', 'Top hat', 'Wizard hat', 'Halo', 'Cap', 'Flower', 'Chef hat'];
+  const cleanHat = (h) => { h = Math.trunc(+h); return Number.isFinite(h) && h >= 0 && h < HATS.length ? h : 0; };
 
   // fx = the name of the ability effect that is sent to clients / handled by the server
   // starter: free for everyone (guests included). price: cost in wins in the shop for everyone else.
   const CHARS = [
     { id: 'fox',   fx: 'dash',   name: 'Ziggy', species: 'Fox',     natural: '#ff8a3d', ability: 'Dash',      cd: 8,  dur: 0.2,  speed: 1.00, radius: 18, role: 'Skirmisher', starter: true,
       desc: 'A lightning burst of speed in the direction you are moving.' },
-    { id: 'frog',  fx: 'leap',   name: 'Hop',   species: 'Frog',    natural: '#55d16b', ability: 'Leap',      cd: 18, dur: 0.5,  speed: 0.95, radius: 18, role: 'Escape artist', price: 1,
+    { id: 'frog',  fx: 'leap',   name: 'Hop',   species: 'Frog',    natural: '#55d16b', ability: 'Leap',      cd: 20, dur: 0.5,  speed: 0.95, radius: 18, role: 'Escape artist', price: 1,
       desc: 'Jump clean over walls and cannot be tagged in the air. Lands with a sticky splash.' },
     { id: 'ghost', fx: 'phase',  name: 'Boo',   species: 'Ghost',   natural: '#dfe7ff', ability: 'Phase',     cd: 11, dur: 2.0,  speed: 0.98, radius: 18, role: 'Wall walker', starter: true,
       desc: 'Drift straight through walls and obstacles for two seconds.' },
@@ -55,6 +80,8 @@
       desc: 'Trade places with the nearest player in range. They are left dizzy for a moment.' },
     { id: 'bat',   fx: 'echo',   name: 'Echo',  species: 'Bat',     natural: '#8a64d6', ability: 'Echo Beacon', cd: 10, dur: 0, speed: 1.02, radius: 16, role: 'Time traveller', price: 3,
       desc: 'Drop a beacon, then press again within 4 seconds to snap back to it. Leave a trail, vanish, reappear.' },
+    { id: 'star',  fx: 'spin',   name: 'Andy',  species: 'Starfish', natural: '#ef6a4c', ability: 'Ricochet', cd: 13, dur: 1.5, speed: 0.99, radius: 19, role: 'Pinball', price: 3,
+      desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
   ];
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -363,6 +390,7 @@
       case 'fox': case 'frog': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
       case 'ghost': case 'cat': case 'robot': p.abT = def.dur; break;
       case 'penguin': p.abT = def.dur; p.vx = dx * 420; p.vy = dy * 420; break;
+      case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
       default: break;                              // bear / octo / owl / raccoon: world effects resolved by the server
     }
@@ -413,6 +441,8 @@
     const inPhase = p.abT > 0 && id === 'ghost';
     const inPounce = id === 'cat' && p.aux > 0;
     const inSlide = id === 'penguin' && p.abT > 0;
+    if (id === 'star' && p.abT > 0 && stunned) p.abT = 0;      // a stun uncurls Andy
+    const inRoll = id === 'star' && p.abT > 0;
 
     let maxSp = BASE_SPEED * def.speed * (p.it ? IT_BOOST : 1) * (p.sm || 1);
     if (id === 'cat' && p.abT > 0) maxSp *= 1.08;
@@ -440,6 +470,12 @@
     if (inDash || inLeap || inPounce) {
       const sp = inDash ? 800 : inPounce ? 700 : 520;
       p.vx = p.adx * sp; p.vy = p.ady * sp;
+    } else if (inRoll) {
+      if (len > 0.15) {                                            // gentle steering: bend the roll toward the stick
+        const k = Math.min(1, 3.2 * dt), tx = p.adx + (mx / len - p.adx) * k, ty = p.ady + (my / len - p.ady) * k, tl = Math.sqrt(tx * tx + ty * ty) || 1;
+        p.adx = tx / tl; p.ady = ty / tl;
+      }
+      p.vx = p.adx * 500; p.vy = p.ady * 500;
     } else if (stunned) {
       approach(p, 0, 0, FRIC * 0.6 * dt);
     } else {
@@ -447,8 +483,15 @@
     }
 
     p.x += p.vx * dt; p.y += p.vy * dt;
+    const px = p.x, py = p.y;
     if (!inLeap && !inPhase) collide(map, p, r);
     clampBounds(map, p, r);
+    if (inRoll) {                                                  // ricochet: whatever pushed us back reflects that axis
+      const hx = Math.abs(p.x - px) > 0.01, hy = Math.abs(p.y - py) > 0.01;
+      if (hx) { p.adx = -p.adx; p.vx = -p.vx; }
+      if (hy) { p.ady = -p.ady; p.vy = -p.vy; }
+      if ((hx || hy) && ev) ev.push({ k: 'ab', n: 'bounce', id: p.id, x: p.x, y: p.y, dx: hx ? p.adx : 0, dy: hy ? p.ady : 0 });
+    }
 
     // teleporters: step on a pad once, step off before it can fire again
     let onPad = false;
@@ -469,7 +512,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

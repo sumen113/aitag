@@ -100,6 +100,11 @@
             <p class="stage-desc" id="stDesc"></p>
             <div class="picker" id="picker" role="radiogroup" aria-label="Character"></div>
             <div class="swatch-row"><span class="mono">Colour</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Colour"></div></div>
+            <div class="custom-row hidden" id="customRow">
+              <label class="mono" for="hue">Hue</label><input type="range" id="hue" min="0" max="359" value="200" aria-label="Custom colour hue">
+              <div class="tones" id="tones" role="radiogroup" aria-label="Colour tone"></div>
+            </div>
+            <div class="swatch-row"><span class="mono">Hat</span><div class="hats" id="hats" role="radiogroup" aria-label="Hat"></div></div>
           </div>
         </aside>
       </section>
@@ -338,7 +343,7 @@
 
   <aside id="newsCard" class="news-card hidden" aria-label="Update notice">
     <span class="mono">New update</span>
-    <p><b>accounts, shop and chat</b><br>make an account or lose progress, pls dont swear in chat</p>
+    <p><b>the character update</b><br>new starfish, hats, custom colours and way more animations</p>
     <div><button type="button" class="btn-nav solid" id="newsOpen">full logs</button><button type="button" class="news-x" id="newsClose" aria-label="Dismiss">×</button></div>
   </aside>
   <script src="vendor/gsap.min.js"></script>

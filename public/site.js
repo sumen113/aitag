@@ -16,11 +16,12 @@
     get(k, d) { try { const v = localStorage.getItem('tagrush.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
-  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff'];
+  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0'];   // one per character, same order as CHARS
   const sel = {
     name: String(store.get('name', '') || '').slice(0, 14),
     c: clamp(store.get('c', 0) | 0, 0, CHARS.length - 1),
-    k: clamp(store.get('k', 0) | 0, 0, COLORS.length - 1),
+    k: C.cleanColor(store.get('k', 0)),
+    h: C.cleanHat(store.get('h', 0)),
     diff: ['easy', 'normal', 'hard'].includes(store.get('diff', 'normal')) ? store.get('diff', 'normal') : 'normal',
   };
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -85,7 +86,7 @@
     Sfx.unlock(); Sfx.play('ready');
     await curtainIn();
     const slow = setTimeout(() => App.curtainMsg('Waking the server up… free hosting can take up to a minute.'), 3500);
-    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k }, extra));
+    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k, h: sel.h }, extra));
     clearTimeout(slow); App.curtainMsg('');
     if (!res.ok) { await curtainOut(); busy = false; $('btnPlay').disabled = $('btnBots').disabled = false; if (mode === 'online') { if (extra.server && extra.pass !== undefined && /password/i.test(res.err) && lockedSv) { openModal('serverModal'); askPass(lockedSv, res.err); } else openServers(res.err); } else showErr(res.err); return; }
     enterGame();
@@ -169,6 +170,7 @@
   const pvc = $('preview'), pv = pvc.getContext('2d');
   const pic = $('picker'), sw = $('swatches');
   const hop = { air: 0, sq: 0 };
+  const pvVis = { pose: { up: 0, rot: 0, sq: 0 } };
   const LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const owns = (i) => C.ownsChar(App.account ? App.account.owned : [], CHARS[i].id);
   const firstOwned = () => CHARS.findIndex((_, i) => owns(i));
@@ -183,15 +185,45 @@
     });
     COLORS.forEach((_, k) => {
       const b = el('button', 'swatch'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.k = k; b.title = C.COLOR_NAMES[k]; b.setAttribute('aria-label', C.COLOR_NAMES[k]);
-      b.addEventListener('click', () => { sel.k = k; store.set('k', k); Sfx.play('click'); paintStage(false); bounce(); });
+      b.addEventListener('click', () => { setLook({ k }); });
       sw.appendChild(b);
     });
+    // custom colour: a rainbow swatch that opens the hue slider + three tones
+    const cb = el('button', 'swatch custom'); cb.type = 'button'; cb.setAttribute('role', 'radio'); cb.title = 'Custom colour'; cb.setAttribute('aria-label', 'Custom colour');
+    cb.addEventListener('click', () => setLook({ k: C.customK(+hueEl.value, customTone()) }));
+    sw.appendChild(cb);
+    C.CUSTOM_TONES.forEach((_, i) => {
+      const b = el('button', 'tone'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.tone = i; b.setAttribute('aria-label', ['Vivid', 'Pastel', 'Deep'][i]); b.title = ['Vivid', 'Pastel', 'Deep'][i];
+      b.addEventListener('click', () => setLook({ k: C.customK(+hueEl.value, i) }));
+      tonesEl.appendChild(b);
+    });
+    hueEl.addEventListener('input', () => setLook({ k: C.customK(+hueEl.value, customTone()) }, true));
+    C.HATS.forEach((name, h) => {
+      const b = el('button', 'hat-pill', name); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.h = h;
+      b.addEventListener('click', () => setLook({ h }));
+      hatsEl.appendChild(b);
+    });
   }
-  function paintStage(animate) {
+  const hueEl = $('hue'), tonesEl = $('tones'), hatsEl = $('hats'), customRow = $('customRow');
+  const customTone = () => (sel.k >= C.CUSTOM_BASE ? Math.floor((sel.k - C.CUSTOM_BASE) / 360) : 0);
+  /** change colour and/or hat: save, repaint, and let the character react (quietly while dragging the slider) */
+  function setLook(p, quiet) {
+    if (p.k !== undefined) { sel.k = p.k; store.set('k', sel.k); }
+    if (p.h !== undefined) { sel.h = p.h; store.set('h', sel.h); }
+    if (!quiet) { Sfx.play('click'); bounce(); }
+    paintStage(false, quiet);
+  }
+  function paintStage(animate, quiet) {
     const def = CHARS[sel.c];
-    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.k, 96); });
+    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.k, 96, sel.h); });
     paintLockSticker();
-    sw.querySelectorAll('.swatch').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
+    const isCustom = sel.k >= C.CUSTOM_BASE;
+    sw.querySelectorAll('.swatch:not(.custom)').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
+    const cs = sw.querySelector('.custom'); cs.classList.toggle('on', isCustom); cs.setAttribute('aria-checked', String(isCustom)); cs.style.background = isCustom ? C.colorFor(sel.k) : '';
+    customRow.classList.toggle('hidden', !isCustom);
+    if (isCustom) { const n = sel.k - C.CUSTOM_BASE; if (document.activeElement !== hueEl) hueEl.value = n % 360; }
+    tonesEl.querySelectorAll('.tone').forEach((b, i) => { const t = C.CUSTOM_TONES[i]; b.style.background = C.hslHex(+hueEl.value, t[0], t[1]); b.setAttribute('aria-checked', String(isCustom && customTone() === i)); });
+    hatsEl.querySelectorAll('.hat-pill').forEach((b, h) => b.setAttribute('aria-checked', String(h === sel.h)));
     $('stage').style.setProperty('--stage', STAGE[sel.c]);
     $('stRole').textContent = def.role;
     $('stAb').textContent = def.ability; $('stCd').textContent = def.cd + 's recharge';
@@ -216,13 +248,14 @@
   }
   function pick(i, fromCast) {
     if (i === sel.c && !fromCast) { bounce(); return; }
-    sel.c = i; store.set('c', i); Sfx.play('click'); paintStage(true); bounce();
+    sel.c = i; store.set('c', i); Sfx.play('click'); paintStage(true); Chars.pose(pvVis, 'hello', 1);
   }
   App.pick = pick;
 
   const mouse = { x: 0.5, y: 0.5 };
   window.addEventListener('pointermove', (e) => { mouse.x = e.clientX / innerWidth; mouse.y = e.clientY / innerHeight; }, { passive: true });
-  pvc.addEventListener('pointerdown', () => { bounce(); Sfx.play('click'); });
+  // poke the character: it performs its own ability (the same little animation it does in a match)
+  pvc.addEventListener('pointerdown', () => { Chars.pose(pvVis, CHARS[sel.c].fx, 1); Sfx.play('click'); });
   let stageVisible = true, blink = { next: 2, t: 0 };
   new IntersectionObserver((en) => { stageVisible = en[0].isIntersecting; }).observe($('stage'));
   function drawPreview(dt, t) {
@@ -233,7 +266,9 @@
     const b = blink.t > 0 ? Math.sin((1 - blink.t / 0.16) * Math.PI) : 0;
     const r = pvc.getBoundingClientRect(), cx = (r.left + r.width / 2) / innerWidth, cy = (r.top + r.height / 2) / innerHeight;
     const lx = clamp((mouse.x - cx) * 4, -1, 1), ly = clamp((mouse.y - cy) * 4, -1, 1);
-    Chars.draw(pv, sel.c, { x: 280, y: 470, s: 6.6, color: sel.k ? COLORS[sel.k] : null, face: 1, lx: lx || 0.001, ly, t, spd: 0, blink: b, air: hop.air, stretch: hop.sq });
+    // fit: wide things (bat wings, fox tail) and tall things (hats) shrink the whole character just enough to stay inside the canvas
+    const f = Chars.fit(sel.c, sel.h), sc = Math.min(6.6, 530 / f.w, 410 / -f.y0), px = 280 - f.cx * sc;
+    Chars.draw(pv, sel.c, { x: px, y: 478, s: sc, color: C.colorFor(sel.k), face: 1, lx: lx || 0.001, ly, t, spd: 0, blink: b, air: hop.air, stretch: hop.sq, hat: sel.h, pose: pvVis.pose });
   }
 
   /* ============================== content blocks =========================== */
@@ -408,7 +443,8 @@
     if (u && restoreChar && u.settings) {
       const i = CHARS.findIndex((c) => c.id === u.settings.c);
       if (i >= 0 && owns(i)) { sel.c = i; store.set('c', i); }
-      if (Number.isInteger(u.settings.k) && u.settings.k >= 0 && u.settings.k < COLORS.length) { sel.k = u.settings.k; store.set('k', sel.k); }
+      if (Number.isInteger(u.settings.k)) { sel.k = C.cleanColor(u.settings.k); store.set('k', sel.k); }
+      if (Number.isInteger(u.settings.h)) { sel.h = C.cleanHat(u.settings.h); store.set('h', sel.h); }
     }
     if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
     paintAccount();
@@ -518,7 +554,7 @@
     const art = el('div', 'shop-art'), body = el('div', 'shop-body'), buy = el('div', 'shop-buy');
     if (item.type === 'character') {
       const i = CHARS.findIndex((c) => c.id === item.ref), def = CHARS[i];
-      art.style.setProperty('--c', STAGE[i]); const img = new Image(); img.alt = def.species; img.src = Chars.avatar(i, sel.k, 192); art.append(el('span', 'tag', 'Character'), img);
+      art.style.setProperty('--c', STAGE[i]); const img = new Image(); img.alt = def.species; img.src = Chars.avatar(i, sel.k, 192, sel.h); art.append(el('span', 'tag', 'Character'), img);
       const ab = el('div', 'ab'); ab.innerHTML = Chars.icon(def.fx); ab.append(el('span', '', `${def.ability} · ${def.cd}s`));
       body.append(el('h3', '', `${def.name} the ${def.species}`), ab, el('p', '', def.desc));
     } else { body.append(el('h3', '', item.name), el('p', '', item.blurb || '')); }
@@ -567,9 +603,20 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-4';
+  const NEWS_VERSION = 'update-6';
   const NEWS = [
-    { v: 'Update 4', tag: 'Newest', items: [
+    { v: 'Update 6 · Character update', tag: 'Newest', items: [
+      ['Starfish Andy', 'A new character. Ricochet curls Andy into a spinning star that bounces off every wall while you steer it.'],
+      ['Make it yours', '16 colours plus a custom colour picker (any hue, vivid, pastel or deep) and 8 hats: party, crown, top hat, wizard, halo, cap, flower and chef.'],
+      ['Everyone moves differently', 'Frogs hop, penguins waddle, cats sneak, bears plod, robots roll and the starfish tumbles. Abilities and getting tagged have their own little animations now. Click your character on the home page to see its move.'],
+      ['Fixes', 'No more clipped bat, fox and raccoon in the picker and showcase, and the newest characters finally have their own background colour.'],
+    ] },
+    { v: 'Update 5', items: [
+      ['Servers', 'Online play now has a server list: join the always-on Regular server or make your own with a name, game length (60s or more), max players, bots and an optional password.'],
+      ['Cheaper characters', 'Every character now costs 1 to 3 wins.'],
+      ['Balance', 'Ties no longer go to whoever joined first, and Fox, Frog and Octopus got small ability tweaks.'],
+    ] },
+    { v: 'Update 4', items: [
       ['A chat you can’t miss', 'A big Chat button with an unread badge (or just press Enter), quick-chat phrases like GG! and Run!, and a log that sticks around longer.'],
       ['Leaderboard', 'See the top 10 players by total wins. Open it from the menu or your account.'],
       ['Admin tools', 'Admins can announce messages in games, mute or ban troublemakers and show a banner on this page. Admin messages carry an ADMIN tag.'],

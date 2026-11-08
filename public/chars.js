@@ -19,7 +19,7 @@ const Chars = (() => {
     return v;
   }
   const palette = (hex) => ({ m: hex, d: shade(hex, -0.22), dd: shade(hex, -0.45), l: shade(hex, 0.32), ll: shade(hex, 0.62) });
-  const colorOf = (ci, ki) => (ki ? C.COLORS[ki] : C.CHARS[ci].natural);
+  const colorOf = (ci, ki) => C.colorFor(ki) || C.CHARS[ci].natural;
 
   /* ---------------------------- tiny path helpers --------------------------- */
   function fillStroke(g, fill, lw) {
@@ -55,7 +55,7 @@ const Chars = (() => {
   function feet(g, col, spread, o, size) {
     const sz = size || 1;
     for (let i = -1; i <= 1; i += 2) {
-      const lift = o.spd > 0.05 ? Math.max(0, Math.sin(o.t * 11 + (i > 0 ? 0 : Math.PI))) * 3.4 * o.spd : 0;
+      const lift = o.spd > 0.05 ? Math.max(0, Math.sin(o.t * o.gf + (i > 0 ? 0 : Math.PI))) * 3.4 * o.spd : 0;
       ell(g, i * spread, -1.5 - lift, 6 * sz, 3.6 * sz, col, 2);
     }
   }
@@ -188,9 +188,11 @@ const Chars = (() => {
         g.beginPath(); g.arc(s * 10, -4.5, 5.6, 0, 7); fillStroke(g, '#3a3a58', 2);
         g.save(); g.translate(s * 10, -4.5); g.rotate(spin); g.beginPath(); g.moveTo(-4, 0); g.lineTo(4, 0); g.moveTo(0, -4); g.lineTo(0, 4); g.lineWidth = 1.4; g.strokeStyle = '#8a8cb8'; g.stroke(); g.restore();
       }
-      g.beginPath(); g.moveTo(0, -37); g.lineTo(0, -45.5); g.lineWidth = 2.4; g.strokeStyle = OUT; g.stroke();
-      const pulse = 0.5 + 0.5 * Math.sin(o.t * 5);
-      g.beginPath(); g.arc(0, -47.5, 3.4, 0, 7); fillStroke(g, pulse > 0.5 ? '#ffd166' : '#ff8a5c', 2);
+      if (!o.hat) {
+        g.beginPath(); g.moveTo(0, -37); g.lineTo(0, -45.5); g.lineWidth = 2.4; g.strokeStyle = OUT; g.stroke();
+        const pulse = 0.5 + 0.5 * Math.sin(o.t * 5);
+        g.beginPath(); g.arc(0, -47.5, 3.4, 0, 7); fillStroke(g, pulse > 0.5 ? '#ffd166' : '#ff8a5c', 2);
+      }
       rrect(g, -22, -24, 6, 11, 3, c.d, 2); rrect(g, 16, -24, 6, 11, 3, c.d, 2);
       rrect(g, -16.5, -37, 33, 30, 9, c.m);
       g.save(); g.globalAlpha *= 0.35; rrect(g, -13, -35, 26, 6, 3, '#fff', 0.01); g.restore();
@@ -205,7 +207,7 @@ const Chars = (() => {
     penguin(g, c, o) {
       const flap = Math.sin(o.t * 9) * (0.12 + 0.3 * o.spd);
       for (const sd of [-1, 1]) {
-        const lift = o.spd > 0.05 ? Math.max(0, Math.sin(o.t * 11 + (sd > 0 ? 0 : Math.PI))) * 3 * o.spd : 0;
+        const lift = o.spd > 0.05 ? Math.max(0, Math.sin(o.t * o.gf + (sd > 0 ? 0 : Math.PI))) * 3 * o.spd : 0;
         ell(g, sd * 7.5, -1.4 - lift, 7.4, 3.6, '#ffa733', 2);
       }
       ell(g, 0, -19.5, 17.5, 20, c.m);
@@ -260,53 +262,228 @@ const Chars = (() => {
       g.beginPath(); g.moveTo(-5, -14.4); g.quadraticCurveTo(0, -12.2, 5, -14.4); g.lineWidth = 1.5; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
       g.restore();
     },
+    star(g, c, o) {
+      const cy = -20, R = 33.5, r = 11.5, TAU = Math.PI * 2;
+      g.save(); g.translate(0, cy);
+      const tips = [];
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * TAU / 5, leg = i === 2 || i === 3;
+        const lift = leg && o.spd > 0.05 ? Math.max(0, Math.sin(o.t * o.gf + (i === 2 ? 0 : Math.PI))) * 3.4 * o.spd : 0;
+        const wig = Math.sin(o.t * 3 + i * 1.7) * 0.07 + (leg ? 0 : Math.sin(o.t * o.gf * 0.5 + i) * 0.1 * o.spd);
+        tips.push([a + wig, R - lift]);
+      }
+      g.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const [a, rr] = tips[i], v0 = a - Math.PI / 5, v1 = a + Math.PI / 5;
+        const sx = Math.cos(v0) * r, sy = Math.sin(v0) * r;
+        if (i === 0) g.moveTo(sx, sy);
+        g.quadraticCurveTo(Math.cos(a) * rr, Math.sin(a) * rr, Math.cos(v1) * r, Math.sin(v1) * r);
+      }
+      g.closePath(); fillStroke(g, c.m);
+      for (let i = 0; i < 5; i++) {                                  // bumpy dots down each arm
+        const [a] = tips[i];
+        for (const [d, rad] of [[17, 1.9], [23.5, 1.4]]) { g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, rad, 0, 7); g.fillStyle = c.l; g.fill(); }
+      }
+      ell(g, 0, 0, 10.5, 10, c.l, 0.01);
+      eye(g, -4.6, -2.2, 3.5, o); eye(g, 4.6, -2.2, 3.5, o);
+      cheek(g, -8.2, 2.6, 2.4, 1.6); cheek(g, 8.2, 2.6, 2.4, 1.6);
+      g.beginPath(); g.moveTo(-2.4, 3.4); g.quadraticCurveTo(0, 6.4, 2.4, 3.4); g.lineWidth = 1.6; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
+      g.restore();
+    },
+  };
+
+  /* ---------------------------------- hats ---------------------------------- */
+  // where the top of each character's head is (the hat's base sits here) and how wide the hat may be
+  const HEAD = {
+    fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
+    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9],
+  };
+  function drawHat(g, id, hat, o) {
+    const [hx, hy, hw] = HEAD[id] || HEAD.fox, k = hw / 12;
+    g.save(); g.translate(hx, hy + 1.5); g.rotate(0.1); g.scale(k, k);
+    switch (hat) {
+      case 1: {   // party hat
+        poly(g, [-10, 0, 10, 0, 0, -25], '#ff5da2', 2.2);
+        g.save(); g.beginPath(); g.moveTo(-10, 0); g.lineTo(10, 0); g.lineTo(0, -25); g.closePath(); g.clip();
+        g.fillStyle = '#ffe066'; for (const y of [-6, -13, -20]) { g.beginPath(); g.moveTo(-14, y); g.lineTo(14, y - 5); g.lineTo(14, y - 1); g.lineTo(-14, y + 4); g.fill(); }
+        g.restore();
+        g.beginPath(); g.moveTo(-10, 0); g.lineTo(10, 0); g.lineTo(0, -25); g.closePath(); g.lineWidth = 2.2; g.strokeStyle = OUT; g.stroke();
+        ell(g, 0, -26, 3.6, 3.6, '#fff', 1.8); break;
+      }
+      case 2: {   // crown
+        g.beginPath(); g.moveTo(-11, 0); g.lineTo(-12, -14); g.lineTo(-6, -8); g.lineTo(0, -17); g.lineTo(6, -8); g.lineTo(12, -14); g.lineTo(11, 0); g.closePath(); fillStroke(g, '#ffd23f', 2.2);
+        g.fillStyle = '#ffec99'; g.fillRect(-9.6, -5.5, 19.2, 2);
+        for (const [x, col] of [[-5, '#ff5d73'], [0, '#4cc9f0'], [5, '#3ddc97']]) { g.beginPath(); g.arc(x, -2, 1.5, 0, 7); g.fillStyle = col; g.fill(); }
+        break;
+      }
+      case 3: {   // top hat
+        rrect(g, -13, -2.5, 26, 5, 2.5, '#26233f', 2.2);
+        rrect(g, -8.5, -20, 17, 18.5, 2, '#33305a', 2.2);
+        g.fillStyle = '#ff5d73'; g.fillRect(-8.3, -8, 16.6, 4); break;
+      }
+      case 4: {   // wizard hat
+        g.beginPath(); g.moveTo(-9, 0); g.quadraticCurveTo(-4, -16, 3, -27); g.quadraticCurveTo(9, -23, 14, -13); g.quadraticCurveTo(9, -8, 9, 0); g.closePath(); fillStroke(g, '#5b4fd6', 2.2);
+        ell(g, 0, 0.5, 15.5, 3.6, '#4a3fbd', 2.2);
+        for (const [x, y, r] of [[-1, -10, 1.8], [4, -16, 1.3], [-3, -17, 1.1]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = '#ffe066'; g.fill(); }
+        break;
+      }
+      case 5: {   // halo
+        const b = Math.sin(o.t * 3) * 1.2;
+        g.beginPath(); g.ellipse(0, -9 + b, 10.5, 3.6, 0, 0, 7); g.lineWidth = 5.2; g.strokeStyle = OUT; g.stroke(); g.lineWidth = 2.6; g.strokeStyle = '#ffe066'; g.stroke();
+        break;
+      }
+      case 6: {   // cap (brim points the way the character faces)
+        g.beginPath(); g.moveTo(-10.5, 0.5); g.quadraticCurveTo(-11, -15, 0, -15); g.quadraticCurveTo(11, -15, 10.5, 0.5); g.closePath(); fillStroke(g, '#ff5d73', 2.2);
+        g.beginPath(); g.moveTo(3, -1); g.quadraticCurveTo(18, -2, 19, 3); g.quadraticCurveTo(10, 3.4, 3, 2.4); g.closePath(); fillStroke(g, '#d93a58', 2);
+        g.beginPath(); g.arc(0, -15, 1.6, 0, 7); g.fillStyle = '#ffe066'; g.fill(); break;
+      }
+      case 7: {   // flower
+        g.translate(7.5, -2.5);
+        for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; ell(g, Math.cos(a) * 5.2, Math.sin(a) * 5.2, 3.9, 3.9, '#ff8fc0', 1.8); }
+        ell(g, 0, 0, 3.4, 3.4, '#ffe066', 1.8); break;
+      }
+      case 8: {   // chef hat
+        for (const [x, y, r] of [[-7, -15, 6.5], [7, -15, 6.5], [0, -20, 7.5]]) ell(g, x, y, r, r, '#fff', 2.2);
+        rrect(g, -10.5, -14, 21, 14.5, 3, '#fff', 2.2);
+        g.fillStyle = '#e4e8f5'; g.fillRect(-10, -4.5, 20, 1.8); break;
+      }
+      default: break;
+    }
+    g.restore();
+  }
+
+  /* ------------------------------ walk personalities ------------------------------
+     f: step frequency · bob: hop height · sq: squash & stretch · sway: waddle (rad) · lean: forward tilt · crouch: stays low */
+  const GAIT = {
+    fox:     { f: 12, bob: 3.4, sq: 0.04, sway: 0.00, lean: 0.07, crouch: 0 },
+    frog:    { f: 7,  bob: 7.5, sq: 0.13, sway: 0.00, lean: 0.00, crouch: 0 },      // proper hops
+    ghost:   { f: 5,  bob: 1.6, sq: 0.02, sway: 0.08, lean: 0.12, crouch: 0 },      // drifts
+    cat:     { f: 10, bob: 1.2, sq: 0.03, sway: 0.02, lean: 0.10, crouch: 0.07 },   // sneaks low
+    bear:    { f: 7,  bob: 2.2, sq: 0.05, sway: 0.10, lean: 0.00, crouch: 0 },      // heavy plod
+    octo:    { f: 8,  bob: 2.6, sq: 0.08, sway: 0.03, lean: 0.00, crouch: 0 },      // pulsing wobble
+    owl:     { f: 13, bob: 3.6, sq: 0.03, sway: 0.05, lean: 0.03, crouch: 0 },
+    robot:   { f: 16, bob: 0.7, sq: 0.00, sway: 0.00, lean: 0.05, crouch: 0 },      // stiff, rolling
+    penguin: { f: 8,  bob: 1.8, sq: 0.03, sway: 0.20, lean: 0.00, crouch: 0 },      // waddle
+    raccoon: { f: 15, bob: 2.4, sq: 0.05, sway: 0.03, lean: 0.10, crouch: 0.03 },   // scurry
+    bat:     { f: 6,  bob: 2.2, sq: 0.02, sway: 0.04, lean: 0.12, crouch: 0 },      // flutter
+    star:    { f: 9,  bob: 2.4, sq: 0.06, sway: 0.07, lean: 0.04, crouch: 0 },
   };
 
   /* -------------------------------- public API ------------------------------ */
   /**
    * o: x,y (feet position) s (scale: radius/18) color face(+1/-1) lx,ly (look) t (seconds)
-   *    spd (0..1) air (0..1) alpha blink(0..1) lean(rad)
+   *    spd (0..1) air (0..1) alpha blink(0..1) lean(rad) hat(0..8) pose{up,rot,sq} (see pose())
    */
   function draw(g, ci, o) {
-    const def = C.CHARS[ci], c = palette(o.color || def.natural), id = def.id;
-    const s = o.s || 1, air = o.air || 0;
-    const o2 = { t: o.t || 0, spd: o.spd || 0, blink: o.blink || 0, lx: (o.lx || 0) * (o.face || 1), ly: o.ly || 0 };
+    const def = C.CHARS[ci], c = palette(o.color || def.natural), id = def.id, gt = GAIT[id] || GAIT.fox;
+    const s = o.s || 1, face = o.face || 1, t = o.t || 0, spd = o.spd || 0, pz = o.pose;
+    const up = pz ? pz.up : 0, air = (o.air || 0) + up / 46;
+    const o2 = { t, spd, blink: o.blink || 0, lx: (o.lx || 0) * face, ly: o.ly || 0, gf: gt.f, hat: o.hat | 0 };
     g.save();
     g.translate(o.x, o.y);
     if (o.shadow !== false) {
-      g.globalAlpha = (o.alpha == null ? 1 : o.alpha) * (0.3 - 0.12 * air);
-      g.beginPath(); g.ellipse(0, 2 * s, (17 - 5 * air) * s, (6.2 - 2 * air) * s, 0, 0, 7); g.fillStyle = '#000'; g.fill();
+      g.globalAlpha = (o.alpha == null ? 1 : o.alpha) * (0.3 - 0.12 * Math.min(1, air));
+      g.beginPath(); g.ellipse(0, 2 * s, (17 - 5 * Math.min(1, air)) * s, (6.2 - 2 * Math.min(1, air)) * s, 0, 0, 7); g.fillStyle = '#000'; g.fill();
     }
     g.globalAlpha = o.alpha == null ? 1 : o.alpha;
-    const float = id === 'ghost' ? 6 + Math.sin(o2.t * 3) * 2.5 : 0;
-    const bob = o2.spd > 0.05 ? Math.abs(Math.sin(o2.t * 11)) * 3.2 * o2.spd : Math.sin(o2.t * 3) * 0.9;
-    const sq = o2.spd > 0.05 ? Math.sin(o2.t * 22) * 0.04 * o2.spd : Math.sin(o2.t * 3) * 0.015;
-    g.scale(s * (o.face || 1), s);
-    g.translate(0, -air * 46 - float - bob);
-    if (o.lean) g.rotate(o.lean * (o.face || 1));
-    g.scale(1 + sq + (o.stretch || 0), 1 - sq - (o.stretch || 0));
+    const float = id === 'ghost' ? 6 + Math.sin(t * 3) * 2.5 : 0;
+    const moving = spd > 0.05, ph = Math.sin(t * gt.f);
+    const bob = moving ? Math.abs(ph) * gt.bob * spd : Math.sin(t * 3) * 0.9;
+    const sq = moving ? (0.5 - Math.abs(ph)) * 2 * gt.sq * spd : Math.sin(t * 3) * 0.015;
+    const sway = moving ? Math.sin(t * gt.f * 0.5) * gt.sway * spd : 0;
+    g.scale(s * face, s);
+    g.translate(0, -(o.air || 0) * 46 - float - bob - up);
+    g.rotate(sway + gt.lean * spd * 0.6 + (o.lean ? o.lean * face : 0));
+    if (pz && pz.rot) { g.translate(0, -20); g.rotate(pz.rot); g.translate(0, 20); }
+    const st = sq + (o.stretch || 0) + (pz ? pz.sq : 0), cr = gt.crouch * spd;
+    g.scale(1 + st + cr * 0.5, (1 - st) * (1 - cr));
     g.lineJoin = 'round'; g.lineCap = 'round';
     DRAW[id](g, c, o2);
+    if (o2.hat) drawHat(g, id, o2.hat, o2);
     g.restore();
   }
 
+  /* --------------------- fitting: measure what a character really covers --------------------- */
+  const fitCache = new Map();
+  /** Bounding box (in character units, feet at 0,0) of a character over its animation, incl. its hat. */
+  function fit(ci, hat) {
+    const key = ci + ':' + (hat | 0);
+    let f = fitCache.get(key);
+    if (f) return f;
+    const W = 280, H = 280, OX = 140, OY = 200;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const [spd, n] of [[0, 2], [1, 4]]) for (let i = 0; i < n; i++) {
+      g.clearRect(0, 0, W, H);
+      draw(g, ci, { x: OX, y: OY, s: 1, t: i * 0.37, spd, face: 1, shadow: false, hat, lx: 0.001 });
+      const d = g.getImageData(0, 0, W, H).data;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    f = { x0: x0 - OX, x1: x1 - OX + 1, y0: y0 - OY, y1: y1 - OY + 1 };
+    f.w = f.x1 - f.x0; f.h = f.y1 - f.y0; f.cx = (f.x0 + f.x1) / 2; f.cy = (f.y0 + f.y1) / 2;
+    fitCache.set(key, f);
+    return f;
+  }
+
   const avCache = new Map();
-  function avatar(ci, ki, size) {
-    size = size || 64;
-    const key = ci + ':' + ki + ':' + size;
+  /** A portrait that always fits its canvas, centred, never clipped (hat optional). */
+  function avatar(ci, ki, size, hat) {
+    size = size || 64; hat = hat | 0;
+    const key = ci + ':' + ki + ':' + size + ':' + hat;
     let u = avCache.get(key);
     if (u) return u;
+    const f = fit(ci, hat), s = Math.min(size / 62, (size * 0.92) / f.w, (size * 0.92) / f.h);
     const cv = document.createElement('canvas'); cv.width = cv.height = size;
     const g = cv.getContext('2d');
-    draw(g, ci, { x: size / 2, y: size * 0.88, s: size / 62, color: ki ? C.COLORS[ki] : null, face: 1, t: 0.3, shadow: false });
+    draw(g, ci, { x: size / 2 - f.cx * s, y: size / 2 - f.cy * s, s, color: C.colorFor(ki), face: 1, t: 0.3, shadow: false, hat });
     u = cv.toDataURL();
+    if (avCache.size > 600) avCache.clear();     // custom colours can generate lots of keys
     avCache.set(key, u);
     return u;
+  }
+
+  /* --------------------------- poses: little GSAP acting bits --------------------------- */
+  // A pose is {up, rot, sq} on a plain object that draw() reads; timelines tween it and settle back to rest.
+  const REST = { up: 0, rot: 0, sq: 0 };
+  const reducedMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const POSES = {
+    dash:    (p, f) => [[{ sq: 0.2, rot: -0.12, duration: 0.07, ease: 'power2.out' }], [{ sq: -0.16, rot: 0.34, duration: 0.12, ease: 'power2.out' }], [{ ...REST, duration: 0.35, ease: 'elastic.out(1, 0.5)' }]],
+    leap:    (p, f) => [[{ sq: 0.26, duration: 0.1, ease: 'power2.out' }], [{ sq: -0.14, duration: 0.14, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.5)' }]],
+    phase:   () => [[{ rot: 0.22, sq: -0.08, duration: 0.12, ease: 'sine.inOut' }], [{ rot: -0.22, duration: 0.2, ease: 'sine.inOut' }], [{ rot: 0.12, duration: 0.16, ease: 'sine.inOut' }], [{ ...REST, duration: 0.2, ease: 'sine.out' }]],
+    cloak:   () => [[{ sq: 0.24, duration: 0.1, ease: 'power2.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.45)' }]],
+    stomp:   () => [[{ sq: 0.22, duration: 0.1, ease: 'power2.out' }], [{ up: 16, sq: -0.2, duration: 0.13, ease: 'power2.out' }], [{ up: 0, sq: 0.3, duration: 0.09, ease: 'power4.in' }], [{ ...REST, duration: 0.5, ease: 'elastic.out(1, 0.4)' }]],
+    goo:     () => [[{ sq: 0.3, up: -2, duration: 0.09, ease: 'power2.out' }], [{ sq: -0.16, duration: 0.12, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.45)' }]],
+    decoy:   () => [[{ up: 9, rot: -0.28, sq: -0.1, duration: 0.14, ease: 'power2.out' }], [{ up: 0, rot: 0.1, sq: 0.1, duration: 0.12, ease: 'power2.in' }], [{ ...REST, duration: 0.3, ease: 'back.out(2)' }]],
+    shield:  () => [[{ sq: -0.14, up: 3, duration: 0.12, ease: 'back.out(3)' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.5)' }]],
+    shieldhit: () => [[{ rot: -0.3, sq: 0.18, duration: 0.07, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.4)' }]],
+    slide:   () => [[{ sq: 0.18, duration: 0.07, ease: 'power2.out' }], [{ sq: 0, duration: 0.2, ease: 'power2.out' }]],      // the belly flop itself is held in game.js while sliding
+    swap:    (p, f) => [[{ rot: Math.PI * 4 * f, sq: -0.1, duration: 0.42, ease: 'power3.out' }], [{ ...REST, duration: 0.001 }]],
+    echo:    () => [[{ up: 10, rot: 0.4, duration: 0.14, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'bounce.out' }]],
+    recall:  () => [[{ sq: -0.3, duration: 0.07, ease: 'power2.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
+    pounce:  (p, f) => [[{ sq: 0.18, rot: -0.1, duration: 0.06, ease: 'power2.out' }], [{ sq: -0.18, rot: 0.42, duration: 0.12, ease: 'power2.out' }], [{ ...REST, duration: 0.35, ease: 'elastic.out(1, 0.5)' }]],
+    spin:    (p, f) => [[{ sq: 0.24, duration: 0.09, ease: 'power2.out' }], [{ sq: 0, up: 5, duration: 0.14, ease: 'power2.out' }], [{ up: 0, duration: 0.2, ease: 'power2.in' }]],
+    bounce:  () => [[{ sq: 0.2, duration: 0.05, ease: 'power2.out' }], [{ ...REST, duration: 0.3, ease: 'elastic.out(1, 0.45)' }]],
+    hit:     () => [[{ sq: 0.24, rot: -0.2, duration: 0.07, ease: 'power2.out' }], [{ rot: 0.12, sq: -0.1, duration: 0.1, ease: 'power2.inOut' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.4)' }]],
+    hello:   () => [[{ up: 12, sq: -0.14, duration: 0.16, ease: 'power2.out' }], [{ up: 0, sq: 0.18, duration: 0.14, ease: 'power2.in' }], [{ ...REST, duration: 0.5, ease: 'elastic.out(1, 0.4)' }]],
+  };
+  /** Play a named pose on `v` (any object; v.pose is created on demand). face = +1/-1 so spins go the way you face. */
+  function pose(v, name, face) {
+    if (!v) return;
+    const p = v.pose || (v.pose = { up: 0, rot: 0, sq: 0 });
+    const mk = POSES[name];
+    if (!mk || reducedMotion()) return;
+    if (v.poseTl) v.poseTl.kill();
+    gsap.killTweensOf(p);
+    const tl = gsap.timeline({ onComplete: () => { p.up = p.rot = p.sq = 0; } });
+    for (const [vars] of mk(p, face || 1)) tl.to(p, { ...vars, overwrite: false });
+    v.poseTl = tl;
   }
 
   /* ability icons (inline SVG, stroke-based so they inherit currentColor) */
   const ICON = {
     dash: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    spin: '<path d="M12 2.8l2.7 6 6.5.6-4.9 4.3 1.5 6.4L12 16.7 6.2 20.1l1.5-6.4L2.8 9.4l6.5-.6z"/>',
     leap: '<path d="M3 19c2-9 9-13 17-8"/><path d="M15 5.5 20 11l-6.5 2"/>',
     phase: '<circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3.2"/><circle cx="12" cy="12" r="2.6"/>',
     cloak: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 20 20 4"/>',
@@ -320,5 +497,5 @@ const Chars = (() => {
   };
   const icon = (fx, cls) => `<svg viewBox="0 0 24 24" class="${cls || 'ico'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[fx] || ''}</svg>`;
 
-  return { draw, avatar, shade, colorOf, palette, icon };
+  return { draw, avatar, fit, pose, shade, colorOf, palette, icon, GAIT };
 })();

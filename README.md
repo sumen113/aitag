@@ -107,17 +107,26 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 
 | Character | Power | Cooldown | Unlock | Notes |
 |---|---|---|---|---|
-| Fox | Dash | 7 s | start | short, very fast burst |
+| Fox | Dash | 8 s | start | short, very fast burst |
 | Ghost | Phase | 11 s | start | walk through walls for 2 s |
 | Bear | Stomp | 12 s | start | knockback + stun in a radius; biggest body |
-| Frog | Leap | 15 s | 3 ★ | untouchable in the air, jumps walls, lands with a slowing splash |
-| Cat | Cloak | 14 s | 3 ★ | near invisible and faster; press again to **pounce** |
-| Octopus | Goo Trap | 8 s | 4 ★ | puddle that slows everyone but you |
-| Owl | Decoy | 9 s | 4 ★ | clone runs off; IT is stunned if they catch it |
-| Robot | Shield | 10 s | 5 ★ | blocks one tag and stuns the tagger; slower while up. As IT: speed surge |
-| Penguin | Belly Slide | 10 s | 5 ★ | slide fast and bowl players over (stun + shove) |
-| Raccoon | Swap | 12 s | 6 ★ | trade places with the nearest player; they are dizzy for a moment |
-| Bat | Echo Beacon | 10 s | 6 ★ | drop a beacon, press again within 4 s to snap back to it |
+| Frog | Leap | 20 s | 1 ★ | untouchable in the air, jumps walls, lands with a slowing splash |
+| Cat | Cloak | 14 s | 1 ★ | near invisible and faster; press again to **pounce** |
+| Octopus | Goo Trap | 7 s | 2 ★ | puddle that slows everyone but you |
+| Owl | Decoy | 9 s | 2 ★ | clone runs off; IT is stunned if they catch it |
+| Robot | Shield | 10 s | 2 ★ | blocks one tag and stuns the tagger; slower while up. As IT: speed surge |
+| Penguin | Belly Slide | 10 s | 3 ★ | slide fast and bowl players over (stun + shove) |
+| Raccoon | Swap | 12 s | 3 ★ | trade places with the nearest player; they are dizzy for a moment |
+| Bat | Echo Beacon | 10 s | 3 ★ | drop a beacon, press again within 4 s to snap back to it |
+| Starfish | Ricochet | 13 s | 3 ★ | steerable 1.5 s roll that bounces off walls |
+
+### Customisation and animation
+
+- **Colours:** `COLORS` (16 presets, only ever append) plus custom colours: index `100 + tone*360 + hue` (see `colorFor` / `customK` in `public/shared.js`). Servers only validate the range.
+- **Hats:** `HATS` in `shared.js`, drawn in `drawHat` (`public/chars.js`) at each character's `HEAD` anchor. Free for everyone.
+- **Walk styles:** the `GAIT` table in `chars.js` (step rate, hop height, squash, waddle, lean, crouch).
+- **Poses:** `POSES` in `chars.js`, GSAP timelines on a small `{up, rot, sq}` object that `draw()` reads. Triggered by ability events and tags in `game.js`, and by clicking the character on the home page. Skipped when the OS asks for reduced motion.
+- **Fitting:** `Chars.fit()` measures what a character really covers (wings, tails, hats), so portraits and the showcase never clip.
 
 Tuning lives in the `CHARS` table in `public/shared.js`. To add a character: add an entry (set `starter: true` or a `price`),
 a `DRAW` function + icon in `public/chars.js`, and its behaviour in `useAbility` / `stepPlayer` (and `botAbility` in `src/bots.js` if bots should use it).

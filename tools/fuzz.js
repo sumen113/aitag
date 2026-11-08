@@ -187,6 +187,27 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
     d.ws.close(); await sleep(200);
   }
 
+  console.log('character update');
+  const cu = await client({ name: 'Stylish', mode: 'online', c: STI[0], k: T.customK(200, 1), h: 3 });
+  const cuR = cu.init && cu.init.roster.find((r) => r.n === 'Stylish');
+  ok(cuR && cuR.k === T.customK(200, 1) && cuR.h === 3, 'custom colour + hat are kept and shared in the roster');
+  ok(T.colorFor(cuR.k) && /^#[0-9a-f]{6}$/.test(T.colorFor(cuR.k)), 'custom colour index maps to a hex colour');
+  const cu2 = await client({ name: 'Sneaky', mode: 'online', c: STI[0], k: 99999, h: 99 });
+  const cu2R = cu2.init && cu2.init.roster.find((r) => r.n === 'Sneaky');
+  ok(cu2R && cu2R.k === 0 && cu2R.h === 0, 'out-of-range colour/hat are reset to default (' + JSON.stringify(cu2R) + ')');
+  for (const x of [cu, cu2]) try { x.ws.close(); } catch (e) { /* noop */ }
+  {
+    const starI = T.CHARS.findIndex((x) => x.id === 'star'), map = T.MAP_BY_ID[T.MAPS[0].id];
+    const p = T.newSim(1, starI, map.w - 120, map.h / 2); const ctx = { map, goos: [] };
+    T.stepPlayer(p, { s: 1, x: 1, y: 0, a: 1 }, ctx, []);
+    ok(p.abT > 1.4 && p.adx > 0.9, 'starfish starts rolling in the aimed direction');
+    let bounced = 0, ev = [];
+    for (let i = 0; i < 90; i++) { ev = []; T.stepPlayer(p, { s: i + 2, x: 0, y: 0, a: 0 }, ctx, ev); if (ev.some((e) => e.n === 'bounce')) bounced++; }
+    ok(bounced >= 1 && p.x <= map.w, 'starfish ricochets off walls and stays inside the arena (bounces: ' + bounced + ')');
+    const q = T.newSim(2, starI, 300, 300); q.stun = 0.5; q.abT = 1; T.stepPlayer(q, { s: 1, x: 0, y: 0, a: 0 }, ctx, []);
+    ok(q.abT === 0, 'a stun uncurls the starfish');
+  }
+
   console.log('server browser');
   const list0 = await (await fetch(BASE + '/api/servers')).json();
   ok(list0.servers[0].regular && list0.servers[0].name === 'Regular server', 'list starts with the Regular server');

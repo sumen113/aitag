@@ -143,6 +143,7 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'bear') use = td < 150;
     else if (id === 'robot') use = td > 80 && td < 260 && los;
     else if (id === 'penguin') use = td > 170 && td < 380 && los;
+    else if (id === 'star') use = td > 90 && td < 330 && los;
   } else if (itp) {
     if (id === 'fox') use = d < 140;
     else if (id === 'frog') use = d < 120;
@@ -154,6 +155,7 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'robot') use = d < 110;
     else if (id === 'penguin') use = d < 230;
     else if (id === 'raccoon') use = d < 200;
+    else if (id === 'star') use = d < 210;
     else if (id === 'bat') use = p.aux > 0 ? d < 130 : p.cd <= 0 && d > 240 && d < 520;     // drop a beacon while safe, snap back when IT closes in
   }
   if (use && Math.random() < DIFFS[room.diff || 'normal'].abil) p.input.a = 1;

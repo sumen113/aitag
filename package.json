@@ -1,6 +1,6 @@
 {
   "name": "tag-rush",
-  "version": "5.2.1",
+  "version": "6.0.0",
   "description": "Tag Rush - a real-time multiplayer game of tag with unique characters, accounts and a shop.",
   "main": "server.js",
   "scripts": {

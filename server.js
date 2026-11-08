@@ -195,7 +195,7 @@ wss.on('connection', (ws, req) => {
       name = v.name;
       if (store) { try { if (await store.nameTaken(name)) return fail('That name belongs to a registered player. Log in to use it, or pick another.'); } catch (e) { /* db hiccup: let the guest in */ } }
     }
-    const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), col = T.clamp(m.k | 0, 0, T.COLORS.length - 1);
+    const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), col = T.cleanColor(m.k), hat = T.cleanHat(m.h);
     const owns = T.ownsChar(user ? user.owned : [], T.CHARS[ci].id);
     if (!owns && mode !== 'bots') return fail(user ? 'You have not unlocked that character yet. Visit the shop.' : 'Guests can only play the starter characters. Log in to use more.');
     if (ws.readyState !== 1) return;
@@ -226,9 +226,9 @@ wss.on('connection', (ws, req) => {
       const old = activeUsers.get(user.id);                    // same account in two tabs: the newest wins
       if (old && old.ws !== ws) { try { old.ws.send(JSON.stringify({ t: 'kick', m: 'You signed in somewhere else.' })); old.ws.close(); } catch (e) { /* gone */ } }
       activeUsers.set(user.id, { ws });
-      if (owns) store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col }).catch(() => {});
+      if (owns) store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col, h: hat }).catch(() => {});
     }
-    c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0);
+    c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0, hat);
     c.player.staff = !!(user && admin && admin.isAdmin(user.username));
     c.player.muted = !!(admin && admin.isMuted(name, !!user));
     c.player.rtt = ws.rtt;

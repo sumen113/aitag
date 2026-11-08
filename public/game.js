@@ -3,7 +3,7 @@
 (() => {
   'use strict';
   const C = TagShared;
-  const { CHARS, COLORS, STATE, DT } = C;
+  const { CHARS, STATE, DT } = C;
   const $ = (id) => document.getElementById(id);
   const clamp = C.clamp, TAU = Math.PI * 2;
   const q2 = (v) => Math.round(v * 100) / 100;
@@ -35,13 +35,13 @@
   /** Open a socket and join. Resolves {ok:true} once the server says init, or {ok:false, err}. */
   Game.join = (o) => new Promise((resolve) => {
     closeWs();
-    G.sel = { name: o.name, c: o.c, k: o.k }; G.solo = o.mode === 'bots'; G.diff = o.diff; G.kicked = null;
+    G.sel = { name: o.name, c: o.c, k: o.k, h: o.h | 0 }; G.solo = o.mode === 'bots'; G.diff = o.diff; G.kicked = null;
     let ws, settled = false;
     const done = (r) => { if (settled) return; settled = true; clearTimeout(to); G.joinResolve = null; resolve(r); };
     try { ws = new WebSocket(wsUrl()); } catch (e) { return resolve({ ok: false, err: 'Could not connect to the server.' }); }
     const to = setTimeout(() => { if (!settled) { if (G.ws === ws) G.ws = null; try { ws.close(); } catch (e) { /* noop */ } done({ ok: false, err: 'The server took too long to answer. Please try again.' }); } }, 50000);
     G.ws = ws; G.joinResolve = done;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, server: o.server, pass: o.pass, create: o.create }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, h: o.h | 0, server: o.server, pass: o.pass, create: o.create }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (G.ws === ws) onMessage(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -197,6 +197,7 @@
       case 'tag': {
         const rb = G.roster.get(e.b), mineA = e.a === G.id, mineB = e.b === G.id;
         Particles.burst(e.x, e.y, '#ff4d5e', 18, 380, 7, 0.7); Particles.ring(e.x, e.y, 10, 90, '#ffd23f', 0.45, 7);
+        Chars.pose(visOf(e.b), 'hit', visOf(e.b).face);
         for (let i = 0; i < 4; i++) Particles.star(e.x, e.y - 20, '#ffd23f', 12, 0.7, (Math.random() - 0.5) * 360, -120 - Math.random() * 200);
         if (e.a) feed([el('span', '', rname(e.a)), el('span', '', ' tagged '), el('b', '', rb ? rb.n : '???')], mineA || mineB);
         else feed([el('b', '', rb ? rb.n : '???'), el('span', '', ' is the new IT')], mineB);
@@ -219,11 +220,21 @@
     }
   }
 
+  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide']);
   const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl']);   // effects the local sim doesn't predict: show them for me too
   function abilityFx(e, local) {
     const id = e.n, x = e.x, y = e.y;
     const loud = local || near(x, y);
+    if (POSE_FX.has(id)) { const v = visOf(e.id); Chars.pose(v, id, v.face || 1); }
     switch (id) {
+      case 'spin':
+        Particles.puff(x, y + 10, '#ffd9c7', 14, 0.45); Particles.ring(x, y + 8, 6, 62, '#ff9a7a', 0.4, 6);
+        for (let i = 0; i < 6; i++) Particles.star(x, y, '#ffb199', 9, 0.6, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300);
+        if (loud) Sfx.play('spin'); break;
+      case 'bounce':
+        Particles.burst(x, y, '#ffb199', 10, 260, 5, 0.4); Particles.ring(x, y, 6, 52, '#fff', 0.3, 5);
+        for (let i = 0; i < 3; i++) Particles.star(x, y, '#ffe27a', 8, 0.5, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 240);
+        if (loud) { Sfx.play('boing'); if (local) G.shake = Math.max(G.shake, 3); } break;
       case 'dash':
         for (let i = 0; i < 7; i++) Particles.streak(x + (Math.random() - 0.5) * 20, y + (Math.random() - 0.5) * 24, e.dx, e.dy, '#ffcf8a', 60 + Math.random() * 50, 0.28);
         Particles.puff(x, y + 12, '#fff', 14, 0.4); Particles.ring(x, y, 8, 50, '#ff8a3d', 0.3, 5); if (loud) Sfx.play('dash'); break;
@@ -380,7 +391,7 @@
   document.addEventListener('contextmenu', (e) => { if (live()) e.preventDefault(); });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce']);
+  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce']);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
@@ -416,7 +427,7 @@
 
   function visOf(key) {
     let v = G.vis.get(key);
-    if (!v) { v = { face: 1, nextBlink: 1 + Math.random() * 3, blinkT: 0, ph: Math.random() * 10, dust: 0, trail: 0 }; G.vis.set(key, v); }
+    if (!v) { v = { face: 1, nextBlink: 1 + Math.random() * 3, blinkT: 0, ph: Math.random() * 10, dust: 0, trail: 0, spin: 0, flop: 0, pose: { up: 0, rot: 0, sq: 0 } }; G.vis.set(key, v); }
     return v;
   }
   const project = (x, y) => [(x - G.cam.x) * G.zoom + G.W / 2, (y - G.cam.y) * G.zoom + G.H / 2];
@@ -438,7 +449,7 @@
     if (phase) alpha = 0.5;
     if (e.imm && !e.it && !e.decoy) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(t * 13));
     const x = e.x, y = e.y, fyPos = y + r;
-    const color = e.k ? COLORS[e.k] : null;
+    const color = C.colorFor(e.k);
 
     // ground markers
     if (e.it && !e.decoy) {
@@ -457,7 +468,15 @@
     v.dust -= dt;
     if (spd > 0.55 && v.dust <= 0 && !air && !phase && !cloak) { v.dust = 0.1; Particles.puff(x - e.vx * 0.04, fyPos - 2, DUST[G.map.theme], 5 + Math.random() * 3, 0.35); }
 
-    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18) });
+    // sustained poses ride on top of the timed ones from Chars.pose(): belly-flop while sliding, tumbling while rolling, dizzy sway when stunned
+    const pz = v.pose || (v.pose = { up: 0, rot: 0, sq: 0 });
+    const rollOn = on && id === 'star';
+    if (rollOn) v.spin += dt * 17 * (e.vx >= 0 ? 1 : -1);
+    else if (v.spin) { const tgt = Math.round(v.spin / TAU) * TAU; v.spin += (tgt - v.spin) * Math.min(1, dt * 12); if (Math.abs(tgt - v.spin) < 0.02) v.spin = 0; }
+    const flopT = slide ? 1.2 : 0; v.flop += (flopT - v.flop) * Math.min(1, dt * 14);
+    const dizzy = e.stun ? Math.sin(t * 14) * 0.14 : 0;
+    const drawPose = { up: pz.up, sq: pz.sq, rot: pz.rot + v.spin + v.flop + dizzy };
+    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18), hat: e.h | 0, pose: drawPose });
 
     if (shield) {
       const rad = r * 1.9, cy = fyPos - r * 1.15, flick = e.abT < 0.6 ? 0.45 + 0.55 * Math.abs(Math.sin(t * 28)) : 1;
@@ -564,13 +583,13 @@
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s) continue;
-      ents.push({ key: id, id, c: r.c, k: r.k, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
+      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
     for (const d of G.decoys) {
@@ -664,7 +683,7 @@
 
   /* scoreboard: rows are persistent elements, re-ordered with GSAP Flip */
   function makeRow(r) {
-    const d = el('div', 'brow'); const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, r.k, 48);
+    const d = el('div', 'brow'); const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, r.k, 48, r.h);
     d.append(el('span', 'rk'), img, el('span', 'nm', r.n));
     if (r.a) d.append(el('span', 'ck', '✓'));
     if (r.b) d.append(el('span', 'bt', 'BOT'));
@@ -708,11 +727,11 @@
     const pod = $('podium'); pod.innerHTML = '';
     [1, 0, 2].forEach((i) => {
       const x = res[i]; if (!x) return;
-      const d = el('div', 'pod p' + (i + 1)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96);
+      const d = el('div', 'pod p' + (i + 1)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h);
       d.append(img, el('div', 'pn', x.r.n), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(i + 1))); pod.appendChild(d);
     });
     const list = $('resList'); list.innerHTML = '';
-    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48); d.append(el('span', 'rk', String(i + 4)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
+    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h); d.append(el('span', 'rk', String(i + 4)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
     const myRank = res.findIndex((x) => x.r.id === G.id);
     if (myRank > 5) { const x = res[myRank], d = el('div', 'brow me'); d.append(el('span', 'rk', String(myRank + 1)), el('span', '', ''), el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); }
     const box = $('results'); box.classList.remove('hidden');
