@@ -21,7 +21,7 @@ const MIME = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2', '.webp': 'image/webp',
 };
-const CSP = "default-src 'self'; script-src 'self' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss: https://cloud.umami.is https://api-gateway.umami.dev; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const CSP = "default-src 'self'; script-src 'self' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss: https://cloud.umami.is https://gateway.umami.is https://api-gateway.umami.dev; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 /* ------------------------------ static files ------------------------------ */
 const files = new Map();
