@@ -196,6 +196,13 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   const cu2R = cu2.init && cu2.init.roster.find((r) => r.n === 'Sneaky');
   ok(cu2R && cu2R.k === 0 && cu2R.h === 0, 'out-of-range colour/hat are reset to default (' + JSON.stringify(cu2R) + ')');
   for (const x of [cu, cu2]) try { x.ws.close(); } catch (e) { /* noop */ }
+  // every character keeps its own colour; the list is saved with the account and sanitised
+  const pc = await account('PerChar');
+  const pcc = await client({ name: 'x', mode: 'online', c: STI[1], k: 3, ks: [1, 2, 3, 99999, 'bad', T.customK(10, 0)], h: 0 }, { cookie: pc.cookie });
+  const pcU = await srv.getStore().userByName('PerChar');
+  ok(pcU.settings.ks && pcU.settings.ks.length === T.CHARS.length, 'account saves one colour per character (' + JSON.stringify(pcU.settings.ks) + ')');
+  ok(pcU.settings.ks[0] === 1 && pcU.settings.ks[1] === 2 && pcU.settings.ks[STI[1]] === 3 && pcU.settings.ks[3] === 0 && pcU.settings.ks[4] === 0 && pcU.settings.ks[5] === T.customK(10, 0), 'saved colours are sanitised and the played character uses the joined colour');
+  try { pcc.ws.close(); } catch (e) { /* noop */ }
   {
     const starI = T.CHARS.findIndex((x) => x.id === 'star'), map = T.MAP_BY_ID[T.MAPS[0].id];
     const p = T.newSim(1, starI, map.w - 120, map.h / 2); const ctx = { map, goos: [] };

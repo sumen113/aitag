@@ -66,6 +66,8 @@ function join(name, cookie, c = 0) {
   // leaderboard
   await post('/api/admin/wins', { username: 'Pleb', delta: 5 }, boss, 'sesame'); await post('/api/admin/wins', { username: 'Boss', delta: 2 }, boss, 'sesame');
   j = await (await fetch(BASE + '/api/leaderboard')).json(); ok(j.top.length === 2 && j.top[0].username === 'Pleb' && j.top[0].wins === 5, 'leaderboard ordered: ' + JSON.stringify(j.top));
+  for (let i = 0; i < 14; i++) { await reg('Lb' + i); await post('/api/admin/wins', { username: 'Lb' + i, delta: 1 + i }, boss, 'sesame'); }
+  srv.resetBoard(); j = await (await fetch(BASE + '/api/leaderboard')).json(); ok(j.top.length === 16 && j.top[0].wins === 14 && j.top.every((t, i) => !i || j.top[i - 1].wins >= t.wins), 'leaderboard goes beyond 10 rows (got ' + j.top.length + ')');
   j = await (await post('/api/admin/state', {}, boss, 'sesame')).json(); ok(j.log.length > 8, 'audit log has entries');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');

@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/leaderboard' && req.method === 'GET') {
     try {
       if (!store) throw new Error('no store');
-      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(100)).map((r) => ({ username: r.username, wins: r.wins - (admin ? admin.lbBase(r.username) : 0) })).filter((r) => r.wins > 0 && !(admin && admin.banReason(r.username))).sort((a, b) => b.wins - a.wins).slice(0, 10); board.at = Date.now(); }
+      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(150)).map((r) => ({ username: r.username, wins: r.wins - (admin ? admin.lbBase(r.username) : 0) })).filter((r) => r.wins > 0 && !(admin && admin.banReason(r.username))).sort((a, b) => b.wins - a.wins).slice(0, 100); board.at = Date.now(); }
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify({ top: board.list }));
     } catch (e) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end('{"top":[]}'); }
   }
@@ -196,6 +196,7 @@ wss.on('connection', (ws, req) => {
       if (store) { try { if (await store.nameTaken(name)) return fail('That name belongs to a registered player. Log in to use it, or pick another.'); } catch (e) { /* db hiccup: let the guest in */ } }
     }
     const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), col = T.cleanColor(m.k), hat = T.cleanHat(m.h);
+    const ks = T.cleanColorList(m.ks, T.CHARS.length); ks[ci] = col;        // each character keeps its own colour
     const owns = T.ownsChar(user ? user.owned : [], T.CHARS[ci].id);
     if (!owns && mode !== 'bots') return fail(user ? 'You have not unlocked that character yet. Visit the shop.' : 'Guests can only play the starter characters. Log in to use more.');
     if (ws.readyState !== 1) return;
@@ -226,7 +227,7 @@ wss.on('connection', (ws, req) => {
       const old = activeUsers.get(user.id);                    // same account in two tabs: the newest wins
       if (old && old.ws !== ws) { try { old.ws.send(JSON.stringify({ t: 'kick', m: 'You signed in somewhere else.' })); old.ws.close(); } catch (e) { /* gone */ } }
       activeUsers.set(user.id, { ws });
-      if (owns) store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col, h: hat }).catch(() => {});
+      if (owns) store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col, h: hat, ks }).catch(() => {});
     }
     c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0, hat);
     c.player.staff = !!(user && admin && admin.isAdmin(user.username));
@@ -298,4 +299,4 @@ if (require.main === module) {
   init();
   process.on('SIGTERM', () => { server.close(); if (store) store.close().catch(() => {}); process.exit(0); });
 }
-module.exports = { resetLimits: () => createLog.clear(), server, rooms, createRoom, findPublicRoom, ensureRegular, serverList, init, getStore: () => store };
+module.exports = { resetLimits: () => createLog.clear(), resetBoard: () => { board.list = null; }, server, rooms, createRoom, findPublicRoom, ensureRegular, serverList, init, getStore: () => store };

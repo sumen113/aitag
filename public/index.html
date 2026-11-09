@@ -99,9 +99,13 @@
             <div class="stage-head"><h2 id="stName">Ziggy the Fox</h2></div>
             <p class="stage-desc" id="stDesc"></p>
             <div class="picker" id="picker" role="radiogroup" aria-label="Character"></div>
-            <div class="swatch-row"><span class="mono">Colour</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Colour"></div></div>
-            <div class="swatch-row"><span class="mono">Hat</span>
-              <div class="hat-cycle" id="hats"><button type="button" class="hat-btn" id="hatPrev" aria-label="Previous hat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><span class="hat-name" id="hatName" aria-live="polite">None</span><button type="button" class="hat-btn" id="hatNext" aria-label="Next hat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div></div>
+            <div class="swatch-row colour-row"><span class="mono">Colour</span><div class="swatches" id="swatches" role="radiogroup" aria-label="Colour"></div>
+              <div class="custom-pop" id="customPop" role="group" aria-label="Custom colour" hidden>
+                <input type="range" id="hue" class="hue" min="0" max="359" step="1" value="200" aria-label="Hue">
+                <div class="tones" id="tones" role="radiogroup" aria-label="Shade"></div>
+              </div>
+            </div>
+            <div class="swatch-row"><span class="mono">Hat</span><div class="swatches hat-grid" id="hats" role="radiogroup" aria-label="Hat"></div></div>
           </div>
         </aside>
       </section>
@@ -113,7 +117,7 @@
       <section class="section" id="cast">
         <header class="section-head">
           <p class="mono kicker">01 / Characters</p>
-          <h2 class="h2" data-split>Eleven fighters.<br>Eleven ways to dodge.</h2>
+          <h2 class="h2" data-split>Twelve fighters.<br>Twelve ways to dodge.</h2>
           <p class="section-lede">Every character has one power on a cooldown. None is best — they trade speed, size and tricks. Everyone starts with Fox, Ghost and Bear; win rounds to unlock the others in the shop.</p>
         </header>
         <div class="cast-grid" id="castGrid"></div>
@@ -260,7 +264,7 @@
     <section class="modal card" id="boardModal" role="dialog" aria-modal="true" aria-labelledby="boardTitle" hidden>
       <button type="button" class="modal-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <p class="mono kicker">Hall of fame</p>
-      <h2 id="boardTitle">Top players</h2>
+      <h2 id="boardTitle">Top 100 players</h2>
       <p class="shop-note">Most rounds won in online lobbies, ever. Log in and win to get on the list.</p>
       <ol id="boardList" class="board-list"></ol>
     </section>

@@ -41,7 +41,7 @@
     try { ws = new WebSocket(wsUrl()); } catch (e) { return resolve({ ok: false, err: 'Could not connect to the server.' }); }
     const to = setTimeout(() => { if (!settled) { if (G.ws === ws) G.ws = null; try { ws.close(); } catch (e) { /* noop */ } done({ ok: false, err: 'The server took too long to answer. Please try again.' }); } }, 50000);
     G.ws = ws; G.joinResolve = done;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, h: o.h | 0, server: o.server, pass: o.pass, create: o.create }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, ks: o.ks, h: o.h | 0, server: o.server, pass: o.pass, create: o.create }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (G.ws === ws) onMessage(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;

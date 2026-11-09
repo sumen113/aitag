@@ -48,6 +48,8 @@
     const n = k - CUSTOM_BASE, tone = Math.floor(n / 360), t = CUSTOM_TONES[tone];
     return hslHex(n % 360, t[0], t[1]);
   }
+  /** A saved per-character colour list -> a clean array with one entry per character. */
+  const cleanColorList = (a, n) => Array.from({ length: n }, (_, i) => cleanColor(Array.isArray(a) ? a[i] : 0));
   const customK = (hue, tone) => CUSTOM_BASE + (tone | 0) * 360 + (((Math.round(hue) % 360) + 360) % 360);
   const colorName = (k) => { k = cleanColor(k); return k < COLORS.length ? COLOR_NAMES[k] : 'Custom'; };
 
@@ -512,7 +514,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

@@ -17,12 +17,21 @@
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
   const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0'];   // one per character, same order as CHARS
-  const BASIC = 8;   // the colour row is always one row of the basic colours
-  const basicColor = (k) => { k = C.cleanColor(k); return k < BASIC ? k : 0; };
+  // colour row (one row, always): [default, 6 presets, custom]. Presets are COLORS[1..6]; anything else saved from older versions falls back to default.
+  const PRESETS = 7;
+  const rowColor = (k) => { k = C.cleanColor(k); return k < PRESETS || k >= C.CUSTOM_BASE ? k : 0; };
+  /** every character remembers its own colour; migrates the old single colour */
+  function loadColors() {
+    let ks = store.get('ks', null);
+    if (!Array.isArray(ks)) { ks = []; const c0 = clamp(store.get('c', 0) | 0, 0, CHARS.length - 1); ks[c0] = store.get('k', 0); }
+    return Array.from({ length: CHARS.length }, (_, i) => rowColor(ks[i]));
+  }
   const sel = {
     name: String(store.get('name', '') || '').slice(0, 14),
     c: clamp(store.get('c', 0) | 0, 0, CHARS.length - 1),
-    k: basicColor(store.get('k', 0)),
+    ks: loadColors(),
+    get k() { return this.ks[this.c]; },        // colour of the selected character
+    set k(v) { this.ks[this.c] = v; },
     h: C.cleanHat(store.get('h', 0)),
     diff: ['easy', 'normal', 'hard'].includes(store.get('diff', 'normal')) ? store.get('diff', 'normal') : 'normal',
   };
@@ -88,7 +97,7 @@
     Sfx.unlock(); Sfx.play('ready');
     await curtainIn();
     const slow = setTimeout(() => App.curtainMsg('Waking the server up… free hosting can take up to a minute.'), 3500);
-    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k, h: sel.h }, extra));
+    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k, ks: sel.ks, h: sel.h }, extra));
     clearTimeout(slow); App.curtainMsg('');
     if (!res.ok) { await curtainOut(); busy = false; $('btnPlay').disabled = $('btnBots').disabled = false; if (mode === 'online') { if (extra.server && extra.pass !== undefined && /password/i.test(res.err) && lockedSv) { openModal('serverModal'); askPass(lockedSv, res.err); } else openServers(res.err); } else showErr(res.err); return; }
     enterGame();
@@ -173,6 +182,7 @@
   const pic = $('picker'), sw = $('swatches');
   const hop = { air: 0, sq: 0 };
   const pvVis = { pose: { up: 0, rot: 0, sq: 0 } };
+  const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.2 6.2L21 12l-6.8 2.8L12 21l-2.2-6.2L3 12l6.8-2.8z" fill="#fff" stroke="#1a1633" stroke-width="1.8" stroke-linejoin="round"/></svg>';
   const LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const owns = (i) => C.ownsChar(App.account ? App.account.owned : [], CHARS[i].id);
   const firstOwned = () => CHARS.findIndex((_, i) => owns(i));
@@ -185,28 +195,70 @@
       b.addEventListener('click', () => pick(i));
       pic.appendChild(b);
     });
-    for (let k = 0; k < BASIC; k++) {
-      const b = el('button', 'swatch'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.k = k; b.title = C.COLOR_NAMES[k]; b.setAttribute('aria-label', C.COLOR_NAMES[k]);
-      b.addEventListener('click', () => { setLook({ k }); });
+    // colours: default (shows the character's own colour + a sparkle), six presets, and a custom-colour swatch
+    for (let k = 0; k < PRESETS; k++) {
+      const b = el('button', k ? 'swatch' : 'swatch default'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.k = k;
+      const nm = k ? C.COLOR_NAMES[k] : 'Original colour'; b.title = nm; b.setAttribute('aria-label', nm);
+      if (!k) b.innerHTML = SPARK;
+      b.addEventListener('click', () => { closeCustom(); setLook({ k }); });
       sw.appendChild(b);
     }
-    const stepHat = (d) => setLook({ h: (sel.h + d + C.HATS.length) % C.HATS.length });
-    $('hatPrev').addEventListener('click', () => stepHat(-1));
-    $('hatNext').addEventListener('click', () => stepHat(1));
+    const cb = el('button', 'swatch custom'); cb.type = 'button'; cb.setAttribute('role', 'radio'); cb.title = 'Custom colour'; cb.setAttribute('aria-label', 'Custom colour'); cb.setAttribute('aria-expanded', 'false');
+    cb.addEventListener('click', () => { if (sel.k < C.CUSTOM_BASE) setLook({ k: C.customK(+hueEl.value, lastTone) }); toggleCustom(); });
+    sw.appendChild(cb);
+    C.CUSTOM_TONES.forEach((t, i) => {
+      const b = el('button', 'tone'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.tone = i; const nm = ['Vivid', 'Pastel', 'Deep'][i]; b.title = nm; b.setAttribute('aria-label', nm);
+      b.addEventListener('click', () => { lastTone = i; setLook({ k: C.customK(+hueEl.value, i) }, true); });
+      tonesEl.appendChild(b);
+    });
+    hueEl.addEventListener('input', () => setLook({ k: C.customK(+hueEl.value, lastTone) }, true));
+    // hats: a row of little hat pictures, same shape as the colours
+    C.HATS.forEach((name, h) => {
+      const b = el('button', 'swatch hat-sw'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.h = h; b.title = name; b.setAttribute('aria-label', name);
+      const img = new Image(); img.alt = ''; img.src = Chars.hatIcon(h, 64); b.appendChild(img);
+      b.addEventListener('click', () => setLook({ h }));
+      hatsEl.appendChild(b);
+    });
+    document.addEventListener('pointerdown', (e) => { if (customOpen && !e.target.closest('.colour-row')) closeCustom(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && customOpen) closeCustom(); });
+  }
+  const hueEl = $('hue'), tonesEl = $('tones'), hatsEl = $('hats'), popEl = $('customPop');
+  let lastTone = 0, customOpen = false, popTl = null;
+  /** the custom-colour pop-over slides up over the picker (GSAP timeline, reversed to close; no layout shift) */
+  function toggleCustom() { customOpen ? closeCustom() : openCustom(); }
+  function openCustom() {
+    if (customOpen) return;
+    customOpen = true; sw.querySelector('.custom').setAttribute('aria-expanded', 'true');
+    popEl.hidden = false;
+    if (reduce) { gsap.set(popEl, { autoAlpha: 1, y: 0, scale: 1 }); return; }
+    if (popTl) popTl.kill();
+    popTl = gsap.timeline().fromTo(popEl, { autoAlpha: 0, y: 10, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.28, ease: 'back.out(2)' })
+      .from('#tones .tone', { scale: 0, duration: 0.25, stagger: 0.05, ease: 'back.out(3)' }, 0.1);
+  }
+  function closeCustom() {
+    if (!customOpen) return;
+    customOpen = false; sw.querySelector('.custom').setAttribute('aria-expanded', 'false');
+    if (popTl) popTl.kill();
+    if (reduce) { gsap.set(popEl, { autoAlpha: 0 }); popEl.hidden = true; return; }
+    popTl = gsap.to(popEl, { autoAlpha: 0, y: 8, scale: 0.96, duration: 0.16, ease: 'power2.in', onComplete: () => { popEl.hidden = true; } });
   }
   /** change colour and/or hat: save, repaint, and let the character react (quietly while dragging the slider) */
   function setLook(p, quiet) {
-    if (p.k !== undefined) { sel.k = p.k; store.set('k', sel.k); }
+    if (p.k !== undefined) { sel.k = p.k; store.set('ks', sel.ks); }
     if (p.h !== undefined) { sel.h = p.h; store.set('h', sel.h); }
     if (!quiet) { Sfx.play('click'); bounce(); }
     paintStage(false, quiet);
   }
   function paintStage(animate, quiet) {
     const def = CHARS[sel.c];
-    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.k, 96, sel.h); });
+    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.ks[i], 96, sel.h); });
     paintLockSticker();
-    sw.querySelectorAll('.swatch').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
-    $('hatName').textContent = C.HATS[sel.h];
+    const isCustom = sel.k >= C.CUSTOM_BASE;
+    if (isCustom) { const n = sel.k - C.CUSTOM_BASE; lastTone = Math.floor(n / 360); if (document.activeElement !== hueEl) hueEl.value = n % 360; }
+    sw.querySelectorAll('.swatch:not(.custom)').forEach((b, k) => { b.style.background = Chars.colorOf(sel.c, k); b.setAttribute('aria-checked', String(k === sel.k)); });
+    const cs = sw.querySelector('.custom'); cs.classList.toggle('on', isCustom); cs.setAttribute('aria-checked', String(isCustom)); cs.style.background = isCustom ? C.colorFor(sel.k) : '';
+    tonesEl.querySelectorAll('.tone').forEach((b, i) => { const t = C.CUSTOM_TONES[i]; b.style.background = C.hslHex(+hueEl.value, t[0], t[1]); b.setAttribute('aria-checked', String(isCustom && lastTone === i)); });
+    hatsEl.querySelectorAll('.hat-sw').forEach((b, h) => b.setAttribute('aria-checked', String(h === sel.h)));
     $('stage').style.setProperty('--stage', STAGE[sel.c]);
     $('stRole').textContent = def.role;
     $('stAb').textContent = def.ability; $('stCd').textContent = def.cd + 's recharge';
@@ -426,7 +478,8 @@
     if (u && restoreChar && u.settings) {
       const i = CHARS.findIndex((c) => c.id === u.settings.c);
       if (i >= 0 && owns(i)) { sel.c = i; store.set('c', i); }
-      if (Number.isInteger(u.settings.k)) { sel.k = basicColor(u.settings.k); store.set('k', sel.k); }
+      if (Array.isArray(u.settings.ks)) { sel.ks = C.cleanColorList(u.settings.ks, CHARS.length).map(rowColor); store.set('ks', sel.ks); }
+      else if (Number.isInteger(u.settings.k)) { sel.k = rowColor(u.settings.k); store.set('ks', sel.ks); }
       if (Number.isInteger(u.settings.h)) { sel.h = C.cleanHat(u.settings.h); store.set('h', sel.h); }
     }
     if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
@@ -537,7 +590,7 @@
     const art = el('div', 'shop-art'), body = el('div', 'shop-body'), buy = el('div', 'shop-buy');
     if (item.type === 'character') {
       const i = CHARS.findIndex((c) => c.id === item.ref), def = CHARS[i];
-      art.style.setProperty('--c', STAGE[i]); const img = new Image(); img.alt = def.species; img.src = Chars.avatar(i, sel.k, 192, sel.h); art.append(el('span', 'tag', 'Character'), img);
+      art.style.setProperty('--c', STAGE[i]); const img = new Image(); img.alt = def.species; img.src = Chars.avatar(i, sel.ks[i], 192, sel.h); art.append(el('span', 'tag', 'Character'), img);
       const ab = el('div', 'ab'); ab.innerHTML = Chars.icon(def.fx); ab.append(el('span', '', `${def.ability} · ${def.cd}s`));
       body.append(el('h3', '', `${def.name} the ${def.species}`), ab, el('p', '', def.desc));
     } else { body.append(el('h3', '', item.name), el('p', '', item.blurb || '')); }
@@ -590,7 +643,8 @@
   const NEWS = [
     { v: 'Update 6 · Character update', tag: 'Newest', items: [
       ['Starfish Andy', 'A new character. Ricochet curls Andy into a spinning star that bounces off every wall while you steer it.'],
-      ['Make it yours', '8 colours and 8 hats: party, crown, top hat, wizard, halo, cap, flower and chef.'],
+      ['Make it yours', 'Every character remembers its own colour: pick one, or tap the rainbow swatch to make your own. 8 hats to try too: party, crown, top hat, wizard, halo, cap, flower and chef.'],
+      ['Top 100', 'The leaderboard now shows the 100 players with the most wins.'],
       ['Everyone moves differently', 'Frogs hop, penguins waddle, cats sneak, bears plod, robots roll and the starfish tumbles. Abilities and getting tagged have their own little animations now. Click your character on the home page to see its move.'],
       ['Fixes', 'No more clipped bat, fox and raccoon in the picker and showcase, and the newest characters finally have their own background colour.'],
     ] },
@@ -646,6 +700,7 @@
     const top = (r.j && r.j.top) || [];
     if (!top.length) list.append(el('li', 'empty', 'Nobody has won a round yet. Be the first!'));
     for (const t of top) { const li = el('li', App.account && App.account.username === t.username ? 'me' : ''); li.append(el('span', '', t.username), el('span', 'w', String(t.wins))); list.append(li); }
+    if (!reduce && top.length) gsap.from('#boardList li:nth-child(-n+12)', { y: 14, autoAlpha: 0, duration: 0.3, stagger: 0.03, ease: 'power2.out', clearProps: 'transform,opacity,visibility' });
   }
   $('footNews').addEventListener('click', openNews); $('footBoard').addEventListener('click', openBoard);
   $('navBoard').addEventListener('click', openBoard); $('acctBoard').addEventListener('click', openBoard); $('newsBoard').addEventListener('click', openBoard);

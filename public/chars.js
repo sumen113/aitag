@@ -297,6 +297,7 @@ const Chars = (() => {
   const HEAD = {
     fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
     owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9],
+    icon: [0, -1.5, 12],      // used by hatIcon(): hat sits on the origin at natural size
   };
   function drawHat(g, id, hat, o) {
     const [hx, hy, hw] = HEAD[id] || HEAD.fox, k = hw / 12;
@@ -426,6 +427,38 @@ const Chars = (() => {
     return f;
   }
 
+  const hatCache = new Map();
+  /** A small picture of a hat on its own (for the hat chooser); 0 = the "no hat" sign. Cropped to the hat and centred. */
+  function hatIcon(h, size) {
+    size = size || 48; h = h | 0;
+    const key = h + ':' + size;
+    let u = hatCache.get(key);
+    if (u) return u;
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const g = cv.getContext('2d');
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    if (!h) {
+      const r = size * 0.27;
+      g.lineWidth = size * 0.09; g.strokeStyle = OUT; g.globalAlpha = 0.55;
+      g.beginPath(); g.arc(size / 2, size / 2, r, 0, Math.PI * 2); g.moveTo(size / 2 - r * 0.7, size / 2 + r * 0.7); g.lineTo(size / 2 + r * 0.7, size / 2 - r * 0.7); g.stroke();
+    } else {
+      const W = 220, H = 220, S = 4;
+      const probe = document.createElement('canvas'); probe.width = W; probe.height = H;
+      const p = probe.getContext('2d', { willReadFrequently: true });
+      p.lineJoin = 'round'; p.lineCap = 'round';
+      p.translate(W / 2, H * 0.72); p.scale(S, S);
+      drawHat(p, 'icon', h, { t: 0 });
+      const d = p.getImageData(0, 0, W, H).data;
+      let x0 = W, x1 = 0, y0 = H, y1 = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      const w = x1 - x0 + 1, hh = y1 - y0 + 1, s = Math.min((size * 0.88) / w, (size * 0.88) / hh);
+      g.drawImage(probe, x0, y0, w, hh, (size - w * s) / 2, (size - hh * s) / 2, w * s, hh * s);
+    }
+    u = cv.toDataURL();
+    hatCache.set(key, u);
+    return u;
+  }
+
   const avCache = new Map();
   /** A portrait that always fits its canvas, centred, never clipped (hat optional). */
   function avatar(ci, ki, size, hat) {
@@ -497,5 +530,5 @@ const Chars = (() => {
   };
   const icon = (fx, cls) => `<svg viewBox="0 0 24 24" class="${cls || 'ico'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[fx] || ''}</svg>`;
 
-  return { draw, avatar, fit, pose, shade, colorOf, palette, icon, GAIT };
+  return { draw, avatar, hatIcon, fit, pose, shade, colorOf, palette, icon, GAIT };
 })();
