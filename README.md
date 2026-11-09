@@ -111,7 +111,7 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 | Ghost | Phase | 11 s | start | walk through walls for 2 s |
 | Bear | Stomp | 12 s | start | knockback + stun in a radius; biggest body |
 | Frog | Leap | 20 s | 1 ★ | untouchable in the air, jumps walls, lands with a slowing splash |
-| Cat | Cloak | 14 s | 1 ★ | near invisible and faster; press again to **pounce** |
+| Cat | Cloak | 14 s | 1 ★ | fully invisible to other players (you see a faint outline) and faster; press again to **pounce** |
 | Octopus | Goo Trap | 7 s | 2 ★ | puddle that slows everyone but you |
 | Owl | Decoy | 9 s | 2 ★ | clone runs off; IT is stunned if they catch it |
 | Robot | Shield | 10 s | 2 ★ | blocks one tag and stuns the tagger; slower while up. As IT: speed surge |
@@ -119,6 +119,7 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 | Raccoon | Swap | 12 s | 3 ★ | trade places with the nearest player; they are dizzy for a moment |
 | Bat | Echo Beacon | 10 s | 3 ★ | drop a beacon, press again within 4 s to snap back to it |
 | Starfish | Ricochet | 13 s | 3 ★ | steerable 1.5 s roll that bounces off walls |
+| Bird | Gale | 12 s | 2 ★ | stun-free blast (270 px) that shoves everyone away, then a short glide boost |
 
 ### Customisation and animation
 

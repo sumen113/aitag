@@ -220,7 +220,7 @@
     }
   }
 
-  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide']);
+  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust']);
   const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl']);   // effects the local sim doesn't predict: show them for me too
   function abilityFx(e, local) {
     const id = e.n, x = e.x, y = e.y;
@@ -231,6 +231,11 @@
         Particles.puff(x, y + 10, '#ffd9c7', 14, 0.45); Particles.ring(x, y + 8, 6, 62, '#ff9a7a', 0.4, 6);
         for (let i = 0; i < 6; i++) Particles.star(x, y, '#ffb199', 9, 0.6, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300);
         if (loud) Sfx.play('spin'); break;
+      case 'gust':
+        Particles.ring(x, y, 10, 270, '#ffffff', 0.55, 7); Particles.ring(x, y, 6, 190, '#bfeaff', 0.45, 5);
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + Math.random() * 0.3; Particles.streak(x + Math.cos(a) * 26, y + Math.sin(a) * 26, Math.cos(a), Math.sin(a), '#e8f8ff', 70 + Math.random() * 60, 0.4); }
+        for (let i = 0; i < 6; i++) Particles.puff(x, y + 6, '#ffffff', 14, 0.5);
+        if (loud) { Sfx.play('gust'); if (local) G.shake = Math.max(G.shake, 4); } break;
       case 'bounce':
         Particles.burst(x, y, '#ffb199', 10, 260, 5, 0.4); Particles.ring(x, y, 6, 52, '#fff', 0.3, 5);
         for (let i = 0; i < 3; i++) Particles.star(x, y, '#ffe27a', 8, 0.5, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 240);
@@ -391,7 +396,7 @@
   document.addEventListener('contextmenu', (e) => { if (live()) e.preventDefault(); });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce']);
+  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust']);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
@@ -445,7 +450,8 @@
     const shield = on && id === 'robot' && !e.it, surge = on && id === 'robot' && e.it;
     const air = leap ? Math.sin(Math.PI * clamp(1 - e.abT / 0.6, 0, 1)) : 0;
     let alpha = 1;
-    if (cloak) alpha = e.isMe ? 0.42 : 0.07;
+    if (cloak && !e.isMe) return;      // a cloaked cat is fully invisible to everyone else: no body, shadow, marker or name
+    if (cloak) alpha = 0.42;
     if (phase) alpha = 0.5;
     if (e.imm && !e.it && !e.decoy) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(t * 13));
     const x = e.x, y = e.y, fyPos = y + r;
@@ -453,7 +459,7 @@
 
     // ground markers
     if (e.it && !e.decoy) {
-      const p = 0.5 + 0.5 * Math.sin(t * 6), a = cloak && !e.isMe ? 0.45 : 1;
+      const p = 0.5 + 0.5 * Math.sin(t * 6), a = 1;
       g.globalAlpha = a;
       g.beginPath(); g.ellipse(x, fyPos, r * (1.9 + p * 0.25), r * (0.7 + p * 0.1), 0, 0, TAU);
       g.fillStyle = 'rgba(255,60,90,' + (0.3 + p * 0.15) + ')'; g.fill(); g.lineWidth = 3; g.strokeStyle = 'rgba(255,110,130,.9)'; g.stroke();
@@ -717,23 +723,27 @@
   function showResults() {
     const res = (G.res || []).map((r) => ({ r: G.roster.get(r[0]), s: r[1], t: r[2] })).filter((x) => x.r);
     if (!res.length) return;
-    const win = res[0], mine = win.r.id === G.id;
+    // ranks: equal scores share a rank (1,1,3...), and everyone tied for first shares the win
+    res.forEach((x, i) => { x.rank = i && x.s === res[i - 1].s ? res[i - 1].rank : i + 1; });
+    const winners = res.filter((x) => x.rank === 1), mine = winners.some((x) => x.r.id === G.id);
     const rw = $('resWin'); rw.className = 'res-win hidden'; rw.textContent = '';
     if (mine) {
       if (G.solo) { rw.className = 'res-win guest'; rw.textContent = 'Practice rounds don\u2019t earn wins. Play online to collect them.'; }
       else if (!G.acct) { rw.className = 'res-win guest'; rw.textContent = 'You won! Sign up to save wins and unlock characters.'; }
     }
-    $('resTitle').textContent = mine ? 'You win!' : `${win.r.n} wins!`;
+    const wn = winners.map((x) => x.r.n);
+    $('resTitle').textContent = mine ? (winners.length > 1 ? 'You share the win!' : 'You win!')
+      : winners.length === 1 ? `${wn[0]} wins!` : winners.length === 2 ? `${wn[0]} & ${wn[1]} win!` : `${wn[0]} & ${winners.length - 1} others win!`;
     const pod = $('podium'); pod.innerHTML = '';
     [1, 0, 2].forEach((i) => {
       const x = res[i]; if (!x) return;
-      const d = el('div', 'pod p' + (i + 1)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h);
-      d.append(img, el('div', 'pn', x.r.n), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(i + 1))); pod.appendChild(d);
+      const d = el('div', 'pod p' + Math.min(3, x.rank)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h);
+      d.append(img, el('div', 'pn', x.r.n), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(x.rank))); pod.appendChild(d);
     });
     const list = $('resList'); list.innerHTML = '';
-    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h); d.append(el('span', 'rk', String(i + 4)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
+    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h); d.append(el('span', 'rk', String(x.rank)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
     const myRank = res.findIndex((x) => x.r.id === G.id);
-    if (myRank > 5) { const x = res[myRank], d = el('div', 'brow me'); d.append(el('span', 'rk', String(myRank + 1)), el('span', '', ''), el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); }
+    if (myRank > 5) { const x = res[myRank], d = el('div', 'brow me'); d.append(el('span', 'rk', String(x.rank)), el('span', '', ''), el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); }
     const box = $('results'); box.classList.remove('hidden');
     gsap.killTweensOf(box); gsap.fromTo(box, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.3 });
     const tl = gsap.timeline();

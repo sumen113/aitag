@@ -158,13 +158,17 @@ class Room {
   }
 
   endRound() {
-    const list = [...this.players.values()].map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // ties: more tags, then a coin flip (never "whoever joined first")
+    const list = [...this.players.values()].map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display order inside a tie: more tags, then a coin flip (never "whoever joined first"); the win itself is shared, see below
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
     // wins are paid out in online servers with enough real players and no bots (custom servers: a few more players), to registered accounts that were actually playing
     const need = this.regular ? MIN_WIN_PLAYERS : this.botTarget === 0 ? CUSTOM_MIN_WIN_PLAYERS : Infinity;
     if (this.onWin && !this.solo && list.length && this.humanCount() >= need) {
-      const top = this.players.get(list[0].id);
-      if (top && top.uid && !top.bot && !top.afk && list[0].s >= MIN_WIN_SCORE) this.onWin(top);
+      const best = Math.floor(list[0].s);                // the displayed top score: everyone who finished on it shares the win
+      if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
+        if (Math.floor(r.s) !== best) break;
+        const w = this.players.get(r.id);
+        if (w && w.uid && !w.bot && !w.afk) this.onWin(w);
+      }
     }
     for (const p of this.players.values()) p.it = 0;
     this.itId = 0; this.state = STATE.RESULTS; this.timer = T.RESULTS_TIME; this.tl = T.RESULTS_TIME;
@@ -243,6 +247,19 @@ class Room {
         const f = 1 - d / R * 0.4;
         q.vx += dx * 760 * f; q.vy += dy * 760 * f;
         q.stun = Math.max(q.stun, 0.5);
+        if (q.c === IDX.fox) q.abT = 0;
+      }
+      for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);
+    } else if (e.n === 'gust') {
+      const R = 270;                                          // a wide, stun-free blast: it buys distance, not a free tag
+      for (const q of this.players.values()) {
+        if (q === p) continue;
+        if (q.c === IDX.frog && q.abT > 0) continue;
+        let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
+        if (d > R) continue;
+        if (d < 1) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
+        const f = 1 - d / R * 0.5;
+        q.vx += dx * 640 * f; q.vy += dy * 640 * f;
         if (q.c === IDX.fox) q.abT = 0;
       }
       for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);

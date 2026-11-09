@@ -262,6 +262,21 @@ const Chars = (() => {
       g.beginPath(); g.moveTo(-5, -14.4); g.quadraticCurveTo(0, -12.2, 5, -14.4); g.lineWidth = 1.5; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
       g.restore();
     },
+    bird(g, c, o) {
+      const fl = Math.sin(o.t * 14) * (0.12 + 0.3 * o.spd);                    // wings buzz harder the faster you go
+      poly(g, [-5, -9, -1, 0.5, -9.5, -2], c.d, 2); poly(g, [5, -9, 1, 0.5, 9.5, -2], c.d, 2);   // tail feathers peeking out below
+      feet(g, '#ff9d3a', 6, o, 0.8);
+      ell(g, -17.5, -17, 5.6, 11.5, c.d, 2.2, 0.35 + fl); ell(g, 17.5, -17, 5.6, 11.5, c.d, 2.2, -0.35 - fl);
+      if (!o.hat) for (const [x, r] of [[-3.6, -0.34], [0, 0], [3.6, 0.34]]) { g.save(); g.translate(x, -37); g.rotate(r); ell(g, 0, -4.6, 2.5, 5.6, c.d, 1.8); g.restore(); }
+      ell(g, 0, -19.5, 17.5, 19.5, c.m);
+      ell(g, 0, -12.5, 11.5, 11.5, c.ll, 0.01);
+      g.lineWidth = 1.4; g.strokeStyle = c.m; g.lineCap = 'round';
+      for (const [x, y] of [[-4, -9], [3.5, -7], [-1, -4]]) { g.beginPath(); g.arc(x, y, 2.6, 0.3, Math.PI - 0.3); g.stroke(); }
+      eye(g, -7.2, -25, 4.7, o); eye(g, 7.2, -25, 4.7, o);
+      poly(g, [-4.2, -19.5, 4.2, -19.5, 0, -12.2], '#ff9d3a', 1.9);
+      g.beginPath(); g.moveTo(-3.6, -16.6); g.lineTo(3.6, -16.6); g.lineWidth = 1.2; g.strokeStyle = OUT; g.stroke();
+      cheek(g, -12.8, -17.5, 3.2, 2); cheek(g, 12.8, -17.5, 3.2, 2);
+    },
     star(g, c, o) {
       const cy = -20, R = 33.5, r = 11.5, TAU = Math.PI * 2;
       g.save(); g.translate(0, cy);
@@ -296,7 +311,7 @@ const Chars = (() => {
   // where the top of each character's head is (the hat's base sits here) and how wide the hat may be
   const HEAD = {
     fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
-    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9],
+    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11],
     icon: [0, -1.5, 12],      // used by hatIcon(): hat sits on the origin at natural size
   };
   function drawHat(g, id, hat, o) {
@@ -368,6 +383,7 @@ const Chars = (() => {
     raccoon: { f: 15, bob: 2.4, sq: 0.05, sway: 0.03, lean: 0.10, crouch: 0.03 },   // scurry
     bat:     { f: 6,  bob: 2.2, sq: 0.02, sway: 0.04, lean: 0.12, crouch: 0 },      // flutter
     star:    { f: 9,  bob: 2.4, sq: 0.06, sway: 0.07, lean: 0.04, crouch: 0 },
+    bird:    { f: 14, bob: 4.2, sq: 0.03, sway: 0.04, lean: 0.05, crouch: 0 },      // quick pecking hops
   };
 
   /* -------------------------------- public API ------------------------------ */
@@ -496,6 +512,7 @@ const Chars = (() => {
     recall:  () => [[{ sq: -0.3, duration: 0.07, ease: 'power2.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
     pounce:  (p, f) => [[{ sq: 0.18, rot: -0.1, duration: 0.06, ease: 'power2.out' }], [{ sq: -0.18, rot: 0.42, duration: 0.12, ease: 'power2.out' }], [{ ...REST, duration: 0.35, ease: 'elastic.out(1, 0.5)' }]],
     spin:    (p, f) => [[{ sq: 0.24, duration: 0.09, ease: 'power2.out' }], [{ sq: 0, up: 5, duration: 0.14, ease: 'power2.out' }], [{ up: 0, duration: 0.2, ease: 'power2.in' }]],
+    gust:    () => [[{ sq: 0.3, duration: 0.1, ease: 'power2.out' }], [{ up: 14, sq: -0.22, rot: -0.14, duration: 0.14, ease: 'power3.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
     bounce:  () => [[{ sq: 0.2, duration: 0.05, ease: 'power2.out' }], [{ ...REST, duration: 0.3, ease: 'elastic.out(1, 0.45)' }]],
     hit:     () => [[{ sq: 0.24, rot: -0.2, duration: 0.07, ease: 'power2.out' }], [{ rot: 0.12, sq: -0.1, duration: 0.1, ease: 'power2.inOut' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.4)' }]],
     hello:   () => [[{ up: 12, sq: -0.14, duration: 0.16, ease: 'power2.out' }], [{ up: 0, sq: 0.18, duration: 0.14, ease: 'power2.in' }], [{ ...REST, duration: 0.5, ease: 'elastic.out(1, 0.4)' }]],
@@ -526,6 +543,7 @@ const Chars = (() => {
     shield: '<path d="M12 3 4.5 6v6c0 4.8 3.2 7.7 7.5 9 4.3-1.3 7.5-4.2 7.5-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
     slide: '<path d="M3 15c4 0 5-7 10-7 3 0 3 4 8 4"/><path d="M3 20h18"/><circle cx="7" cy="12" r="0.8"/>',
     swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    gust: '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h16a3 3 0 1 1-3 3"/><path d="M3 18h7"/>',
     echo: '<circle cx="12" cy="12" r="2"/><path d="M7.6 7.6a6.2 6.2 0 0 0 0 8.8M16.4 7.6a6.2 6.2 0 0 1 0 8.8M4.6 4.6a10.4 10.4 0 0 0 0 14.8M19.4 4.6a10.4 10.4 0 0 1 0 14.8"/>',
   };
   const icon = (fx, cls) => `<svg viewBox="0 0 24 24" class="${cls || 'ico'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[fx] || ''}</svg>`;

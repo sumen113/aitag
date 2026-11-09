@@ -84,6 +84,8 @@
       desc: 'Drop a beacon, then press again within 4 seconds to snap back to it. Leave a trail, vanish, reappear.' },
     { id: 'star',  fx: 'spin',   name: 'Andy',  species: 'Starfish', natural: '#ef6a4c', ability: 'Ricochet', cd: 13, dur: 1.5, speed: 0.99, radius: 19, role: 'Pinball', price: 3,
       desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
+    { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 12, dur: 0, speed: 1.02, radius: 17, role: 'Wind caller', price: 2,
+      desc: 'Flap a mighty gust that blows everyone nearby away, then glide off in a burst of speed.' },
   ];
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -393,6 +395,7 @@
       case 'ghost': case 'cat': case 'robot': p.abT = def.dur; break;
       case 'penguin': p.abT = def.dur; p.vx = dx * 420; p.vy = dy * 420; break;
       case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
+      case 'bird': p.boostT = 0.3; break;           // the gale itself is resolved by the server; the bird glides off in a burst
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
       default: break;                              // bear / octo / owl / raccoon: world effects resolved by the server
     }

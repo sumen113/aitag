@@ -162,7 +162,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   console.log('prediction drift: replay client inputs through the shared sim and compare with the server');
   for (const h of [...humans, dup, refill, solo]) try { h.ws.close(); } catch (e) { /* noop */ }   // a lone player: no tags/stomps to confuse the replay
   await sleep(400);
-  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat'];
+  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat', 'bird'];
   for (const cid of driftIds) {                              // dash, leap, phase, stomp, slide, cloak+pounce, beacon+recall
     const ci = T.CHARS.findIndex((x) => x.id === cid);
     const acc = await account('Drift' + cid, { wins: 20, items: T.CHARS[ci].starter ? [] : [cid] });
@@ -213,6 +213,32 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
     ok(bounced >= 1 && p.x <= map.w, 'starfish ricochets off walls and stays inside the arena (bounces: ' + bounced + ')');
     const q = T.newSim(2, starI, 300, 300); q.stun = 0.5; q.abT = 1; T.stepPlayer(q, { s: 1, x: 0, y: 0, a: 0 }, ctx, []);
     ok(q.abT === 0, 'a stun uncurls the starfish');
+  }
+
+  {
+    // bird: the gale is a stun-free shove; the bird itself glides off
+    const { Room } = require('../src/room.js');
+    const bi = T.CHARS.findIndex((x) => x.id === 'bird'), fi = T.CHARS.findIndex((x) => x.id === 'frog'), ci = T.CHARS.findIndex((x) => x.id === 'fox');
+    ok(bi >= 0 && T.CHARS[bi].fx === 'gust', 'bird exists with the gust power');
+    const room = new Room('t1', { kind: 'public', name: 'GustTest' });
+    const bird = room.makePlayer('Bird', bi, 0, false), near = room.makePlayer('Near', ci, 0, false), far = room.makePlayer('Far', ci, 0, false), hop = room.makePlayer('Hop', fi, 0, false);
+    for (const p of [bird, near, far, hop]) room.players.set(p.id, p);
+    bird.x = 1000; bird.y = 800; near.x = 1100; near.y = 800; far.x = 1600; far.y = 800; hop.x = 1000; hop.y = 900; hop.abT = 0.4;
+    const ev = []; T.stepPlayer(bird, { s: 1, x: 0, y: 0, a: 1 }, room.ctx, ev);
+    ok(bird.cd > 0 && bird.boostT > 0.2, 'bird glides off after the gale (boostT ' + bird.boostT.toFixed(2) + ')');
+    for (const e of ev) room.abilityEvent(bird, e);
+    ok(near.vx > 300 && near.stun === 0, 'gust shoves nearby players away without stunning them (vx ' + Math.round(near.vx) + ', stun ' + near.stun + ')');
+    ok(far.vx === 0 && hop.vx === 0, 'gust leaves distant players and airborne frogs alone');
+    // ties: every registered player on the shared top score gets the win
+    const wins = []; const r2 = new Room('t2', { kind: 'public', name: 'TieTest' }); r2.onWin = (p) => wins.push(p.name);
+    const mkp = (n, sc, uid, bot) => { const p = r2.makePlayer(n, 0, 0, !!bot); p.score = sc; p.uid = uid; r2.players.set(p.id, p); return p; };
+    mkp('A', 61.2, 1); mkp('B', 61.8, 2); mkp('C', 61.4, 0); mkp('D', 40, 4); mkp('E', 61.5, 5, true);
+    r2.endRound();
+    ok(wins.sort().join() === 'A,B' , 'tied top scorers all win, unregistered and bot players do not (' + wins.join() + ')');
+    const wins2 = []; const r3 = new Room('t3', { kind: 'public', name: 'TieTest2' }); r3.onWin = (p) => wins2.push(p.name);
+    for (const [n, sc, u] of [['A', 20, 1], ['B', 20, 2], ['C', 19, 3], ['D', 5, 4]]) { const p = r3.makePlayer(n, 0, 0, false); p.score = sc; p.uid = u; r3.players.set(p.id, p); }
+    r3.endRound();
+    ok(wins2.length === 0, 'nobody wins when the top score is below the survival minimum');
   }
 
   console.log('server browser');
