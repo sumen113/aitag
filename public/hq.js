@@ -40,12 +40,12 @@
       if (!timer) timer = setInterval(refresh, 3000);
       return true;
     }
-    if (r.status === 401) { gate('Admin passcode', r.j.error || 'Enter the passcode to continue.', 'code'); return false; }
+    if (r.status === 401) { gate('Passcode', r.j.error || 'Enter the passcode to continue.', 'code'); return false; }
     if (r.status === 403 && r.j.setup) { gate('Almost there', r.j.error, 'none'); return false; }
     if (r.status === 403) {
       const me = await (await fetch('/api/me', { cache: 'no-store' }).catch(() => null))?.json().catch(() => ({}));
-      if (!me || !me.user) gate('Log in first', 'Log in on the main page with one of the admin usernames, then come back here.', 'login');
-      else gate('No access', `You are logged in as ${me.user.username}, which is not an admin account.`, 'none');
+      if (!me || !me.user) gate('Log in first', 'Log in on the main page with a staff account, then come back here.', 'login');
+      else gate('No access', `You are logged in as ${me.user.username}, which is not a staff account.`, 'none');
       return false;
     }
     if (r.status === 429) { gate('Slow down', r.j.error, 'none'); return false; }
@@ -119,7 +119,7 @@
       const c = el('span', 'ad-chip'); c.append(el('b', '', n), el('small', '', kind));
       const x = el('button', 'ad-btn', 'Unmute'); x.type = 'button'; x.onclick = async () => done(await api('unmute', { username: n }), `${n} unmuted`); c.append(x); mutes.append(c);
     }
-    $('adAdmins').textContent = 'Admin usernames: ' + s.admins.join(', ') + '. Change them with the ADMIN_USERS environment variable.';
+    $('adAdmins').textContent = 'Staff usernames: ' + s.admins.join(', ') + '. Change them with the ADMIN_USERS environment variable.';
 
     const log = $('adLog'); log.replaceChildren();
     if (!s.log.length) log.append(el('li', '', 'Nothing yet this session.'));
@@ -144,7 +144,7 @@
   function userCard(u) {
     const c = el('div', 'ad-user'), head = el('div', 'ad-user-head');
     head.append(el('b', '', u.username), el('span', 'mono', `${u.wins} wins · ${u.balance} to spend · joined ${new Date(u.created).toLocaleDateString()}`));
-    if (u.online) head.append(el('span', 'ad-pill acct', 'online')); if (u.admin) head.append(el('span', 'ad-pill staff', 'admin'));
+    if (u.online) head.append(el('span', 'ad-pill acct', 'online')); if (u.admin) head.append(el('span', 'ad-pill staff', 'staff'));
     if (u.banned) head.append(el('span', 'ad-pill bad', 'banned: ' + u.banned)); if (u.muted) head.append(el('span', 'ad-pill bad', 'muted'));
     c.append(head);
     const owned = el('div', 'ad-user-row'); owned.append(el('span', 'mono', 'Owns'));

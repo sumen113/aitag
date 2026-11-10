@@ -94,13 +94,13 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
       if (req.method !== 'POST') return json(res, 405, { error: 'POST only' }), true;
       if (!sameOrigin(req) || !/^application\/json\b/i.test(req.headers['content-type'] || '')) return json(res, 403, { error: 'Forbidden' }), true;
       const user = await auth.userFromCookie(req.headers.cookie);
-      if (!user || !isAdmin(user.username)) return json(res, 403, { error: 'Not an admin account. Log in with an admin username first.' }), true;
+      if (!user || !isAdmin(user.username)) return json(res, 403, { error: 'Not a staff account. Log in with a staff username first.' }), true;
       if (!passcode) return json(res, 403, { error: 'The server has no ADMIN_PASSCODE set. Add it to the environment variables and redeploy.', setup: true }), true;
       const ip = ipOf(req), now = Date.now(), recent = (fails.get(ip) || []).filter((t) => now - t < 600e3);
       if (recent.length >= 10) return json(res, 429, { error: 'Too many wrong passcodes. Wait a few minutes.' }), true;
       if (!codeOk(req.headers['x-admin-code'])) {
         if (req.headers['x-admin-code']) { recent.push(now); fails.set(ip, recent); }
-        return json(res, 401, { error: req.headers['x-admin-code'] ? 'Wrong passcode.' : 'Enter the admin passcode.', needCode: true }), true;
+        return json(res, 401, { error: req.headers['x-admin-code'] ? 'Wrong passcode.' : 'Enter the passcode.', needCode: true }), true;
       }
       const body = await readBody(req).catch(() => null);
       if (!body || typeof body !== 'object') return json(res, 400, { error: 'Bad request' }), true;
@@ -125,7 +125,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
 
       if (act === 'kick') {
         const f = findPlayer(String(body.room), body.id); if (!f) return json(res, 404, { error: 'That player already left.' }), true;
-        send(f.p.ws, { t: 'kick', m: 'An admin removed you from the game.' }); try { f.p.ws.close(); } catch (e) { /* gone */ }
+        send(f.p.ws, { t: 'kick', m: 'Staff removed you from the game.' }); try { f.p.ws.close(); } catch (e) { /* gone */ }
         record(me, 'kick', f.p.name); return json(res, 200, { ok: true }), true;
       }
 
@@ -134,7 +134,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const on = !!body.on; f.p.muted = on;
         const key = lower(f.p.name);
         if (f.p.uid) { if (on) st.mutes[key] = { by: me, at: Date.now() }; else delete st.mutes[key]; save(); } else if (on) guestMutes.add(key); else guestMutes.delete(key);
-        send(f.p.ws, { t: 'announce', m: on ? 'An admin muted your chat.' : 'You can chat again.', p: 1 });
+        send(f.p.ws, { t: 'announce', m: on ? 'Staff muted your chat.' : 'You can chat again.', p: 1 });
         record(me, on ? 'mute' : 'unmute', f.p.name); return json(res, 200, { ok: true }), true;
       }
 
@@ -180,7 +180,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const u = await target(); if (!u) return noUser(), true;
         const pv = T.validatePassword(body.password); if (!pv.ok) return json(res, 400, { error: pv.err }), true;
         await store.setPassword(u.id, await hashPassword(String(body.password)));
-        kickAccount(u.id, 'Your password was changed by an admin. Log in again.');
+        kickAccount(u.id, 'Your password was changed by staff. Log in again.');
         record(me, 'password-reset', u.username); return json(res, 200, { ok: true }), true;
       }
 
