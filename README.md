@@ -51,7 +51,7 @@ Pressing **Play online** opens a server picker.
 - Limits: 40 custom servers at once, 3 creations per person/IP per 10 minutes, names unique and filtered. Limits live in `SERVER_LIMITS` (`public/shared.js`).
 - Servers live in memory, so a Render restart or free-tier sleep clears them (Regular comes straight back).
 
-## Admin panel (`/admin`)
+## Admin panel (`/hq`, also reachable at `/admin`)
 
 For you and one other person. Two things decide who gets in, both set as environment variables on Render:
 
@@ -60,7 +60,7 @@ For you and one other person. Two things decide who gets in, both set as environ
 2. `ADMIN_PASSCODE`: a long secret phrase you make up. You type it once into the panel (it is kept for that browser tab only).
    Without it the panel refuses to work, so a guessed or stolen admin password alone is not enough.
 
-Then log in with an admin username and open `/admin` (an **Admin** link also appears in the menu and your account window).
+Then log in with an admin username and open `/hq` (many school web filters block anything called "admin", so the panel and its API live under `/hq` and `/api/hq/*`; `/admin` and `/api/admin/*` keep working; an **Admin** link also appears in the menu and your account window).
 What it does:
 - **Live**: who is online (guest / account / ping / room), rooms and their state; **Kick**, **Mute** (chat) or **Ban** a player.
 - **Accounts**: search players; give or take **wins**, give or remove a **character**, **reset a password** (the fix for "I forgot mine", since there is no email reset),
@@ -81,6 +81,8 @@ The rest of the safety is the same as the main site: same-origin JSON only, pass
 The server is authoritative but hides latency in four ways:
 - **Client prediction** (shared deterministic movement in `public/shared.js`): your own character reacts instantly.
 - **Bigger hitboxes**: tag reach is `TAG_REACH = 10` px on top of both body radii (`public/shared.js`).
+- **Two taggers**: rooms with 7 or more players (bots count) start every round with two ITs (`TWO_IT_AT` in `shared.js`). Tags hand the role over one-for-one; if a tagger leaves or goes AFK a replacement is picked. Bots flee whichever tagger is nearest.
+- **Hide interface**: eye button in the game HUD or the `H` key.
 - **Lag compensation**: when IT touches someone, the server also checks where that player was up to `LAG_COMP_MAX` = 0.16 s ago
   (scaled by the tagger's measured ping), so a tag that looked good on the tagger's screen counts. Players who just used an escape ability are not rewound through it.
 - **Adaptive interpolation**: other players are drawn ~70-190 ms in the past depending on measured network jitter; inputs are sent ~60 times/s with `TCP_NODELAY`.
@@ -119,6 +121,7 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 | Raccoon | Swap | 12 s | 3 ★ | trade places with the nearest player; they are dizzy for a moment |
 | Bat | Echo Beacon | 10 s | 3 ★ | drop a beacon, press again within 4 s to snap back to it |
 | Starfish | Ricochet | 13 s | 3 ★ | steerable 1.5 s roll that bounces off walls |
+| Avocado | Pit Shot | 9 s | 6 ★ | spits a seed in a straight line (640 px). From IT it tags the first runner hit; from a runner it stuns IT for 1.3 s. Seeds stop at walls and fly through other taggers |
 | Bird | Gale | 12 s | 2 ★ | stun-free blast (270 px) that shoves everyone away, then a short glide boost |
 
 ### Customisation and animation
@@ -142,6 +145,6 @@ src/bots.js        bot AI (grid pathfinding, chase/flee, ability use)
 src/db.js          accounts storage: Postgres or dev JSON file behind one API
 src/auth.js        register / login / logout / shop-buy HTTP endpoints, scrypt, sessions, rate limits
 src/admin.js       admin API: moderation, wins/items, password reset, announcements, banner
-public/            website + game client (index.html, style.css, site.js, game.js, render.js, chars.js, audio.js, shared.js), admin.html/admin.js/admin.css
+public/            website + game client (index.html, style.css, site.js, game.js, render.js, chars.js, audio.js, shared.js), hq.html/hq.js/hq.css (the admin panel)
 tools/             balance.js, fuzz.js (integration), dbtest.js (database), admintest.js (admin API)
 ```

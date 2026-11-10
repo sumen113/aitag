@@ -38,6 +38,7 @@ class Room {
     this.ctx = { map: this.map, goos: this.goos };
     this.players = new Map();
     this.decoys = [];
+    this.seeds = [];                                   // avocado seeds in flight
     this.events = [];
     this.state = STATE.WAIT;
     this.timer = 0; this.tl = 0; this.round = 0; this.tickN = 0;
@@ -48,6 +49,7 @@ class Room {
   /* ----------------------------- membership ----------------------------- */
   humanCount() { let n = 0; for (const p of this.players.values()) if (!p.bot) n++; return n; }
   itPlayer() { const p = this.players.get(this.itId); return p && p.it ? p : null; }
+  itPlayers() { const a = []; for (const p of this.players.values()) if (p.it) a.push(p); return a; }
 
   makePlayer(name, c, col, bot) {
     const p = T.newSim(nextPlayerId++, c, 0, 0);
@@ -108,6 +110,7 @@ class Room {
     if (!this.players.delete(p.id)) return;
     for (const g of this.goos.slice()) if (g.o === p.id) this.goos.splice(this.goos.indexOf(g), 1);
     for (const d of this.decoys.slice()) if (d.o === p.id) this.decoys.splice(this.decoys.indexOf(d), 1);
+    this.seeds = this.seeds.filter((x) => x.o !== p.id);
     if (!silent && !p.bot) this.emit({ k: 'leave', n: p.name });
     this.rosterDirty = true;
     if (p.it) this.reassignIt();
@@ -115,10 +118,11 @@ class Room {
     if (this.players.size < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
   }
 
+  // hand the IT role to one more random player (an IT left or went AFK); never someone who already is IT
   reassignIt() {
-    const arr = [...this.players.values()];
-    if (this.state !== STATE.PLAY || arr.length < 2) { this.itId = 0; return; }
-    const n = arr[(Math.random() * arr.length) | 0];
+    const arr = [...this.players.values()].filter((p) => !p.it);
+    if (this.state !== STATE.PLAY || !arr.length || this.players.size < 2) { if (!this.itPlayers().length) this.itId = 0; return; }
+    const pool = arr.filter((p) => !p.afk), n = (pool.length ? pool : arr)[(Math.random() * (pool.length || arr.length)) | 0];
     n.it = 1; n.lock = 1; this.itId = n.id;
     this.emit({ k: 'tag', a: 0, b: n.id, x: n.x, y: n.y });
   }
@@ -139,10 +143,10 @@ class Room {
   startCountdown() {
     if (this.round > 0) {
       const m = this.pickMap();
-      if (m !== this.map) { this.map = m; this.ctx.map = m; this.itDist = null; for (const p of this.players.values()) p.ai = null; }
+      if (m !== this.map) { this.map = m; this.ctx.map = m; this.itFields = null; for (const p of this.players.values()) p.ai = null; }
     }
     this.round++;
-    this.goos.length = 0; this.decoys.length = 0; this.results = null;
+    this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.results = null;
     const sp = shuffle(this.map.spawns.slice()); let i = 0;
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
     this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN; this.tl = T.COUNTDOWN;
@@ -150,11 +154,13 @@ class Room {
   }
 
   startPlay() {
-    const arr = [...this.players.values()];
-    const it = arr[(Math.random() * arr.length) | 0];
-    it.it = 1; it.stun = T.HEAD_START; this.itId = it.id;
+    const arr = shuffle([...this.players.values()]);
+    this.itWant = T.itCountFor(arr.length);              // 7+ players: two taggers
+    const its = arr.slice(0, this.itWant);
+    for (const it of its) { it.it = 1; it.stun = T.HEAD_START; }
+    this.itId = its[0].id;
     this.state = STATE.PLAY; this.tl = this.roundTime;
-    this.emit({ k: 'st', s: STATE.PLAY, it: it.id });
+    this.emit({ k: 'st', s: STATE.PLAY, it: its[0].id, its: its.map((p) => p.id) });
   }
 
   endRound() {
@@ -263,6 +269,10 @@ class Room {
         if (q.c === IDX.fox) q.abT = 0;
       }
       for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);
+    } else if (e.n === 'seed') {
+      const L = Math.hypot(e.dx, e.dy) || 1, ux = e.dx / L, uy = e.dy / L, off = CHARS[p.c].radius + 6;
+      if (this.seeds.filter((x) => x.o === p.id).length >= 2) return;
+      this.seeds.push({ id: this.entId++, o: p.id, x: p.x + ux * off, y: p.y + uy * off, vx: ux * T.SEED_SPEED, vy: uy * T.SEED_SPEED, it: p.it ? 1 : 0, ttl: T.SEED_RANGE / T.SEED_SPEED });
     } else if (e.n === 'goo') {
       const mine = this.goos.filter((g) => g.o === p.id);
       if (mine.length >= 3) this.goos.splice(this.goos.indexOf(mine[0]), 1);
@@ -289,6 +299,38 @@ class Room {
       return;
     }
     this.emit({ k: 'ab', n: e.n, id: p.id, x: r1(e.x), y: r1(e.y), dx: r2(e.dx || 0), dy: r2(e.dy || 0), x1: e.x1 !== undefined ? r1(e.x1) : undefined, y1: e.y1 !== undefined ? r1(e.y1) : undefined });
+  }
+
+  /* avocado seeds: fly straight, stop at walls. From an IT avocado a hit tags the runner; from a runner it stuns the IT. */
+  stepSeeds() {
+    for (let i = this.seeds.length - 1; i >= 0; i--) {
+      const s = this.seeds[i], o = this.players.get(s.o);
+      s.ttl -= DT; s.x += s.vx * DT; s.y += s.vy * DT;
+      let dead = s.ttl <= 0 || !o || this.state !== STATE.PLAY;
+      if (!dead && !T.circleFree(this.map, s.x, s.y, T.SEED_R * 0.6)) { dead = true; this.emit({ k: 'ab', n: 'seedpop', id: s.o, x: r1(s.x - s.vx * DT), y: r1(s.y - s.vy * DT), dx: 0, dy: 0 }); }
+      if (!dead) for (const d of this.decoys.slice()) if (d.o !== s.o && Math.hypot(d.x - s.x, d.y - s.y) < 22 + T.SEED_R) { this.popDecoy(d); dead = true; break; }
+      if (!dead) for (const q of this.players.values()) {
+        if (q === o || (q.c === IDX.frog && q.abT > 0)) continue;
+        const rr = CHARS[q.c].radius + T.SEED_R, dx = q.x - s.x, dy = q.y - s.y;
+        if (dx * dx + dy * dy >= rr * rr) continue;
+        if (q.c === IDX.robot && q.abT > 0) {                  // shield eats the seed
+          q.abT = 0; this.emit({ k: 'ab', n: 'shieldhit', id: q.id, x: r1(q.x), y: r1(q.y), dx: r2(s.vx / T.SEED_SPEED), dy: r2(s.vy / T.SEED_SPEED) });
+          dead = true; break;
+        }
+        if (s.it) {
+          if (q.it || q.imm > 0) continue;                      // seeds fly through other taggers and freshly tagged runners
+          if (!o.it) { dead = true; break; }                  // the avocado lost its IT status while the seed was flying
+          this.tag(o, q); dead = true; break;
+        }
+        if (q.it) {                                            // a runner's seed: stun and shove the tagger
+          q.stun = Math.max(q.stun, 1.3); q.vx += s.vx * 0.45; q.vy += s.vy * 0.45;
+          if (q.c === IDX.fox) q.abT = 0;
+          this.emit({ k: 'ab', n: 'seedhit', id: o.id, x: r1(q.x), y: r1(q.y), dx: r2(s.vx / T.SEED_SPEED), dy: r2(s.vy / T.SEED_SPEED) });
+          dead = true; break;
+        }
+      }
+      if (dead) this.seeds.splice(i, 1);
+    }
   }
 
   popDecoy(d) {
@@ -356,11 +398,13 @@ class Room {
     }
     for (let i = this.goos.length - 1; i >= 0; i--) { this.goos[i].ttl -= DT; if (this.goos[i].ttl <= 0) this.goos.splice(i, 1); }
 
+    this.stepSeeds();
+
     // ---- tagging & scoring
     if (this.state === STATE.PLAY) {
-      const it = this.itPlayer();
       for (const p of this.players.values()) if (!p.it && !p.afk) p.score += DT;
-      if (it) {
+      for (const it of this.itPlayers()) {
+        if (!it.it) continue;                                 // already handed over by an earlier tag this tick
         const ri = CHARS[it.c].radius;
         for (const d of this.decoys.slice()) {
           if (d.o !== it.id && Math.hypot(d.x - it.x, d.y - it.y) < ri + 16) { this.popDecoy(d); it.stun = Math.max(it.stun, 1.0); }
@@ -370,7 +414,7 @@ class Room {
           // so a tag also counts if the target WAS in reach shortly before. Capped at LAG_COMP_MAX so dodging still works.
           const comp = it.bot ? 0 : T.clamp((it.rtt + 90) / 1000 * 0.8, 0, T.LAG_COMP_MAX), kmax = Math.min(HIST - 2, Math.round(comp * T.TICK));
           for (const q of this.players.values()) {
-            if (q === it || q.imm > 0 || (q.c === IDX.frog && q.abT > 0)) continue;
+            if (q === it || q.it || q.imm > 0 || (q.c === IDX.frog && q.abT > 0)) continue;
             const rr = ri + CHARS[q.c].radius + T.TAG_REACH;
             let dx = q.x - it.x, dy = q.y - it.y, hit = dx * dx + dy * dy < rr * rr;
             if (!hit && kmax >= 2) {
@@ -389,7 +433,9 @@ class Room {
             this.tag(it, q); break;
           }
         }
-      } else if (this.players.size >= 2) this.reassignIt();
+      }
+      const want = Math.min(this.itWant || 1, Math.max(1, this.players.size - 1));
+      if (this.itPlayers().length < want && this.players.size >= 2) this.reassignIt();
     }
 
     // ---- afk handling (once per second). Only counts while a round is being played: waiting in an empty lobby is fine.
@@ -431,6 +477,7 @@ class Room {
       t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, p: ps,
       g: this.goos.map((g) => [g.id, r1(g.x), r1(g.y), g.r, g.o, r1(g.ttl), g.splash ? 1 : 0]),
       d: this.decoys.map((d) => [d.id, r1(d.x), r1(d.y), r1(d.vx), r1(d.vy), d.c, d.k, d.o, r1(d.ttl)]),
+      sd: this.seeds.map((x) => [x.id, r1(x.x), r1(x.y), r1(x.vx), r1(x.vy), x.o]),
     };
     if (this.state === STATE.RESULTS) head.res = this.results;
     const base = JSON.stringify(head).slice(0, -1);

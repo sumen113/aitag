@@ -1,7 +1,9 @@
 'use strict';
-/* Admin panel client. Talks to /api/admin/* (server checks: admin account + ADMIN_PASSCODE on every request). */
+/* Admin panel client. Talks to /api/hq/* (an alias of /api/admin/*; some school filters block anything called "admin") (server checks: admin account + ADMIN_PASSCODE on every request). */
 (function () {
   const T = window.TagShared;
+  // anything that goes wrong is shown on the page instead of leaving it blank
+  window.addEventListener('error', (e) => { const m = document.getElementById('adGateMsg'); if (m && !document.getElementById('adGate').classList.contains('hidden')) m.textContent = 'Something broke: ' + (e.message || 'unknown error'); });
   const $ = (id) => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
   let code = '';
@@ -10,7 +12,7 @@
 
   async function api(action, body) {
     try {
-      const r = await fetch('/api/admin/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Code': code }, body: JSON.stringify(body || {}) });
+      const r = await fetch('/api/hq/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Code': code }, body: JSON.stringify(body || {}) });
       return { status: r.status, j: await r.json().catch(() => ({})) };
     } catch (e) { return { status: 0, j: { error: 'Could not reach the server.' } }; }
   }

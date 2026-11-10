@@ -20,6 +20,9 @@
   const ACCEL = 2400, FRIC = 2200;
   const ICE_ACCEL = 420, ICE_FRIC = 140;
   const ROUND_TIME = 90, COUNTDOWN = 4, RESULTS_TIME = 10, HEAD_START = 2.2;
+  const SEED_SPEED = 800, SEED_RANGE = 640, SEED_R = 11;     // avocado seed: px/s, px, hit radius
+  const TWO_IT_AT = 7;                                    // from this many players, a round starts with two taggers
+  const itCountFor = (n) => (n >= TWO_IT_AT ? 2 : 1);
   const TAG_IMMUNITY = 2.0, TAG_LOCK = 0.6;
   const TAG_REACH = 10;                      // extra px of tag range beyond touching: generous on purpose (players are far from the server)
   const LAG_COMP_MAX = 0.16;                 // seconds of server-side rewind granted to the tagger
@@ -86,6 +89,8 @@
       desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
     { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 12, dur: 0, speed: 1.02, radius: 17, role: 'Wind caller', price: 2,
       desc: 'Flap a mighty gust that blows everyone nearby away, then glide off in a burst of speed.' },
+    { id: 'avocado', fx: 'seed', name: 'Guac',  species: 'Avocado', natural: '#6aa84f', ability: 'Pit Shot', cd: 9, dur: 0, speed: 0.97, radius: 18, role: 'Sharpshooter', price: 6,
+      desc: 'Spit a hard seed in a straight line. As IT it tags the first runner it hits; as a runner it stuns whoever is IT.' },
   ];
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -397,7 +402,7 @@
       case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
       case 'bird': p.boostT = 0.3; break;           // the gale itself is resolved by the server; the bird glides off in a burst
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
-      default: break;                              // bear / octo / owl / raccoon: world effects resolved by the server
+      default: break;                              // bear / octo / owl / raccoon / avocado: world effects (incl. the flying seed) resolved by the server
     }
     p.cd = def.cd;
     if (ev) ev.push(e);
@@ -516,7 +521,7 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };

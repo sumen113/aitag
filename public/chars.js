@@ -277,6 +277,19 @@ const Chars = (() => {
       g.beginPath(); g.moveTo(-3.6, -16.6); g.lineTo(3.6, -16.6); g.lineWidth = 1.2; g.strokeStyle = OUT; g.stroke();
       cheek(g, -12.8, -17.5, 3.2, 2); cheek(g, 12.8, -17.5, 3.2, 2);
     },
+    avocado(g, c, o) {
+      feet(g, c.dd, 7.5, o, 0.95);
+      const arm = Math.sin(o.t * 9) * 0.35 * o.spd;
+      ell(g, -17.5, -17, 4.6, 7.5, c.d, 2.2, 0.5 + arm); ell(g, 17.5, -17, 4.6, 7.5, c.d, 2.2, -0.5 - arm);
+      const pear = (rr, y0, r0, y1, r1, col, lw) => { ell(g, 0, y0, rr * r0[0], r0[1], col, lw); ell(g, 0, y1, rr * r1[0], r1[1], col, lw); };
+      if (!o.hat) { ell(g, 0.4, -46.5, 1.7, 4, '#6b4a2b', 1.6, 0.25); ell(g, 5.2, -47.5, 5.4, 2.7, c.l, 1.8, -0.5); }          // little stalk + leaf
+      pear(1, -12.5, [19, 15.5], -31, [13.4, 14], c.d, 2.6);                        // skin
+      pear(1, -12, [15.4, 12.6], -30.5, [10, 11.2], c.ll, 0.01);                    // flesh
+      ell(g, 0, -11.5, 8.6, 9.2, '#8a5a35', 2); ell(g, -2.8, -14.6, 2.6, 3.2, '#b88556', 0.01, -0.4);   // the pit, doubles as a belly
+      eye(g, -5.2, -30.5, 4.3, o); eye(g, 5.2, -30.5, 4.3, o);
+      g.beginPath(); g.arc(0, -24.8, 2.6, 0.25, Math.PI - 0.25); g.lineWidth = 1.7; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
+      cheek(g, -9.8, -25.2, 2.9, 1.9); cheek(g, 9.8, -25.2, 2.9, 1.9);
+    },
     star(g, c, o) {
       const cy = -20, R = 33.5, r = 11.5, TAU = Math.PI * 2;
       g.save(); g.translate(0, cy);
@@ -311,7 +324,7 @@ const Chars = (() => {
   // where the top of each character's head is (the hat's base sits here) and how wide the hat may be
   const HEAD = {
     fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
-    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11],
+    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11], avocado: [0, -43.5, 10],
     icon: [0, -1.5, 12],      // used by hatIcon(): hat sits on the origin at natural size
   };
   function drawHat(g, id, hat, o) {
@@ -383,6 +396,7 @@ const Chars = (() => {
     raccoon: { f: 15, bob: 2.4, sq: 0.05, sway: 0.03, lean: 0.10, crouch: 0.03 },   // scurry
     bat:     { f: 6,  bob: 2.2, sq: 0.02, sway: 0.04, lean: 0.12, crouch: 0 },      // flutter
     star:    { f: 9,  bob: 2.4, sq: 0.06, sway: 0.07, lean: 0.04, crouch: 0 },
+    avocado: { f: 9,  bob: 2.6, sq: 0.05, sway: 0.06, lean: 0.05, crouch: 0 },
     bird:    { f: 14, bob: 4.2, sq: 0.03, sway: 0.04, lean: 0.05, crouch: 0 },      // quick pecking hops
   };
 
@@ -512,6 +526,7 @@ const Chars = (() => {
     recall:  () => [[{ sq: -0.3, duration: 0.07, ease: 'power2.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
     pounce:  (p, f) => [[{ sq: 0.18, rot: -0.1, duration: 0.06, ease: 'power2.out' }], [{ sq: -0.18, rot: 0.42, duration: 0.12, ease: 'power2.out' }], [{ ...REST, duration: 0.35, ease: 'elastic.out(1, 0.5)' }]],
     spin:    (p, f) => [[{ sq: 0.24, duration: 0.09, ease: 'power2.out' }], [{ sq: 0, up: 5, duration: 0.14, ease: 'power2.out' }], [{ up: 0, duration: 0.2, ease: 'power2.in' }]],
+    seed:    () => [[{ sq: 0.34, rot: 0.1, duration: 0.1, ease: 'power2.out' }], [{ up: 6, sq: -0.3, rot: -0.12, duration: 0.08, ease: 'power3.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.45)' }]],
     gust:    () => [[{ sq: 0.3, duration: 0.1, ease: 'power2.out' }], [{ up: 14, sq: -0.22, rot: -0.14, duration: 0.14, ease: 'power3.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
     bounce:  () => [[{ sq: 0.2, duration: 0.05, ease: 'power2.out' }], [{ ...REST, duration: 0.3, ease: 'elastic.out(1, 0.45)' }]],
     hit:     () => [[{ sq: 0.24, rot: -0.2, duration: 0.07, ease: 'power2.out' }], [{ rot: 0.12, sq: -0.1, duration: 0.1, ease: 'power2.inOut' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.4)' }]],
@@ -543,6 +558,7 @@ const Chars = (() => {
     shield: '<path d="M12 3 4.5 6v6c0 4.8 3.2 7.7 7.5 9 4.3-1.3 7.5-4.2 7.5-9V6z"/><path d="M9 12l2.2 2.2L15.5 10"/>',
     slide: '<path d="M3 15c4 0 5-7 10-7 3 0 3 4 8 4"/><path d="M3 20h18"/><circle cx="7" cy="12" r="0.8"/>',
     swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+    seed: '<path d="M13.5 7.5c3.6-1.2 7 1.5 6.4 5.2-.6 3.5-4.4 5.2-6.9 3.3-2.3-1.8-2.4-7 .5-8.5z"/><path d="M2 9h6M3 13h5M5 17h4"/>',
     gust: '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h16a3 3 0 1 1-3 3"/><path d="M3 18h7"/>',
     echo: '<circle cx="12" cy="12" r="2"/><path d="M7.6 7.6a6.2 6.2 0 0 0 0 8.8M16.4 7.6a6.2 6.2 0 0 1 0 8.8M4.6 4.6a10.4 10.4 0 0 0 0 14.8M19.4 4.6a10.4 10.4 0 0 1 0 14.8"/>',
   };

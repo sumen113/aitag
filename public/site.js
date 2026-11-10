@@ -16,7 +16,7 @@
     get(k, d) { try { const v = localStorage.getItem('tagrush.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
-  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6'];   // one per character, same order as CHARS
+  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6', '#d8efb0'];   // one per character, same order as CHARS
   // colour row (one row, always): [default, 6 presets, custom]. Presets are COLORS[1..6]; anything else saved from older versions falls back to default.
   const PRESETS = 7;
   const rowColor = (k) => { k = C.cleanColor(k); return k < PRESETS || k >= C.CUSTOM_BASE ? k : 0; };
@@ -639,9 +639,15 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-7';
+  const NEWS_VERSION = 'update-8';
   const NEWS = [
-    { v: 'Update 7', tag: 'Newest', items: [
+    { v: 'Update 8', tag: 'Newest', items: [
+      ['Guac the Avocado', 'The priciest fighter yet, 6 wins. Pit Shot spits a seed in a straight line: as IT it tags the first runner it hits, as a runner it stuns the tagger.'],
+      ['Two taggers', 'Rooms with 7 or more players now start every round with two taggers.'],
+      ['Hide interface', 'New eye button in the game (or press H) hides the HUD for a clean view.'],
+      ['Admin page', 'Staff panel moved to /hq so school filters stop blocking it.'],
+    ] },
+    { v: 'Update 7', items: [
       ['Pip the Bird', 'A new character for 2 wins. Gale blasts everyone nearby away, with no stun, then sends Pip gliding off in a burst of speed.'],
       ['Shared wins', 'If two or more players finish on the same top score, they all get the win.'],
       ['Cat', 'Shade is now completely invisible to other players while cloaked, so no more spotting the outline.'],

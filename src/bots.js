@@ -132,7 +132,7 @@ function setDir(p, tx, ty, wobble) {
 
 function botAbility(room, p, itp, d, los, target) {
   const id = T.CHARS[p.c].id;
-  let use = false;
+  let use = false, aim = null;
   if (p.it) {
     if (!target) return;
     const td = d;
@@ -144,6 +144,7 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'robot') use = td > 80 && td < 260 && los;
     else if (id === 'penguin') use = td > 170 && td < 380 && los;
     else if (id === 'star') use = td > 90 && td < 330 && los;
+    else if (id === 'avocado') use = td > 110 && td < 460 && los;       // the bot is already steering at the target
   } else if (itp) {
     if (id === 'fox') use = d < 140;
     else if (id === 'frog') use = d < 120;
@@ -157,9 +158,10 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'raccoon') use = d < 200;
     else if (id === 'star') use = d < 210;
     else if (id === 'bird') use = d < 190;
+    else if (id === 'avocado') { use = d > 100 && d < 400 && lineClear(room.map, p.x, p.y, itp.x, itp.y, 12); aim = itp; }   // turn and spit at IT
     else if (id === 'bat') use = p.aux > 0 ? d < 130 : p.cd <= 0 && d > 240 && d < 520;     // drop a beacon while safe, snap back when IT closes in
   }
-  if (use && Math.random() < DIFFS[room.diff || 'normal'].abil) p.input.a = 1;
+  if (use && Math.random() < DIFFS[room.diff || 'normal'].abil) { p.input.a = 1; if (aim) setDir(p, aim.x + aim.vx * 0.15, aim.y + aim.vy * 0.15, 0); }
 }
 
 function thinkBot(room, p) {
@@ -200,9 +202,10 @@ function thinkBot(room, p) {
   }
 
   // ----- runner -----
-  const itp = room.itPlayer();
-  if (!itp) { p.input.x = 0; p.input.y = 0; return; }
-  const d = Math.hypot(p.x - itp.x, p.y - itp.y);
+  const its = room.itPlayers();                   // one tagger, or two in big rooms: flee from whichever is closest
+  if (!its.length) { p.input.x = 0; p.input.y = 0; return; }
+  let itp = its[0], d = Math.hypot(p.x - itp.x, p.y - itp.y);
+  for (const q of its) { const dq = Math.hypot(p.x - q.x, p.y - q.y); if (dq < d) { d = dq; itp = q; } }
   if (d > 700) {                                  // far away: amble about
     if (!ai.wp || room.tickN > ai.wpUntil || Math.hypot(ai.wp[0] - p.x, ai.wp[1] - p.y) < 40) {
       for (let tries = 0; tries < 8; tries++) {
@@ -218,15 +221,20 @@ function thinkBot(room, p) {
   }
   const me = nav.idx(p.x, p.y);
   const start = nav.bfs(me, ai.dist, ai.par, 14);
-  if (!room.itDist || room.itDist.length !== nav.n) { room.itDist = new Int16Array(nav.n); room.itPar = new Int32Array(nav.n); room.itFieldTick = -999; }
-  if (room.itFieldTick + 8 <= room.tickN || room.itFieldFor !== itp.id) {
-    nav.bfs(nav.idx(itp.x, itp.y), room.itDist, room.itPar, 9999);
-    room.itFieldTick = room.tickN; room.itFieldFor = itp.id;
+  if (!room.itFields || room.itFieldsN !== nav.n) { room.itFields = new Map(); room.itFieldsN = nav.n; }
+  const fields = [];
+  for (const q of its) {                          // one cached distance field per tagger, refreshed every 8 ticks
+    let f = room.itFields.get(q.id);
+    if (!f) { f = { dist: new Int16Array(nav.n), par: new Int32Array(nav.n), tick: -999 }; room.itFields.set(q.id, f); }
+    if (f.tick + 8 <= room.tickN) { nav.bfs(nav.idx(q.x, q.y), f.dist, f.par, 9999); f.tick = room.tickN; }
+    fields.push(f.dist);
   }
   let bestC = -1, bestS = -1e9;
   for (let i = 0; i < nav.n; i++) {
     const dm = ai.dist[i]; if (dm < 0) continue;
-    const di = room.itDist[i]; if (di < 0) continue;
+    let di = -1;
+    for (const fd of fields) { const v = fd[i]; if (v >= 0 && (di < 0 || v < di)) di = v; }
+    if (di < 0) continue;
     let s = Math.max(-8, Math.min(12, di - dm)) * 3 + di * 0.15 - dm * 0.2 + nav.open[i] * 3;
     if (i === ai.tgt) s += 2.5;
     if (s > bestS) { bestS = s; bestC = i; }

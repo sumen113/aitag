@@ -162,7 +162,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   console.log('prediction drift: replay client inputs through the shared sim and compare with the server');
   for (const h of [...humans, dup, refill, solo]) try { h.ws.close(); } catch (e) { /* noop */ }   // a lone player: no tags/stomps to confuse the replay
   await sleep(400);
-  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat', 'bird'];
+  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat', 'bird', 'avocado'];
   for (const cid of driftIds) {                              // dash, leap, phase, stomp, slide, cloak+pounce, beacon+recall
     const ci = T.CHARS.findIndex((x) => x.id === cid);
     const acc = await account('Drift' + cid, { wins: 20, items: T.CHARS[ci].starter ? [] : [cid] });
@@ -239,6 +239,55 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
     for (const [n, sc, u] of [['A', 20, 1], ['B', 20, 2], ['C', 19, 3], ['D', 5, 4]]) { const p = r3.makePlayer(n, 0, 0, false); p.score = sc; p.uid = u; r3.players.set(p.id, p); }
     r3.endRound();
     ok(wins2.length === 0, 'nobody wins when the top score is below the survival minimum');
+  }
+
+  {
+    // two taggers from 7 players; the avocado seed tags (IT) or stuns (runner)
+    const { Room } = require('../src/room.js'), { lineClear } = require('../src/bots.js'), STATE = T.STATE;
+    const mk = (n) => { const r = new Room('tw' + n, { kind: 'public', name: 'Two' + n }); for (let i = 0; i < n; i++) { const p = r.makePlayer('P' + i, 0, 0, false); r.players.set(p.id, p); } return r; };
+    const r6 = mk(6), r7 = mk(7);
+    r6.startPlay(); r7.startPlay();
+    ok(r6.itPlayers().length === 1, '6 players: one tagger');
+    ok(r7.itPlayers().length === 2, '7 players: two taggers (' + r7.itPlayers().length + ')');
+    const gone = r7.itPlayers()[0]; r7.removePlayer(gone);
+    ok(r7.itPlayers().length === 2 && !r7.players.has(gone.id), 'a tagger leaving hands the role to someone else, still two taggers');
+    for (let i = 0; i < 5; i++) r7.tick();
+    ok(r7.itPlayers().length === 2, 'two taggers stay two after ticking');
+    const [a, b] = r7.itPlayers(), runner = [...r7.players.values()].find((p) => !p.it);
+    a.stun = b.stun = 0; a.lock = b.lock = 0; runner.imm = 0; runner.x = a.x + 5; runner.y = a.y; b.x = a.x + 900; b.y = a.y; r7.tag(a, runner);
+    ok(r7.itPlayers().length === 2 && runner.it === 1 && a.it === 0, 'tagging passes the role on without changing the number of taggers');
+
+    // avocado seed
+    const ai = T.CHARS.findIndex((x) => x.id === 'avocado');
+    ok(ai >= 0 && T.CHARS[ai].price === 6 && T.CHARS.every((x) => !x.price || x.price <= 6), 'avocado costs 6 wins, the most expensive');
+    const setup = () => {
+      const r = new Room('sd', { kind: 'public', name: 'SeedTest' }); const av = r.makePlayer('Av', ai, 0, false), v = r.makePlayer('V', 0, 0, false);
+      r.players.set(av.id, av); r.players.set(v.id, v); r.state = STATE.PLAY; r.itWant = 1;
+      for (const sp of r.map.spawns) for (const [ux, uy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!lineClear(r.map, sp[0], sp[1], sp[0] + ux * 420, sp[1] + uy * 420, 16)) continue;
+        av.x = sp[0]; av.y = sp[1]; v.x = sp[0] + ux * 300; v.y = sp[1] + uy * 300; return { r, av, v, ux, uy };
+      }
+      throw new Error('no clear lane on ' + r.map.id);
+    };
+    {
+      const { r, av, v, ux, uy } = setup(); av.it = 1; r.itId = av.id; v.imm = 0;
+      r.abilityEvent(av, { n: 'seed', id: av.id, x: av.x, y: av.y, dx: ux, dy: uy });
+      ok(r.seeds.length === 1, 'the avocado fires a seed');
+      for (let i = 0; i < 40 && r.seeds.length; i++) r.stepSeeds();
+      ok(v.it === 1 && av.it === 0 && r.seeds.length === 0, 'an IT avocado\'s seed tags the runner it hits');
+    }
+    {
+      const { r, av, v, ux, uy } = setup(); v.it = 1; r.itId = v.id; v.stun = 0;
+      r.abilityEvent(av, { n: 'seed', id: av.id, x: av.x, y: av.y, dx: ux, dy: uy });
+      for (let i = 0; i < 40 && r.seeds.length; i++) r.stepSeeds();
+      ok(v.it === 1 && v.stun >= 1 && r.seeds.length === 0, 'a runner avocado\'s seed stuns the tagger instead (stun ' + v.stun.toFixed(2) + ')');
+    }
+    {
+      const { r, av, v, ux, uy } = setup(); av.it = 1; r.itId = av.id; v.imm = 0;
+      r.abilityEvent(av, { n: 'seed', id: av.id, x: av.x, y: av.y, dx: -ux, dy: -uy });
+      for (let i = 0; i < 120 && r.seeds.length; i++) r.stepSeeds();
+      ok(v.it === 0 && r.seeds.length === 0, 'a seed that misses flies on and disappears (no tag)');
+    }
   }
 
   console.log('server browser');

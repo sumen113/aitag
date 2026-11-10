@@ -22,6 +22,8 @@ function join(name, cookie, c = 0) {
   r = await post('/api/admin/state', {}, boss); ok(r.status === 401 && (await r.json()).needCode, 'admin without passcode asked for it');
   r = await post('/api/admin/state', {}, boss, 'wrong'); ok(r.status === 401, 'wrong passcode refused');
   r = await post('/api/admin/state', {}, boss, 'sesame'); let j = await r.json(); ok(r.status === 200 && j.me === 'Boss' && j.accounts === 3, 'admin state ok');
+  r = await post('/api/hq/state', {}, boss, 'sesame'); ok(r.status === 200 && (await r.json()).me === 'Boss', 'the /api/hq alias (not blocked by school filters) works');
+  r = await fetch(BASE + '/hq'); const pg = await r.text(); ok(r.status === 200 && /hq\.js/.test(pg), '/hq serves the panel'); r = await fetch(BASE + '/admin'); ok(r.status === 200, '/admin still works');
   const me = await (await fetch(BASE + '/api/me', { headers: { cookie: boss } })).json(); ok(me.user.admin === true, '/api/me flags admin');
   const me2 = await (await fetch(BASE + '/api/me', { headers: { cookie: pleb } })).json(); ok(!me2.user.admin, '/api/me does not flag others');
   const csrf = await fetch(BASE + '/api/admin/state', { method: 'POST', headers: { 'content-type': 'text/plain', cookie: boss, 'x-admin-code': 'sesame', origin: 'http://evil.example' }, body: '{}' }); ok(csrf.status === 403, 'cross-site refused');

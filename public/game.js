@@ -17,7 +17,7 @@
     ws: null, inGame: false, id: 0, solo: false, diff: 'normal', sel: { name: '', c: 0, k: 0 },
     roster: new Map(), map: null, ctx: { map: null, goos: [] },
     me: null, px: 0, py: 0, pending: [], seq: 0, sendBuf: [], acc: 0, err: { x: 0, y: 0 },
-    snaps: [], offset: null, goos: [], decoys: [], decoysAt: 0,
+    snaps: [], offset: null, goos: [], decoys: [], decoysAt: 0, seeds: [], seedsAt: 0, uiOff: false,
     state: STATE.WAIT, tl: 0, tlAt: 0, rd: 0, itId: 0, res: null,
     cam: { x: 0, y: 0 }, zoom: 1, zoomT: 1, shake: 0, camSnap: true,
     vis: new Map(), bubbles: new Map(), muted: new Set(), acct: false, t: 0, ping: 0, jit: 0, snapInt: 33, lastArr: 0, lastTs: 0, delay: 100, lastSend: 0,
@@ -118,6 +118,7 @@
     for (const e of m.p) { const r = G.roster.get(e[0]); if (r) { r.sc = e[9]; r.tg = e[10]; r.fl = e[7]; } }
     G.goos = m.g.map((a) => ({ id: a[0], x: a[1], y: a[2], r: a[3], o: a[4], ttl: a[5], s: a[6] }));
     G.ctx.goos = G.goos;
+    G.seeds = (m.sd || []).map((a) => ({ id: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], o: a[5] })); G.seedsAt = now;
     G.decoys = m.d.map((a) => ({ id: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], c: a[5], k: a[6], o: a[7], ttl: a[8] })); G.decoysAt = now;
     if (G.vis.size > 40) { const live = new Set(G.decoys.map((d) => 'd' + d.id)); for (const k of [...G.vis.keys()]) if (typeof k === 'string' && !live.has(k)) G.vis.delete(k); }
 
@@ -208,7 +209,9 @@
       case 'st':
         if (e.s === STATE.COUNT) { banner(`Round ${e.rd}`, ''); Sfx.play('ready'); }
         else if (e.s === STATE.PLAY) {
-          if (e.it === G.id) { banner("YOU'RE IT!", 'red'); flash(); Sfx.play('youreIt'); } else { banner(`${rname(e.it)} is IT!`, 'red'); Sfx.play('go'); }
+          const its = e.its || [e.it];
+          if (its.includes(G.id)) { banner(its.length > 1 ? "YOU'RE IT! (two taggers)" : "YOU'RE IT!", 'red'); flash(); Sfx.play('youreIt'); }
+          else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} are IT!` : `${rname(its[0])} is IT!`, 'red'); Sfx.play('go'); }
         } else if (e.s === STATE.RESULTS) Sfx.play('win');
         break;
       case 'ab': if (SERVER_FX.has(e.n) || e.id !== G.id) abilityFx(e, e.id === G.id); break;
@@ -220,8 +223,8 @@
     }
   }
 
-  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust']);
-  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl']);   // effects the local sim doesn't predict: show them for me too
+  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust', 'seed']);
+  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl', 'seedhit', 'seedpop']);   // effects the local sim doesn't predict: show them for me too
   function abilityFx(e, local) {
     const id = e.n, x = e.x, y = e.y;
     const loud = local || near(x, y);
@@ -236,6 +239,16 @@
         for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + Math.random() * 0.3; Particles.streak(x + Math.cos(a) * 26, y + Math.sin(a) * 26, Math.cos(a), Math.sin(a), '#e8f8ff', 70 + Math.random() * 60, 0.4); }
         for (let i = 0; i < 6; i++) Particles.puff(x, y + 6, '#ffffff', 14, 0.5);
         if (loud) { Sfx.play('gust'); if (local) G.shake = Math.max(G.shake, 4); } break;
+      case 'seed':
+        Particles.puff(x + e.dx * 24, y + e.dy * 24, '#e9f3a8', 10, 0.3); Particles.ring(x + e.dx * 20, y + e.dy * 20, 4, 36, '#8a5a35', 0.25, 4);
+        for (let i = 0; i < 4; i++) Particles.streak(x + e.dx * 26, y + e.dy * 26, e.dx, e.dy, '#b88556', 80 + Math.random() * 60, 0.25);
+        if (loud) Sfx.play('seed'); break;
+      case 'seedhit':
+        Particles.burst(x, y, '#8a5a35', 12, 280, 5, 0.45); Particles.ring(x, y, 6, 64, '#ffd23f', 0.35, 6);
+        for (let i = 0; i < 5; i++) Particles.star(x, y - 14, '#ffe27a', 8, 0.7, (Math.random() - 0.5) * 220, -80 - Math.random() * 120);
+        if (loud) { Sfx.play('seedhit'); G.shake = Math.max(G.shake, 4); } break;
+      case 'seedpop':
+        Particles.burst(x, y, '#8a5a35', 6, 160, 4, 0.3); Particles.puff(x, y, '#e9f3a8', 6, 0.25); break;
       case 'bounce':
         Particles.burst(x, y, '#ffb199', 10, 260, 5, 0.4); Particles.ring(x, y, 6, 52, '#fff', 0.3, 5);
         for (let i = 0; i < 3; i++) Particles.star(x, y, '#ffe27a', 8, 0.5, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 240);
@@ -292,10 +305,11 @@
     if (!live()) return;
     if (e.code === 'Escape' && chatOpen) { closeChat(); e.preventDefault(); return; }
     if (typing()) return;
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') { openChat(); e.preventDefault(); return; }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') { if (G.uiOff) setUi(false); openChat(); e.preventDefault(); return; }
     if (MOVE[e.code]) { K[MOVE[e.code]] = true; e.preventDefault(); }
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; Sfx.unlock(); } e.preventDefault(); }
     else if (e.code === 'KeyM') toggleMute();
+    else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
   window.addEventListener('keyup', (e) => { if (MOVE[e.code]) K[MOVE[e.code]] = false; });
   const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.joy.active = false; $('joy').classList.add('hidden'); };
@@ -371,6 +385,16 @@
     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 8.5a5 5 0 0 1 0 7M19.5 6a8.5 8.5 0 0 1 0 12"/></svg>'; };
   function toggleMute() { Sfx.setMuted(!Sfx.muted); paintMute(); }
   $('btnMute').onclick = toggleMute; paintMute();
+  // hide interface: everything but the toggle itself and the touch controls disappears (display:none, so no animation to fight GSAP)
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>__SLASH__</svg>';
+  function setUi(off) {
+    G.uiOff = !!off; if (off) closeChat();
+    $('app').classList.toggle('ui-off', G.uiOff);
+    const b = $('btnUi'); b.innerHTML = EYE.replace('__SLASH__', G.uiOff ? '' : '<path d="M4 20 20 4"/>');
+    b.setAttribute('aria-pressed', String(G.uiOff)); b.setAttribute('aria-label', G.uiOff ? 'Show interface' : 'Hide interface'); b.title = (G.uiOff ? 'Show' : 'Hide') + ' interface (H)';
+    gsap.fromTo(b, { scale: 0.8 }, { scale: 1, duration: 0.35, ease: 'back.out(3)', clearProps: 'transform' });
+  }
+  $('btnUi').onclick = () => setUi(!G.uiOff); setUi(false);
   $('btnLeave').onclick = () => App.leave();
   $('overlayBtn').onclick = () => App.leave();
 
@@ -396,7 +420,7 @@
   document.addEventListener('contextmenu', (e) => { if (live()) e.preventDefault(); });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust']);
+  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed']);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
@@ -608,10 +632,34 @@
       drawEnt(g, e, t, dt, labels);
     }
     if (CHARS[me.c].id === 'bat' && me.aux > 0 && G.state !== STATE.RESULTS) drawBeacon(g, me, t);
+    drawSeeds(g, t);
+    drawAim(g, me, t);
     Particles.draw(g);
     drawLabels(g, labels, t);
     drawArrows(g, ents, t);
     drawMini(ents, t);
+  }
+
+  // avocado seeds in flight (extrapolated a few ms past the last snapshot)
+  function drawSeeds(g, t) {
+    if (!G.seeds.length) return;
+    const since = clamp((performance.now() - G.seedsAt) / 1000, 0, 0.15);
+    for (const s of G.seeds) {
+      const x = s.x + s.vx * since, y = s.y + s.vy * since, a = Math.atan2(s.vy, s.vx);
+      g.save(); g.translate(x, y); g.rotate(a);
+      g.globalAlpha = 0.35; g.fillStyle = '#e9f3a8'; g.beginPath(); g.ellipse(-16, 0, 15, 4, 0, 0, TAU); g.fill(); g.globalAlpha = 1;
+      g.rotate(t * 14); g.beginPath(); g.ellipse(0, 0, 11, 8.5, 0, 0, TAU); g.fillStyle = '#8a5a35'; g.fill(); g.lineWidth = 2.4; g.strokeStyle = '#14122b'; g.stroke();
+      g.beginPath(); g.ellipse(-3, -2.5, 3.4, 2.2, -0.4, 0, TAU); g.fillStyle = '#c99a68'; g.fill();
+      g.restore();
+    }
+  }
+  // a faint dotted line while the avocado's seed is ready, so you can see where it will go
+  function drawAim(g, me, t) {
+    if (CHARS[me.c].id !== 'avocado' || me.cd > 0 || me.stun > 0 || G.state !== STATE.PLAY) return;
+    const mvx = G.joy.active ? G.joy.x : (K.r ? 1 : 0) - (K.l ? 1 : 0), mvy = G.joy.active ? G.joy.y : (K.d ? 1 : 0) - (K.u ? 1 : 0), len = Math.hypot(mvx, mvy);
+    const dx = len > 0.15 ? mvx / len : me.fx, dy = len > 0.15 ? mvy / len : me.fy;
+    g.save(); g.globalAlpha = 0.5; g.strokeStyle = '#e9f3a8'; g.lineWidth = 3; g.lineCap = 'round'; g.setLineDash([2, 14]); g.lineDashOffset = -t * 40;
+    g.beginPath(); g.moveTo(G.px + dx * 30, G.py + dy * 30); g.lineTo(G.px + dx * C.SEED_RANGE, G.py + dy * C.SEED_RANGE); g.stroke(); g.restore();
   }
 
   function drawMini(ents, t) {
@@ -656,7 +704,10 @@
     let txt, cls = 'role';
     if (st === STATE.PLAY) {
       if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : "You're IT! Tag someone!"; }
-      else { const it = G.roster.get(G.itId); txt = it ? `Run! ${it.n} is IT` : 'Run!'; }
+      else {
+        const its = [...G.roster.values()].filter((r) => r.fl & 1 && r.id !== G.id);
+        txt = !its.length ? 'Run!' : its.length === 1 ? `Run! ${its[0].n} is IT` : `Run! ${its.map((r) => r.n).join(' & ')} are IT`;
+      }
     } else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}`;
     else if (st === STATE.RESULTS) txt = 'Round over';
     else txt = G.solo ? 'Warming up…' : 'Waiting for players';
@@ -706,7 +757,7 @@
     rows.forEach((r, i) => {
       let e = rowEls.get(r.id);
       if (!e) { e = makeRow(r); rowEls.set(r.id, e); box.appendChild(e); fresh.push(e); }
-      const isIt = G.state === STATE.PLAY && r.id === G.itId;
+      const isIt = G.state === STATE.PLAY && !!(r.fl & 1);
       e.classList.toggle('me', r.id === G.id); e.classList.toggle('it', isIt);
       e.querySelector('.tg').style.display = isIt ? '' : 'none';
       const rk = e.querySelector('.rk'), sc = e.querySelector('.sc');

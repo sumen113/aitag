@@ -81,6 +81,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify({ top: board.list }));
     } catch (e) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end('{"top":[]}'); }
   }
+  if (url.startsWith('/api/hq/')) url = '/api/admin/' + url.slice(8);          // same API, a name school web filters don't block
   if (url.startsWith('/api/admin/') && admin && auth) { if (await admin.handle(req, res, url, auth)) return; }
   if (url.startsWith('/api/')) {
     if (auth) { if (await auth.handle(req, res, url)) return; }
@@ -89,15 +90,15 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end('{"error":"Not found"}');
   }
   if (url === '/') url = '/index.html';
-  else if (url === '/admin') url = '/admin.html';
+  else if (url === '/hq' || url === '/admin') url = '/hq.html';
   const f = files.get(url);
   if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
   const headers = {
     'Content-Type': f.type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin',
     'Cache-Control': f.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
   };
-  if (url === '/index.html' || url === '/admin.html') headers['Content-Security-Policy'] = CSP;
-  if (url === '/admin.html') headers['Cache-Control'] = 'no-store';
+  if (url === '/index.html' || url === '/hq.html') headers['Content-Security-Policy'] = CSP;
+  if (url === '/hq.html') headers['Cache-Control'] = 'no-store';
   if (f.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
     headers['Content-Encoding'] = 'gzip'; headers.Vary = 'Accept-Encoding';
     res.writeHead(200, headers); return res.end(f.gz);
