@@ -253,6 +253,8 @@
         </div>
         <label class="mono" for="svPassNew">Password (optional)</label>
         <input id="svPassNew" class="inp" type="text" maxlength="24" placeholder="leave empty for an open server" autocomplete="off" spellcheck="false">
+        <label class="mono" for="svMode">Game mode</label>
+        <select id="svMode" class="inp"><option value="vote" selected>Vote every round</option><option value="classic">Classic tag</option><option value="infection">Infection (zombies)</option><option value="potato">Hot Potato</option></select>
         <label class="mono" for="svMap">Arena</label>
         <select id="svMap" class="inp"><option value="random">Random (rotates)</option></select>
         <p class="shop-note">Min 60 seconds. Bots use player slots and make room when humans join. Wins count in custom servers too, but only with no bots and at least 3 players. The server closes when everyone leaves.</p>
@@ -288,6 +290,7 @@
       <div class="hud-top">
         <div id="timerBox" class="card"><span id="stateLbl" class="mono">Waiting</span><b id="timer">--</b></div>
         <div id="role" class="role"></div>
+        <div id="fuse" class="fuse hidden" aria-live="off"><b id="fuseNum">10.0</b><span class="mono">fuse</span></div>
       </div>
 
       <aside id="boardWrap" class="card">
@@ -322,6 +325,18 @@
       </div>
 
       <div id="joy" class="hidden"><div id="joyKnob"></div></div>
+    </div>
+
+    <div id="vote" class="hidden" role="group" aria-label="Vote for the next round">
+      <div class="vote-card card">
+        <div class="vote-head"><p class="mono kicker">Vote for the next round</p><b id="voteTimer" class="mono">14</b></div>
+        <div class="vote-bar"><i id="voteBar"></i></div>
+        <h3 class="vote-sub mono" id="voteMapsLbl">Arena</h3>
+        <div id="voteMaps" class="vote-row"></div>
+        <h3 class="vote-sub mono">Game mode</h3>
+        <div id="voteModes" class="vote-row modes"></div>
+        <p class="vote-hint mono" id="voteHint">Tap to vote · keys 1-3 arena, 4-6 mode</p>
+      </div>
     </div>
 
     <div id="results" class="hidden">

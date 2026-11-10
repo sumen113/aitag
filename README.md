@@ -51,6 +51,16 @@ Pressing **Play online** opens a server picker.
 - Limits: 40 custom servers at once, 3 creations per person/IP per 10 minutes, names unique and filtered. Limits live in `SERVER_LIMITS` (`public/shared.js`).
 - Servers live in memory, so a Render restart or free-tier sleep clears them (Regular comes straight back).
 
+## Game modes (v7)
+
+Regular servers (and practice) open a 14 s vote before every round: 3 random arenas and 3 modes, one vote each, most votes wins (random tie-break; no votes in practice means Classic). Player-made servers can fix a mode or keep the vote.
+
+- **Classic**: one tagger (two at 7+ players), score for time spent untagged.
+- **Infection**: every tag infects the victim and the tagger stays a zombie. Always plays on the big *Outbreak* arena. Ends when one survivor is left (or time runs out).
+- **Hot Potato**: the tagger holds a potato with a 10 s fuse. A pass resets the fuse; each elimination shortens it (floor 4 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
+
+Nobody can join a running match: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
+
 ## Admin panel (`/hq`, also reachable at `/admin`)
 
 For you and one other person. Two things decide who gets in, both set as environment variables on Render:

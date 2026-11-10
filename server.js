@@ -129,7 +129,9 @@ function findPublicRoom(name) {
   let best = null;
   for (const r of rooms.values()) {
     if (!r.regular || r.humanCount() >= r.max || hasName(r, name)) continue;
-    if (!best || r.humanCount() > best.humanCount()) best = r;
+    // a lobby that isn't mid-match comes first: nobody can join a running match, they'd have to wait
+    const better = !best || (r.state === T.STATE.PLAY) < (best.state === T.STATE.PLAY) || ((r.state === T.STATE.PLAY) === (best.state === T.STATE.PLAY) && r.humanCount() > best.humanCount());
+    if (better) best = r;
   }
   return best || createRoom({ kind: 'public' });
 }
@@ -145,7 +147,7 @@ function serverList() {
     if (r.solo) continue;
     const n = r.humanCount();
     if (r.regular) { reg.players += n; reg.lobbies++; if (n > bestState) { bestState = n; reg.state = r.state; } }
-    else custom.push({ id: r.code, name: r.name, regular: false, players: n, max: r.max, time: r.roundTime, map: r.mapMode, state: r.state, full: n >= r.max, bots: r.botTarget, lock: !!r.lock });
+    else custom.push({ id: r.code, name: r.name, regular: false, players: n, max: r.max, time: r.roundTime, map: r.mapMode, mode: r.modeOpt, state: r.state, full: n >= r.max, bots: r.botTarget, lock: !!r.lock });
   }
   custom.sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
   return [reg, ...custom];
@@ -213,7 +215,7 @@ wss.on('connection', (ws, req) => {
       if (taken) return fail('A server with that name already exists. Pick another name or join it.');
       if (customs >= CUSTOM_CAP || rooms.size >= MAX_ROOMS) return fail('There are too many servers open right now. Join an existing one.');
       if (!mayCreate(user ? 'u' + user.id : ipKey)) return fail('You can only create 3 servers every 10 minutes. Join one instead.');
-      room = createRoom({ kind: 'custom', name: v.name, roundTime: v.time, max: v.max, bots: v.bots, diff: v.diff, lock: lockFor(v.pass), mapMode: v.map === 'random' ? 'rotate' : v.map });
+      room = createRoom({ kind: 'custom', name: v.name, roundTime: v.time, max: v.max, bots: v.bots, diff: v.diff, lock: lockFor(v.pass), mapMode: v.map === 'random' ? 'rotate' : v.map, mode: v.mode });
     } else if (m.server && m.server !== 'regular') {
       room = rooms.get(String(m.server));
       if (!room || room.solo || room.regular) return fail('That server has closed. Pick another one.');
@@ -234,7 +236,7 @@ wss.on('connection', (ws, req) => {
     c.player.staff = !!(user && admin && admin.isAdmin(user.username));
     c.player.muted = !!(admin && admin.isMuted(name, !!user));
     c.player.rtt = ws.rtt;
-    ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock } }));
+    ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
   }
 
   ws.on('message', (data, isBinary) => {
@@ -253,6 +255,7 @@ wss.on('connection', (ws, req) => {
         else c.room.chat(c.player, m.m.slice(0, 200));
       }
     }
+    else if (m.t === 'vote') { if (c.player) c.room.castVote(c.player, m.k === 'm' ? 'm' : 'd', Number(m.i) | 0); }
     else if (m.t === 'typing') { if (c.player) c.player.lastActiveAt = now; }
     else if (m.t === 'join' && !c.player && !c.joining) {
       c.joining = true;

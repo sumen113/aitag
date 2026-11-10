@@ -23,6 +23,9 @@ const MapRender = (() => {
     } else if (map.theme === 'candy') {
       const cols = ['#ff6fa8', '#6fd6ff', '#ffe066', '#9dff8a', '#c493ff'];
       for (let i = 0; i < 260; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 8)) items.push({ k: 'sprinkle', x, y, a: R() * Math.PI, c: cols[(R() * 5) | 0] }); }
+    } else if (map.theme === 'city') {
+      for (let i = 0; i < 160; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 10)) items.push({ k: 'crack', pts: [[x, y], [x + (R() - 0.5) * 60, y + (R() - 0.5) * 60], [x + (R() - 0.5) * 110, y + (R() - 0.5) * 110]] }); }
+      for (let i = 0; i < 70; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 24)) items.push({ k: 'puddle', x, y, s: 14 + R() * 20 }); }
     } else if (map.theme === 'neon') {
       for (let i = 0; i < 60; i++) items.push({ k: 'spark', x: R() * map.w, y: R() * map.h, p: R() * TAU, s: 1 + R() * 2 });
     }
@@ -74,6 +77,20 @@ const MapRender = (() => {
       for (let x = Math.floor(x0 / s) * s; x < x1; x += s) for (let y = Math.floor(y0 / s) * s; y < y1; y += s) { g.fillStyle = (((x / s) + (y / s)) & 1) ? '#ffe3f0' : '#fff5fa'; g.fillRect(x, y, s, s); }
       g.lineCap = 'round'; g.lineWidth = 4;
       for (const d of decorFor(map)) { if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue; g.strokeStyle = d.c; g.beginPath(); g.moveTo(d.x - Math.cos(d.a) * 5, d.y - Math.sin(d.a) * 5); g.lineTo(d.x + Math.cos(d.a) * 5, d.y + Math.sin(d.a) * 5); g.stroke(); }
+    } else if (th === 'city') {
+      g.fillStyle = '#3b404c'; g.fillRect(0, 0, W, H);
+      const M = 200, ST = 240, bw = (W - 2 * M - 4 * ST) / 5, bh = (H - 2 * M - 2 * ST) / 3;
+      g.fillStyle = '#4c5260';                                                         // pavement under each block
+      for (let i = 0; i < 5; i++) for (let j = 0; j < 3; j++) { const x = M + i * (bw + ST), y = M + j * (bh + ST); if (x + bw > x0 && x < x1 && y + bh > y0 && y < y1) { g.beginPath(); g.roundRect(x - 10, y - 10, bw + 20, bh + 20, 18); g.fill(); } }
+      g.strokeStyle = 'rgba(255,214,102,.55)'; g.lineWidth = 6; g.setLineDash([46, 38]);   // dashed lane lines down the middle of every street
+      const hy = [M / 2, M + bh + ST / 2, M + 2 * bh + ST + ST / 2, H - M / 2], vx = [M / 2, M + bw + ST / 2, M + 2 * bw + ST + ST / 2, M + 3 * bw + 2 * ST + ST / 2, M + 4 * bw + 3 * ST + ST / 2, W - M / 2];
+      for (const y of hy) { if (y < y0 - 10 || y > y1 + 10) continue; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+      for (const x of vx) { if (x < x0 - 10 || x > x1 + 10) continue; g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); }
+      g.setLineDash([]);
+      for (const d of decorFor(map)) {
+        if (d.k === 'crack') { const q = d.pts[0]; if (q[0] < x0 - 120 || q[0] > x1 + 120 || q[1] < y0 - 120 || q[1] > y1 + 120) continue; g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 2; g.beginPath(); d.pts.forEach((pt, i) => (i ? g.lineTo(pt[0], pt[1]) : g.moveTo(pt[0], pt[1]))); g.stroke(); }
+        else { if (d.x < x0 - 40 || d.x > x1 + 40 || d.y < y0 - 40 || d.y > y1 + 40) continue; g.fillStyle = 'rgba(120,170,220,.22)'; g.beginPath(); g.ellipse(d.x, d.y, d.s * 1.4, d.s, 0.3, 0, TAU); g.fill(); }
+      }
     } else {                                                          // station
       g.fillStyle = '#1b2340'; g.fillRect(0, 0, W, H);
       const s = 160;
@@ -88,7 +105,7 @@ const MapRender = (() => {
   }
 
   function drawBorder(g, map) {
-    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'] }[map.theme];
+    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'], city: ['#ffb64d', '#6b4a1a'] }[map.theme];
     g.lineJoin = 'round';
     g.strokeStyle = col[1]; g.lineWidth = 40; g.strokeRect(-14, -14, map.w + 28, map.h + 28);
     g.strokeStyle = col[0]; g.lineWidth = 14; g.strokeRect(-4, -4, map.w + 8, map.h + 8);
@@ -183,6 +200,22 @@ const MapRender = (() => {
             block(g, o, '#c4934f', '#7e5629', '#59391a', 12, 4);
             g.strokeStyle = 'rgba(70,40,15,.6)'; g.lineWidth = 3; g.beginPath(); g.moveTo(o.x + 6, o.y + 6); g.lineTo(o.x + o.w - 6, o.y + o.h - 6); g.moveTo(o.x + o.w - 6, o.y + 6); g.lineTo(o.x + 6, o.y + o.h - 6); g.stroke();
             break;
+          case 'bldg': {
+            block(g, o, '#6f7a92', '#3d4660', '#262d44', 22, 6);
+            g.fillStyle = 'rgba(255,255,255,.07)'; rr(g, o.x + 8, o.y + 8, o.w - 16, o.h - 16, 4); g.fill();
+            g.fillStyle = '#ffd98a';                                                      // lit windows along the roof edge
+            for (let i = 18; i < o.w - 14; i += 34) { g.globalAlpha = ((i * 7 + o.x) % 5) < 3 ? 0.9 : 0.25; g.fillRect(o.x + i, o.y + o.h + 4, 14, 9); }
+            g.globalAlpha = 1; g.fillStyle = '#4b5470'; rr(g, o.x + o.w * 0.25, o.y + o.h * 0.3, Math.min(46, o.w * 0.3), Math.min(36, o.h * 0.25), 4); g.fill();
+            break; }
+          case 'car': {
+            const horiz = o.w >= o.h, col = ['#e4572e', '#3a86ff', '#ffbe0b', '#8ac926', '#a259ff'][((o.x * 3 + o.y) | 0) % 5];
+            block(g, o, col, '#1b1b2b', '#14141f', 8, 9);
+            g.fillStyle = 'rgba(180,220,255,.8)'; if (horiz) rr(g, o.x + o.w * 0.3, o.y + 6, o.w * 0.35, o.h - 12, 5); else rr(g, o.x + 6, o.y + o.h * 0.3, o.w - 12, o.h * 0.35, 5); g.fill();
+            break; }
+          case 'barrier':
+            block(g, o, '#ffcf4d', '#a67d10', '#6b4f08', 10, 4);
+            g.strokeStyle = '#2b2b2b'; g.lineWidth = 7; g.save(); rr(g, o.x, o.y, o.w, o.h, 4); g.clip(); g.beginPath(); for (let i = -o.h; i < o.w + o.h; i += 26) { g.moveTo(o.x + i, o.y + o.h + 2); g.lineTo(o.x + i + o.h + 4, o.y - 2); } g.stroke(); g.restore();
+            break;
           case 'wall':
             if (th === 'candy') {
               block(g, o, '#ff82b8', '#d4487f', '#a52c61', 12, 12);
@@ -221,6 +254,18 @@ const MapRender = (() => {
           g.closePath(); g.fillStyle = '#8da3bb'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#4b6178'; g.lineJoin = 'round'; g.stroke();
           g.fillStyle = '#a9bdd2'; g.beginPath(); g.ellipse(o.x + 12, o.y + 4, o.r * 0.45, o.r * 0.3, 0.3, 0, TAU); g.fill();
           g.beginPath(); g.ellipse(o.x - 6, o.y - 18, o.r * 0.7, o.r * 0.42, -0.2, 0, TAU); g.fillStyle = '#fff'; g.fill();
+        } else if (o.k === 'barrel') {
+          g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(o.x + 5, o.y + 11, o.r, o.r * 0.7, 0, 0, TAU); g.fill();
+          g.beginPath(); g.ellipse(o.x, o.y + 6, o.r, o.r * 0.8, 0, 0, TAU); g.fillStyle = '#7a2a2a'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#2a0e0e'; g.stroke();
+          g.beginPath(); g.arc(o.x, o.y - 2, o.r, 0, TAU); g.fillStyle = '#d6453d'; g.fill(); g.stroke();
+          g.beginPath(); g.arc(o.x, o.y - 2, o.r * 0.55, 0, TAU); g.strokeStyle = '#ffb199'; g.lineWidth = 2; g.stroke();
+        } else if (o.k === 'fountain') {
+          g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.arc(o.x + 8, o.y + 16, o.r + 8, 0, TAU); g.fill();
+          g.beginPath(); g.arc(o.x, o.y, o.r + 8, 0, TAU); g.fillStyle = '#9aa6bd'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#4b5470'; g.stroke();
+          const gr = g.createRadialGradient(o.x - 20, o.y - 20, 8, o.x, o.y, o.r); gr.addColorStop(0, '#9fe6ff'); gr.addColorStop(1, '#3a8fd1');
+          g.beginPath(); g.arc(o.x, o.y, o.r - 8, 0, TAU); g.fillStyle = gr; g.fill(); g.stroke();
+          g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2.5; for (let i = 0; i < 3; i++) { const ph = (t * 0.3 + i / 3) % 1; g.globalAlpha = 1 - ph; g.beginPath(); g.arc(o.x, o.y, 14 + ph * (o.r - 30), 0, TAU); g.stroke(); } g.globalAlpha = 1;
+          g.beginPath(); g.arc(o.x, o.y, 16, 0, TAU); g.fillStyle = '#c9d3e8'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#4b5470'; g.stroke();
         } else if (o.k === 'reactor') {
           g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.arc(o.x + 7, o.y + 18, o.r, 0, TAU); g.fill();
           g.beginPath(); g.arc(o.x, o.y + 12, o.r, 0, TAU); g.fillStyle = '#2b365a'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#8fa0d6'; g.stroke();

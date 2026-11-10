@@ -8,7 +8,7 @@
   const clamp = C.clamp, TAU = Math.PI * 2;
   const q2 = (v) => Math.round(v * 100) / 100;
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8' };
+  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8', city: '#b9bcc6' };
   const FONT = "'Bricolage Grotesque', system-ui, sans-serif";
   const touchy = window.matchMedia && matchMedia('(pointer: coarse)').matches;
 
@@ -18,7 +18,7 @@
     roster: new Map(), map: null, ctx: { map: null, goos: [] },
     me: null, px: 0, py: 0, pending: [], seq: 0, sendBuf: [], acc: 0, err: { x: 0, y: 0 },
     snaps: [], offset: null, goos: [], decoys: [], decoysAt: 0, seeds: [], seedsAt: 0, uiOff: false,
-    state: STATE.WAIT, tl: 0, tlAt: 0, rd: 0, itId: 0, res: null,
+    state: STATE.WAIT, tl: 0, tlAt: 0, rd: 0, itId: 0, res: null, mode: 'classic', pt: new Map(), ptAt: 0, voteDur: 14,
     cam: { x: 0, y: 0 }, zoom: 1, zoomT: 1, shake: 0, camSnap: true,
     vis: new Map(), bubbles: new Map(), muted: new Set(), acct: false, t: 0, ping: 0, jit: 0, snapInt: 33, lastArr: 0, lastTs: 0, delay: 100, lastSend: 0,
     W: 0, H: 0, dpr: 1, g: null,
@@ -72,7 +72,7 @@
     G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; if (m.name) G.sel.name = m.name;
     G.roster.clear(); onRoster(m.roster);
     G.me = null; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
-    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
+    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
     G.inGame = true; G.camSnap = true;
@@ -104,6 +104,7 @@
   function onSnapshot(m) {
     const prev = G.state;
     G.state = m.s; G.tl = m.tl; G.tlAt = performance.now(); G.rd = m.rd; G.itId = m.it; G.res = m.res || null;
+    G.mode = m.md || 'classic'; G.pt = new Map((m.pt || []).map((a) => [a[0], a[1]])); G.ptAt = performance.now();
     if (!G.map || G.map.id !== m.m) setMap(C.MAP_BY_ID[m.m]);
     const now = performance.now(), o = m.ts - now;
     if (G.lastArr) {                                    // measure arrival jitter -> adaptive interpolation delay
@@ -135,6 +136,8 @@
       const ex = vx - G.me.x, ey = vy - G.me.y;
       if (Math.hypot(ex, ey) > 140) { G.err.x = G.err.y = 0; G.camSnap = Math.hypot(ex, ey) > 500; } else { G.err.x = ex; G.err.y = ey; }
     }
+    if (m.s === STATE.VOTE && m.vc) updateVote(m.vc, m.vt);
+    else if (prev === STATE.VOTE) hideVote();
     if (m.s === STATE.RESULTS && prev !== STATE.RESULTS) showResults();
     if (m.s !== STATE.RESULTS && prev === STATE.RESULTS) hideResults();
   }
@@ -197,23 +200,41 @@
     switch (e.k) {
       case 'tag': {
         const rb = G.roster.get(e.b), mineA = e.a === G.id, mineB = e.b === G.id;
-        Particles.burst(e.x, e.y, '#ff4d5e', 18, 380, 7, 0.7); Particles.ring(e.x, e.y, 10, 90, '#ffd23f', 0.45, 7);
+        const zed = !!e.z, pot = G.mode === 'potato';
+        Particles.burst(e.x, e.y, zed ? '#7ddc4f' : pot ? '#ff8a3d' : '#ff4d5e', 18, 380, 7, 0.7); Particles.ring(e.x, e.y, 10, 90, zed ? '#b6ff8a' : '#ffd23f', 0.45, 7);
         Chars.pose(visOf(e.b), 'hit', visOf(e.b).face);
         for (let i = 0; i < 4; i++) Particles.star(e.x, e.y - 20, '#ffd23f', 12, 0.7, (Math.random() - 0.5) * 360, -120 - Math.random() * 200);
-        if (e.a) feed([el('span', '', rname(e.a)), el('span', '', ' tagged '), el('b', '', rb ? rb.n : '???')], mineA || mineB);
+        if (e.a) feed([el('span', '', rname(e.a)), el('span', '', zed ? ' infected ' : pot ? ' passed the potato to ' : ' tagged '), el('b', '', rb ? rb.n : '???')], mineA || mineB);
         else feed([el('b', '', rb ? rb.n : '???'), el('span', '', ' is the new IT')], mineB);
-        if (mineB) { banner("YOU'RE IT!", 'red'); flash(); G.shake = 14; Sfx.play('youreIt'); Sfx.play('tagged'); }
-        else if (mineA) { banner('Tagged ' + (rb ? rb.n : '') + '!', ''); G.shake = 9; Sfx.play('tag'); }
+        if (mineB) { banner(zed ? "YOU'RE INFECTED!" : pot ? 'YOU HAVE THE POTATO!' : "YOU'RE IT!", zed ? 'green' : pot ? 'orange' : 'red'); flash(); G.shake = 14; Sfx.play(zed ? 'infect' : 'youreIt'); Sfx.play('tagged'); }
+        else if (mineA) { banner(zed ? 'Infected ' + (rb ? rb.n : '') + '!' : pot ? 'Passed it on!' : 'Tagged ' + (rb ? rb.n : '') + '!', zed ? 'green' : ''); G.shake = 9; Sfx.play('tag'); }
         else if (near(e.x, e.y)) { G.shake = Math.max(G.shake, 4); Sfx.play('tag'); }
         break; }
       case 'st':
-        if (e.s === STATE.COUNT) { banner(`Round ${e.rd}`, ''); Sfx.play('ready'); }
-        else if (e.s === STATE.PLAY) {
-          const its = e.its || [e.it];
-          if (its.includes(G.id)) { banner(its.length > 1 ? "YOU'RE IT! (two taggers)" : "YOU'RE IT!", 'red'); flash(); Sfx.play('youreIt'); }
+        if (e.s === STATE.VOTE) { Sfx.play('voteOpen'); }
+        else if (e.s === STATE.COUNT) {
+          const md = C.MODE_BY_ID[e.md];
+          banner(md && md.id !== 'classic' ? md.name + '!' : `Round ${e.rd}`, md && md.id === 'infection' ? 'green' : md && md.id === 'potato' ? 'orange' : ''); Sfx.play('ready');
+        } else if (e.s === STATE.PLAY) {
+          const its = e.its || [e.it], mine = its.includes(G.id);
+          if (e.md === 'potato') {
+            if (mine) { banner('YOU HAVE THE POTATO!', 'orange'); flash(); Sfx.play('youreIt'); }
+            else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} have the potato!` : `${rname(its[0])} has the potato!`, 'orange'); Sfx.play('go'); }
+          } else if (e.md === 'infection') {
+            if (mine) { banner("YOU'RE PATIENT ZERO!", 'green'); flash(); Sfx.play('infect'); }
+            else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} are infected!` : `${rname(its[0])} is infected!`, 'green'); Sfx.play('go'); }
+          } else if (mine) { banner(its.length > 1 ? "YOU'RE IT! (two taggers)" : "YOU'RE IT!", 'red'); flash(); Sfx.play('youreIt'); }
           else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} are IT!` : `${rname(its[0])} is IT!`, 'red'); Sfx.play('go'); }
         } else if (e.s === STATE.RESULTS) Sfx.play('win');
         break;
+      case 'boom': {
+        Particles.burst(e.x, e.y, '#ff8a3d', 40, 560, 9, 0.8); Particles.burst(e.x, e.y, '#ffd23f', 24, 420, 7, 0.7); Particles.ring(e.x, e.y, 10, 230, '#fff', 0.5, 14);
+        for (let i = 0; i < 8; i++) Particles.puff(e.x, e.y, '#55506a', 24, 0.8);
+        const mineE = e.id === G.id;
+        if (mineE) { banner("BOOM! You're out", 'red'); flash(); G.shake = 24; Sfx.play('boom'); }
+        else if (near(e.x, e.y)) { G.shake = Math.max(G.shake, 12); Sfx.play('boom'); }
+        feed([el('b', '', rname(e.id)), el('span', '', ' blew up!')], mineE);
+        break; }
       case 'ab': if (SERVER_FX.has(e.n) || e.id !== G.id) abilityFx(e, e.id === G.id); break;
       case 'pop': Particles.burst(e.x, e.y, '#fff', 14, 300, 6, 0.5); Particles.puff(e.x, e.y, '#ddd', 18, 0.5); if (near(e.x, e.y)) Sfx.play('pop'); break;
       case 'chat': onChat(e); break;
@@ -308,6 +329,7 @@
     if (e.code === 'Enter' || e.code === 'NumpadEnter') { if (G.uiOff) setUi(false); openChat(); e.preventDefault(); return; }
     if (MOVE[e.code]) { K[MOVE[e.code]] = true; e.preventDefault(); }
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; Sfx.unlock(); } e.preventDefault(); }
+    else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
     else if (e.code === 'KeyM') toggleMute();
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
@@ -477,18 +499,20 @@
     if (cloak && !e.isMe) return;      // a cloaked cat is fully invisible to everyone else: no body, shadow, marker or name
     if (cloak) alpha = 0.42;
     if (phase) alpha = 0.5;
+    if (e.out) alpha *= 0.4;
     if (e.imm && !e.it && !e.decoy) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(t * 13));
     const x = e.x, y = e.y, fyPos = y + r;
-    const color = C.colorFor(e.k);
+    const color = G.mode === 'infection' && e.it && !e.decoy ? '#7ddc4f' : C.colorFor(e.k);      // zombies turn green
 
     // ground markers
-    if (e.it && !e.decoy) {
-      const p = 0.5 + 0.5 * Math.sin(t * 6), a = 1;
+    if (e.it && !e.decoy && !e.out) {
+      const danger = G.mode === 'potato' && ptFuse(e.id) < 3, p = 0.5 + 0.5 * Math.sin(t * (danger ? 16 : 6)), a = 1;
+      const mc = G.mode === 'infection' ? ['rgba(70,200,90,', 'rgba(160,255,160,.9)'] : G.mode === 'potato' ? [danger ? 'rgba(255,60,60,' : 'rgba(255,138,61,', 'rgba(255,200,130,.9)'] : ['rgba(255,60,90,', 'rgba(255,110,130,.9)'];
       g.globalAlpha = a;
       g.beginPath(); g.ellipse(x, fyPos, r * (1.9 + p * 0.25), r * (0.7 + p * 0.1), 0, 0, TAU);
-      g.fillStyle = 'rgba(255,60,90,' + (0.3 + p * 0.15) + ')'; g.fill(); g.lineWidth = 3; g.strokeStyle = 'rgba(255,110,130,.9)'; g.stroke();
+      g.fillStyle = mc[0] + (0.3 + p * 0.15) + ')'; g.fill(); g.lineWidth = 3; g.strokeStyle = mc[1]; g.stroke();
       g.globalAlpha = 1;
-    } else if (e.isMe) {
+    } else if (e.isMe && !e.out) {
       g.beginPath(); g.ellipse(x, fyPos, r * 1.55, r * 0.55, 0, 0, TAU); g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.75)'; g.stroke();
     }
     // afterimages & trails
@@ -543,17 +567,29 @@
       if (sx < -80 || sx > G.W + 80 || sy < -80 || sy > G.H + 80) continue;
       g.globalAlpha = l.alpha;
       const bb = G.bubbles.get(e.id);
-      if (e.it && !e.decoy) {
-        const bob = Math.sin(t * 7) * 3;
-        g.fillStyle = '#ff4d5e'; g.strokeStyle = '#14122b'; g.lineWidth = 3;
-        g.beginPath(); g.moveTo(sx - 9, sy - 26 + bob); g.lineTo(sx + 9, sy - 26 + bob); g.lineTo(sx, sy - 14 + bob); g.closePath(); g.stroke(); g.fill();
-        g.font = `800 14px ${FONT}`; g.strokeText('IT', sx, sy - 31 + bob); g.fillStyle = '#fff'; g.fillText('IT', sx, sy - 31 + bob);
+      let lift = 0;
+      if (e.it && !e.decoy && !e.out) {
+        if (G.mode === 'potato') {
+          const f = Math.min(C.POTATO_START, ptFuse(e.id)), danger = f < 3, bob = Math.sin(t * (danger ? 18 : 7)) * 3, jx = danger ? (Math.random() - 0.5) * 3 : 0, cx = sx + jx, cy = sy - 36 + bob;
+          g.save(); g.translate(cx, cy); g.rotate(-0.2 + (danger ? Math.sin(t * 22) * 0.12 : 0));
+          g.beginPath(); g.ellipse(0, 0, 16, 11.5, 0, 0, TAU); g.fillStyle = danger ? '#e2623a' : '#c98a4b'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#14122b'; g.stroke();
+          g.fillStyle = 'rgba(80,45,20,.55)'; for (const [px, py] of [[-6, -3], [5, 2], [-1, 5], [7, -5]]) { g.beginPath(); g.arc(px, py, 1.8, 0, TAU); g.fill(); }
+          g.restore();
+          g.font = `800 15px ${FONT}`; g.lineWidth = 4; g.strokeStyle = '#14122b'; const ft = f.toFixed(1); g.strokeText(ft, cx, sy - 54 + bob); g.fillStyle = danger ? '#ff6b6b' : '#fff'; g.fillText(ft, cx, sy - 54 + bob);
+          lift = 32;
+        } else {
+          const bob = Math.sin(t * 7) * 3, zed = G.mode === 'infection', txt = zed ? 'ZOMBIE' : 'IT';
+          g.fillStyle = zed ? '#3fbf5f' : '#ff4d5e'; g.strokeStyle = '#14122b'; g.lineWidth = 3;
+          g.beginPath(); g.moveTo(sx - 9, sy - 26 + bob); g.lineTo(sx + 9, sy - 26 + bob); g.lineTo(sx, sy - 14 + bob); g.closePath(); g.stroke(); g.fill();
+          g.font = `800 ${zed ? 12 : 14}px ${FONT}`; g.strokeText(txt, sx, sy - 31 + bob); g.fillStyle = '#fff'; g.fillText(txt, sx, sy - 31 + bob);
+          lift = 24;
+        }
       }
       const name = e.name; g.font = `700 14px ${FONT}`;
       g.lineWidth = 4; g.strokeStyle = 'rgba(20,18,43,.92)'; g.strokeText(name, sx, sy - 4);
       g.fillStyle = e.isMe ? '#ffd23f' : '#fffaf0'; g.fillText(name, sx, sy - 4);
       if (e.afk) { g.font = '16px sans-serif'; g.fillText('💤', sx + g.measureText(name).width / 2 + 10, sy - 10); }
-      if (bb && !e.decoy && G.t - bb.t < 5.5) drawBubble(g, bb, sx, sy - 22 - (e.it ? 24 : 0), l.alpha);
+      if (bb && !e.decoy && G.t - bb.t < 5.5) drawBubble(g, bb, sx, sy - 22 - lift, l.alpha);
       g.globalAlpha = 1;
     }
   }
@@ -580,8 +616,8 @@
   function drawArrows(g, ents, t) {
     const me = ents[0]; if (!me || G.state !== STATE.PLAY) return;
     let target = null, col = '#ff4d5e';
-    if (!me.it) target = ents.find((e) => e.it && !e.decoy && !isCloaked(e));
-    else { let bd = 1e9; for (const e of ents) { if (e === me || e.decoy || isCloaked(e)) continue; const d = Math.hypot(e.x - me.x, e.y - me.y); if (d < bd) { bd = d; target = e; } } col = '#2fd18b'; }
+    if (!me.it || me.out) { let bd = 1e9; for (const e of ents) { if (!e.it || e.decoy || e === me || isCloaked(e)) continue; const d = Math.hypot(e.x - me.x, e.y - me.y); if (d < bd) { bd = d; target = e; } } }
+    else { let bd = 1e9; for (const e of ents) { if (e === me || e.decoy || e.it || isCloaked(e)) continue; const d = Math.hypot(e.x - me.x, e.y - me.y); if (d < bd) { bd = d; target = e; } } col = '#2fd18b'; }
     if (!target) return;
     const [sx, sy] = project(target.x, target.y), pad = 54;
     if (sx > pad && sx < G.W - pad && sy > pad && sy < G.H - pad) return;
@@ -613,12 +649,12 @@
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
-      const s = interp(id, rt); if (!s) continue;
+      const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
       ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
@@ -684,8 +720,8 @@
   function updateHud() {
     const st = G.state, left = Math.max(0, G.tl - (performance.now() - G.tlAt) / 1000), me = G.me;
     const tb = $('timerBox');
-    $('stateLbl').textContent = ['Waiting', 'Get ready', 'Time left', 'Results'][st];
-    $('timer').textContent = st === STATE.PLAY ? fmt(left) : st === STATE.COUNT ? '•••' : st === STATE.RESULTS ? 'GG' : '--';
+    $('stateLbl').textContent = ['Waiting', 'Get ready', 'Time left', 'Results', 'Voting'][st];
+    $('timer').textContent = st === STATE.PLAY ? fmt(left) : st === STATE.COUNT ? '•••' : st === STATE.RESULTS ? 'GG' : st === STATE.VOTE ? Math.ceil(left) : '--';
     tb.classList.toggle('warn', st === STATE.PLAY && left <= 10);
     if (st === STATE.PLAY && left <= 10 && Math.ceil(left) !== G.lastSecTick) {
       G.lastSecTick = Math.ceil(left); Sfx.play('tick');
@@ -699,18 +735,36 @@
     } else if (G.lastCount !== -1) { G.lastCount = -1; gsap.killTweensOf($('countdown')); $('countdown').textContent = ''; }
 
     // role chip
-    const role = $('role'), isIt = st === STATE.PLAY && !!me.it;
+    const role = $('role'), isIt = st === STATE.PLAY && !!me.it && !me.out, mode = G.mode;
     document.body.classList.toggle('is-it', isIt);
-    let txt, cls = 'role';
-    if (st === STATE.PLAY) {
-      if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : "You're IT! Tag someone!"; }
-      else {
-        const its = [...G.roster.values()].filter((r) => r.fl & 1 && r.id !== G.id);
-        txt = !its.length ? 'Run!' : its.length === 1 ? `Run! ${its[0].n} is IT` : `Run! ${its.map((r) => r.n).join(' & ')} are IT`;
-      }
-    } else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}`;
+    let txt, cls = 'role', alive = 0, surv = 0;
+    for (const r of G.roster.values()) if (!(r.fl & 48)) { alive++; if (!(r.fl & 1)) surv++; }
+    const myR = G.roster.get(G.id), waiting = !!(myR && (myR.fl & 32));
+    if (me.out && (st === STATE.PLAY || st === STATE.COUNT)) {
+      cls = 'role ghost'; txt = waiting ? "Match in progress · you're in next round" : "You're out · spectating";
+    } else if (st === STATE.PLAY) {
+      const its = [...G.roster.values()].filter((r) => r.fl & 1 && r.id !== G.id);
+      if (mode === 'potato') {
+        if (isIt) { cls = 'role potato'; txt = me.stun > 0 ? 'You have the potato · hold on…' : 'POTATO! Tag someone fast!'; }
+        else txt = `Avoid the potato · ${alive} left`;
+      } else if (mode === 'infection') {
+        if (isIt) { cls = 'role zombie'; txt = `You're infected! Spread it · ${surv} left`; }
+        else txt = surv <= 1 ? 'Last survivor!' : `Survive! ${surv} left`;
+      } else if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : "You're IT! Tag someone!"; }
+      else txt = !its.length ? 'Run!' : its.length === 1 ? `Run! ${its[0].n} is IT` : `Run! ${its.map((r) => r.n).join(' & ')} are IT`;
+    } else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}` + (mode !== 'classic' ? ' · ' + C.MODE_BY_ID[mode].name : '');
+    else if (st === STATE.VOTE) txt = 'Vote for the next round';
     else if (st === STATE.RESULTS) txt = 'Round over';
     else txt = G.solo ? 'Warming up…' : 'Waiting for players';
+    // Hot Potato fuse chip (only the holder sees the big one)
+    const fz = $('fuse'), holding = mode === 'potato' && isIt;
+    if (holding) {
+      const f = Math.min(C.POTATO_START, ptFuse(G.id));
+      fz.classList.remove('hidden'); fz.classList.toggle('danger', f < 3); $('fuseNum').textContent = f.toFixed(1);
+      const c = Math.ceil(f);
+      if (f <= 5 && c !== G.lastFuseTick) { G.lastFuseTick = c; Sfx.play('fuse'); if (!RM.matches) gsap.fromTo('#fuseNum', { scale: 1.25 }, { scale: 1, duration: 0.3, ease: 'back.out(3)' }); }
+    } else { fz.classList.add('hidden'); G.lastFuseTick = -1; }
+    if (st === STATE.VOTE) { const bar = $('voteBar'); bar.style.transform = `scaleX(${clamp(left / (G.voteDur || 14), 0, 1).toFixed(3)})`; $('voteTimer').textContent = Math.ceil(left); }
     if (txt !== lastRole) {
       lastRole = txt; role.textContent = txt; role.className = cls;
       gsap.fromTo(role, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
@@ -735,7 +789,7 @@
 
     const now = performance.now();
     if (now - G.lastBoard > 250) { G.lastBoard = now; drawBoard(); }
-    if (st === STATE.RESULTS) $('resNext').textContent = `Next round in ${Math.ceil(left)}…`;
+    if (st === STATE.RESULTS) $('resNext').textContent = `${G.solo || (G.sv && G.sv.mode === 'vote') ? 'Vote opens' : 'Next round'} in ${Math.ceil(left)}…`;
   }
 
   /* scoreboard: rows are persistent elements, re-ordered with GSAP Flip */
@@ -757,9 +811,11 @@
     rows.forEach((r, i) => {
       let e = rowEls.get(r.id);
       if (!e) { e = makeRow(r); rowEls.set(r.id, e); box.appendChild(e); fresh.push(e); }
-      const isIt = G.state === STATE.PLAY && !!(r.fl & 1);
-      e.classList.toggle('me', r.id === G.id); e.classList.toggle('it', isIt);
-      e.querySelector('.tg').style.display = isIt ? '' : 'none';
+      const isIt = G.state === STATE.PLAY && !!(r.fl & 1), live = G.state === STATE.PLAY || G.state === STATE.COUNT, outR = live && !!(r.fl & 16), waitR = live && !!(r.fl & 32);
+      e.classList.toggle('me', r.id === G.id); e.classList.toggle('it', isIt); e.classList.toggle('out', outR || waitR);
+      const tg = e.querySelector('.tg'), lbl = isIt ? (G.mode === 'potato' ? 'POTATO' : G.mode === 'infection' ? 'ZOMBIE' : 'IT') : waitR ? 'NEXT' : outR ? 'OUT' : '';
+      const tcls = 'tg' + (isIt ? (G.mode === 'potato' ? ' pt' : G.mode === 'infection' ? ' zb' : '') : lbl ? ' gh' : '');
+      if (tg.textContent !== lbl) tg.textContent = lbl; if (tg.className !== tcls) tg.className = tcls; tg.style.display = lbl ? '' : 'none';
       const rk = e.querySelector('.rk'), sc = e.querySelector('.sc');
       if (rk.textContent !== String(i + 1)) rk.textContent = i + 1;
       if (sc.textContent !== String(r.sc)) sc.textContent = r.sc;
@@ -771,12 +827,71 @@
     }
   }
 
+  /* ================================ vote screen ================================ */
+  const RM = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+  const ptFuse = (id) => { const v = G.pt.get(id); return v === undefined ? 0 : Math.max(0, v - (performance.now() - G.ptAt) / 1000); };
+  const voteEl = $('vote'), voteBtns = { m: [], d: [] };
+  let voteKey = '', myVote = { m: -1, d: -1 }, voteTween = null;
+  function castVote(kind, i, btn) {
+    if (myVote[kind] === i) return;
+    myVote[kind] = i; send({ t: 'vote', k: kind, i }); Sfx.play('vote');
+    paintVote();
+    if (!RM.matches && btn) gsap.fromTo(btn, { scale: 0.93 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', clearProps: 'transform' });
+  }
+  function buildVote(vc, key) {
+    voteKey = key; myVote = { m: -1, d: -1 }; voteBtns.m = []; voteBtns.d = []; G.voteDur = Math.max(1, G.tl);
+    const mk = (kind, i, name, blurb, keyNo, id) => {
+      const b = el('button', 'vopt'); b.type = 'button'; if (id) b.dataset.mode = id;
+      b.append(el('b', '', name), el('span', '', blurb), el('i', 'vn', '0'), el('i', 'vk', String(keyNo)));
+      b.addEventListener('click', () => castVote(kind, i, b)); b._n = 0; return b;
+    };
+    const maps = $('voteMaps'), modes = $('voteModes'); maps.replaceChildren(); modes.replaceChildren();
+    maps.classList.toggle('one', vc.m.length === 1); $('voteMapsLbl').textContent = vc.m.length === 1 ? 'Arena (fixed on this server)' : 'Arena';
+    vc.m.forEach((id, i) => { const m = C.MAP_BY_ID[id]; if (!m) return; const b = mk('m', i, m.name, m.blurb || '', i + 1); voteBtns.m.push(b); maps.appendChild(b); });
+    vc.d.forEach((id, i) => { const m = C.MODE_BY_ID[id]; if (!m) return; const b = mk('d', i, m.name, m.blurb, i + 4, id); voteBtns.d.push(b); modes.appendChild(b); });
+    const wasHidden = voteEl.classList.contains('hidden');
+    voteEl.classList.remove('hidden');
+    if (voteTween) voteTween.kill();
+    if (RM.matches) gsap.set(voteEl, { autoAlpha: 1 });
+    else {
+      voteTween = gsap.timeline()
+        .fromTo(voteEl, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: 'power1.out' })
+        .from('.vote-card', { y: 70, scale: 0.92, rotation: 1.5, duration: 0.55, ease: 'back.out(1.7)' }, 0)
+        .from('.vopt', { y: 24, opacity: 0, stagger: 0.05, duration: 0.35, ease: 'power2.out' }, 0.2);
+    }
+    void wasHidden;
+  }
+  function paintVote(vt) {
+    for (const kind of ['m', 'd']) {
+      const counts = vt ? vt[kind] : null, btns = voteBtns[kind], top = counts ? Math.max(0, ...counts) : 0;
+      btns.forEach((b, i) => {
+        b.classList.toggle('picked', myVote[kind] === i);
+        if (!counts) return;
+        const n = counts[i] || 0, pill = b.querySelector('.vn');
+        b.classList.toggle('lead', top > 0 && n === top && myVote[kind] !== i);
+        if (n !== b._n) { pill.textContent = n; if (n > b._n && !RM.matches) gsap.fromTo(pill, { scale: 1.6 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' }); b._n = n; }
+      });
+    }
+  }
+  function updateVote(vc, vt) {
+    const key = vc.m.join(',') + '|' + vc.d.join(',') + '|' + G.rd;
+    if (key !== voteKey || voteEl.classList.contains('hidden')) buildVote(vc, key);
+    paintVote(vt);
+  }
+  function hideVote(now) {
+    voteKey = ''; if (voteTween) { voteTween.kill(); voteTween = null; }
+    if (voteEl.classList.contains('hidden')) return;
+    if (now || RM.matches) { gsap.set(voteEl, { clearProps: 'all' }); voteEl.classList.add('hidden'); return; }
+    gsap.to(voteEl, { autoAlpha: 0, duration: 0.25, overwrite: true, onComplete: () => { if (G.state !== STATE.VOTE) { voteEl.classList.add('hidden'); gsap.set(voteEl, { clearProps: 'all' }); } } });
+  }
+
   function showResults() {
     const res = (G.res || []).map((r) => ({ r: G.roster.get(r[0]), s: r[1], t: r[2] })).filter((x) => x.r);
     if (!res.length) return;
     // ranks: equal scores share a rank (1,1,3...), and everyone tied for first shares the win
     res.forEach((x, i) => { x.rank = i && x.s === res[i - 1].s ? res[i - 1].rank : i + 1; });
     const winners = res.filter((x) => x.rank === 1), mine = winners.some((x) => x.r.id === G.id);
+    const md = C.MODE_BY_ID[G.mode]; document.querySelector('.results-card .kicker').textContent = 'Round over' + (md && md.id !== 'classic' ? ' · ' + md.name : '');
     const rw = $('resWin'); rw.className = 'res-win hidden'; rw.textContent = '';
     if (mine) {
       if (G.solo) { rw.className = 'res-win guest'; rw.textContent = 'Practice rounds don\u2019t earn wins. Play online to collect them.'; }
@@ -833,7 +948,7 @@
   Game.leave = () => {
     closeWs(); G.inGame = false; G.me = null; G.state = STATE.WAIT; G.joinResolve = null;
     document.body.classList.remove('is-it'); releaseAll(); closeChat(true); chatLog.innerHTML = '';
-    $('results').classList.add('hidden'); $('overlay').classList.add('hidden'); $('waiting').classList.add('hidden');
+    $('results').classList.add('hidden'); $('overlay').classList.add('hidden'); $('waiting').classList.add('hidden'); hideVote(true);
     $('feed').innerHTML = ''; $('toasts').innerHTML = ''; $('banner').innerHTML = ''; $('countdown').textContent = '';
     gsap.killTweensOf('#hud *'); gsap.set('#hud *', { clearProps: 'all' });
     Particles.clear();

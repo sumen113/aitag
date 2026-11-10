@@ -32,10 +32,16 @@ class Room {
     this.max = opts.max || T.MAX_PLAYERS;               // max players (bots use slots, humans push them out)
     this.botTarget = this.solo ? BOT_COUNT : Math.max(0, opts.bots | 0);
     this.lock = opts.lock || null;                      // { salt, hash } when the server has a password
+    // game mode: a fixed one ('classic' | 'infection' | 'potato') or 'vote' (players vote on the map and the mode every round)
+    this.modeOpt = T.MODE_BY_ID[opts.mode] || opts.mode === 'vote' ? opts.mode : (this.regular || this.solo ? 'vote' : 'classic');
+    this.customTime = !!opts.roundTime && !this.regular && !this.solo;
+    this.voteTime = +process.env.VOTE_TIME || opts.voteTime || T.VOTE_TIME;
+    this.mode = T.MODE_BY_ID[this.modeOpt] ? this.modeOpt : 'classic';
+    this.vote = null; this.nextMap = null; this.elims = 0; this.tagCount = 0; this.itWant = 1;
     this.mapMode = opts.mapMode && T.MAP_BY_ID[opts.mapMode] ? opts.mapMode : 'rotate';
     this.map = this.mapMode !== 'rotate' ? T.MAP_BY_ID[this.mapMode] : T.MAPS[(Math.random() * T.MAPS.length) | 0];
     this.goos = [];
-    this.ctx = { map: this.map, goos: this.goos };
+    this.ctx = { map: this.map, goos: this.goos, itBoost: T.MODE_BY_ID[this.mode].boost };
     this.players = new Map();
     this.decoys = [];
     this.seeds = [];                                   // avocado seeds in flight
@@ -48,6 +54,12 @@ class Room {
 
   /* ----------------------------- membership ----------------------------- */
   humanCount() { let n = 0; for (const p of this.players.values()) if (!p.bot) n++; return n; }
+  activeHumans() { let n = 0; for (const p of this.players.values()) if (!p.bot && !p.wait) n++; return n; }   // players actually in the current match
+  activeCount() { let n = 0; for (const p of this.players.values()) if (!p.wait) n++; return n; }
+  aliveCount() { let n = 0; for (const p of this.players.values()) if (!p.out) n++; return n; }
+  modeDef() { return T.MODE_BY_ID[this.mode]; }
+  setMode(id) { this.mode = T.MODE_BY_ID[id] ? id : 'classic'; this.ctx.itBoost = this.modeDef().boost; }
+  roundLen() { const m = this.modeDef(); return this.customTime || !m.time ? this.roundTime : m.time; }
   itPlayer() { const p = this.players.get(this.itId); return p && p.it ? p : null; }
   itPlayers() { const a = []; for (const p of this.players.values()) if (p.it) a.push(p); return a; }
 
@@ -75,12 +87,11 @@ class Room {
     const p = this.makePlayer(name, c, col, false);
     p.ws = ws; p.uid = uid || 0; p.hat = hat | 0;
     this.spawnFor(p);
-    if (this.state === STATE.PLAY) p.imm = 2;
+    this.holdForNextRound(p);
     this.players.set(p.id, p);
     this.emit({ k: 'join', n: p.name });
     this.rebalanceBots();
     this.rosterDirty = true;
-    if (this.state === STATE.WAIT && this.players.size >= 2) this.startCountdown();
     return p;
   }
 
@@ -90,9 +101,12 @@ class Room {
     const name = free.length ? free[(Math.random() * free.length) | 0] : 'Bot' + ((Math.random() * 99) | 0);
     const p = this.makePlayer(name, (Math.random() * CHARS.length) | 0, Math.random() < 0.5 ? 0 : 1 + ((Math.random() * 7) | 0), true);
     this.spawnFor(p);
-    if (this.state === STATE.PLAY) p.imm = 2;
+    this.holdForNextRound(p);
     this.players.set(p.id, p);
   }
+
+  /** Nobody joins a match in progress: arrivals during the countdown or a round float around as spectators until the next vote. */
+  holdForNextRound(p) { if (this.state === STATE.COUNT || this.state === STATE.PLAY) { p.out = 1; p.wait = 1; } }
 
   rebalanceBots() {
     const humans = this.humanCount();
@@ -115,15 +129,17 @@ class Room {
     this.rosterDirty = true;
     if (p.it) this.reassignIt();
     if (!p.bot) { if (this.humanCount() > 0) this.rebalanceBots(); }
-    if (this.players.size < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
+    if (this.activeCount() < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
+    else if (this.state === STATE.VOTE && this.players.size < 2) this.toWait();
   }
 
   // hand the IT role to one more random player (an IT left or went AFK); never someone who already is IT
   reassignIt() {
-    const arr = [...this.players.values()].filter((p) => !p.it);
-    if (this.state !== STATE.PLAY || !arr.length || this.players.size < 2) { if (!this.itPlayers().length) this.itId = 0; return; }
+    const arr = [...this.players.values()].filter((p) => !p.it && !p.out);
+    if (this.state !== STATE.PLAY || !arr.length || this.aliveCount() < 2) { if (!this.itPlayers().length) this.itId = 0; return; }
     const pool = arr.filter((p) => !p.afk), n = (pool.length ? pool : arr)[(Math.random() * (pool.length || arr.length)) | 0];
     n.it = 1; n.lock = 1; this.itId = n.id;
+    if (this.mode === 'potato') n.pot = T.potatoFuse(this.elims);
     this.emit({ k: 'tag', a: 0, b: n.id, x: n.x, y: n.y });
   }
 
@@ -136,39 +152,80 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.score = 0; p.tags = 0; p.aux = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
+  /** Everything between rounds starts here: a vote (regular servers, practice, "vote" custom servers) or straight into the countdown. */
+  beginRound() {
+    if (this.modeOpt === 'vote') this.startVote(); else { this.setMode(this.mode); this.startCountdown(); }
+  }
+
+  startVote() {
+    for (const p of this.players.values()) { p.out = 0; p.wait = 0; p.pot = 0; p.it = 0; p.vm = -1; p.vd = -1; }     // spectators and eliminated players are back in
+    this.itId = 0; this.results = null;
+    const maps = this.mapMode !== 'rotate' ? [this.map.id] : shuffle(T.MAPS.filter((m) => m !== this.map)).slice(0, 3).map((m) => m.id);
+    this.vote = { maps, modes: T.MODES.map((m) => m.id) };
+    this.state = STATE.VOTE; this.timer = this.voteTime; this.tl = this.voteTime;
+    this.emit({ k: 'st', s: STATE.VOTE, vc: { m: this.vote.maps, d: this.vote.modes } });
+  }
+
+  /** p votes for candidate i of kind 'm' (map) or 'd' (mode). */
+  castVote(p, kind, i) {
+    if (this.state !== STATE.VOTE || !this.vote || p.bot) return;
+    i |= 0; const list = kind === 'm' ? this.vote.maps : kind === 'd' ? this.vote.modes : null;
+    if (!list || i < 0 || i >= list.length) return;
+    if (kind === 'm') p.vm = i; else p.vd = i;
+    p.lastActiveAt = Date.now();
+    const humans = [...this.players.values()].filter((q) => !q.bot);
+    if (humans.length && humans.every((q) => q.vd >= 0 && (q.vm >= 0 || this.vote.maps.length < 2))) this.timer = Math.min(this.timer, 1.5);   // everyone has voted: don't make them wait
+  }
+
+  tally() {
+    const counts = (kind) => { const n = kind === 'm' ? this.vote.maps.length : this.vote.modes.length, c = new Array(n).fill(0); for (const p of this.players.values()) { const v = kind === 'm' ? p.vm : p.vd; if (!p.bot && v >= 0 && v < n) c[v]++; } return c; };
+    return { m: counts('m'), d: counts('d') };
+  }
+
   startCountdown() {
-    if (this.round > 0) {
-      const m = this.pickMap();
-      if (m !== this.map) { this.map = m; this.ctx.map = m; this.itFields = null; for (const p of this.players.values()) p.ai = null; }
+    if (this.state === STATE.VOTE && this.vote) {
+      const t = this.tally(), best = (c) => { const top = Math.max(...c), ties = c.map((v, i) => (v === top ? i : -1)).filter((i) => i >= 0); return ties[(Math.random() * ties.length) | 0]; };
+      const anyMode = t.d.some((v) => v > 0);
+      this.setMode(this.vote.modes[anyMode || !this.solo ? best(t.d) : 0]);       // nobody voted in practice: classic; elsewhere a random pick
+      this.nextMap = T.MAP_BY_ID[this.vote.maps[best(t.m)]];
     }
+    let m = this.nextMap || (this.round > 0 && this.modeOpt !== 'vote' ? this.pickMap() : this.map);
+    const need = this.modeDef().map;
+    if (need) m = T.MAP_BY_ID[need];                    // Infection always plays on the big map
+    else if (m.big) m = this.mapMode !== 'rotate' ? T.MAP_BY_ID[this.mapMode] : T.MAPS[(Math.random() * T.MAPS.length) | 0];
+    this.nextMap = null; this.vote = null;
+    if (m !== this.map) { this.map = m; this.ctx.map = m; this.itFields = null; for (const p of this.players.values()) p.ai = null; }
     this.round++;
-    this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.results = null;
+    this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.results = null; this.elims = 0; this.tagCount = 0;
     const sp = shuffle(this.map.spawns.slice()); let i = 0;
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
     this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN; this.tl = T.COUNTDOWN;
-    this.emit({ k: 'st', s: STATE.COUNT, m: this.map.id, rd: this.round });
+    this.emit({ k: 'st', s: STATE.COUNT, m: this.map.id, rd: this.round, md: this.mode });
   }
 
   startPlay() {
-    const arr = shuffle([...this.players.values()]);
-    this.itWant = T.itCountFor(arr.length);              // 7+ players: two taggers
+    const arr = shuffle([...this.players.values()].filter((p) => !p.out));
+    this.itWant = T.itCountFor(arr.length);              // 7+ players: two taggers (or two potatoes)
     const its = arr.slice(0, this.itWant);
-    for (const it of its) { it.it = 1; it.stun = T.HEAD_START; }
+    const fuse = T.potatoFuse(0);
+    for (const it of its) { it.it = 1; it.stun = T.HEAD_START; if (this.mode === 'potato') it.pot = fuse + T.HEAD_START; }
     this.itId = its[0].id;
-    this.state = STATE.PLAY; this.tl = this.roundTime;
-    this.emit({ k: 'st', s: STATE.PLAY, it: its[0].id, its: its.map((p) => p.id) });
+    this.state = STATE.PLAY; this.tl = this.roundLen();
+    this.emit({ k: 'st', s: STATE.PLAY, it: its[0].id, its: its.map((p) => p.id), md: this.mode });
   }
 
   endRound() {
-    const list = [...this.players.values()].map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display order inside a tie: more tags, then a coin flip (never "whoever joined first"); the win itself is shared, see below
+    if (this.mode !== 'classic') for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
+    const inMatch = [...this.players.values()].filter((p) => !p.wait);
+    const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
     // wins are paid out in online servers with enough real players and no bots (custom servers: a few more players), to registered accounts that were actually playing
     const need = this.regular ? MIN_WIN_PLAYERS : this.botTarget === 0 ? CUSTOM_MIN_WIN_PLAYERS : Infinity;
-    if (this.onWin && !this.solo && list.length && this.humanCount() >= need) {
+    if (this.onWin && !this.solo && list.length && this.activeHumans() >= need) {
       const best = Math.floor(list[0].s);                // the displayed top score: everyone who finished on it shares the win
       if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
         if (Math.floor(r.s) !== best) break;
@@ -176,22 +233,40 @@ class Room {
         if (w && w.uid && !w.bot && !w.afk) this.onWin(w);
       }
     }
-    for (const p of this.players.values()) p.it = 0;
+    for (const p of this.players.values()) { p.it = 0; p.pot = 0; }
     this.itId = 0; this.state = STATE.RESULTS; this.timer = T.RESULTS_TIME; this.tl = T.RESULTS_TIME;
-    this.emit({ k: 'st', s: STATE.RESULTS });
+    this.emit({ k: 'st', s: STATE.RESULTS, md: this.mode });
   }
 
   toWait() {
-    for (const p of this.players.values()) p.it = 0;
-    this.itId = 0; this.state = STATE.WAIT; this.tl = 0; this.results = null;
+    for (const p of this.players.values()) { p.it = 0; p.pot = 0; p.out = 0; p.wait = 0; }
+    this.itId = 0; this.state = STATE.WAIT; this.tl = 0; this.results = null; this.vote = null; this.nextMap = null;
     this.emit({ k: 'st', s: STATE.WAIT });
   }
 
+  /** IT touched `victim`. Classic: the role moves. Infection: the victim joins the infected. Potato: the potato moves and its fuse restarts. */
   tag(it, victim) {
-    it.it = 0; it.imm = T.TAG_IMMUNITY; it.tags++;
+    this.tagCount++; it.tags++;
+    if (this.mode === 'infection') {
+      victim.it = 1; victim.lock = 0.9; victim.stun = 0; victim.imm = 0;
+      this.itId = victim.id;
+      this.emit({ k: 'tag', a: it.id, b: victim.id, x: victim.x, y: victim.y, z: 1 });
+      return;
+    }
+    it.it = 0; it.pot = 0; it.imm = T.TAG_IMMUNITY;
     victim.it = 1; victim.lock = T.TAG_LOCK; victim.stun = 0;
+    if (this.mode === 'potato') victim.pot = T.potatoFuse(this.elims);
     this.itId = victim.id;
     this.emit({ k: 'tag', a: it.id, b: victim.id, x: victim.x, y: victim.y });
+  }
+
+  /** Hot Potato: the fuse ran out. The holder is eliminated (becomes a spectator ghost) and the potato lands on a random survivor. */
+  explode(p) {
+    this.emit({ k: 'boom', id: p.id, x: r1(p.x), y: r1(p.y) });
+    p.it = 0; p.pot = 0; p.out = 1; p.vx = p.vy = 0; this.elims++;
+    const want = Math.min(this.itWant, Math.max(1, this.aliveCount() - 1));
+    for (let k = 0; k < 3 && this.aliveCount() > 1 && this.itPlayers().length < want; k++) this.reassignIt();
+    if (this.itPlayers().length) this.itId = this.itPlayers()[0].id;
   }
 
   /* ------------------------------- inputs ------------------------------- */
@@ -245,7 +320,7 @@ class Room {
     if (e.n === 'stomp') {
       const R = 175;
       for (const q of this.players.values()) {
-        if (q === p) continue;
+        if (q === p || q.out) continue;
         if (q.c === IDX.frog && q.abT > 0) continue;
         let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
         if (d > R) continue;
@@ -259,7 +334,7 @@ class Room {
     } else if (e.n === 'gust') {
       const R = 270;                                          // a wide, stun-free blast: it buys distance, not a free tag
       for (const q of this.players.values()) {
-        if (q === p) continue;
+        if (q === p || q.out) continue;
         if (q.c === IDX.frog && q.abT > 0) continue;
         let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
         if (d > R) continue;
@@ -310,7 +385,7 @@ class Room {
       if (!dead && !T.circleFree(this.map, s.x, s.y, T.SEED_R * 0.6)) { dead = true; this.emit({ k: 'ab', n: 'seedpop', id: s.o, x: r1(s.x - s.vx * DT), y: r1(s.y - s.vy * DT), dx: 0, dy: 0 }); }
       if (!dead) for (const d of this.decoys.slice()) if (d.o !== s.o && Math.hypot(d.x - s.x, d.y - s.y) < 22 + T.SEED_R) { this.popDecoy(d); dead = true; break; }
       if (!dead) for (const q of this.players.values()) {
-        if (q === o || (q.c === IDX.frog && q.abT > 0)) continue;
+        if (q === o || q.out || (q.c === IDX.frog && q.abT > 0)) continue;
         const rr = CHARS[q.c].radius + T.SEED_R, dx = q.x - s.x, dy = q.y - s.y;
         if (dx * dx + dy * dy >= rr * rr) continue;
         if (q.c === IDX.robot && q.abT > 0) {                  // shield eats the seed
@@ -346,8 +421,13 @@ class Room {
     else if (this.state === STATE.PLAY) { this.tl -= DT; if (this.tl <= 0) this.endRound(); }
     else if (this.state === STATE.RESULTS) {
       this.timer -= DT; this.tl = Math.max(0, this.timer);
+      if (this.timer <= 0) { if (this.players.size >= 2) this.beginRound(); else this.toWait(); }
+    }
+    else if (this.state === STATE.VOTE) {
+      this.timer -= DT; this.tl = Math.max(0, this.timer);
       if (this.timer <= 0) { if (this.players.size >= 2) this.startCountdown(); else this.toWait(); }
     }
+    else if (this.state === STATE.WAIT && this.players.size >= 2) this.beginRound();
 
     // ---- players
     for (const p of this.players.values()) {
@@ -371,7 +451,7 @@ class Room {
       if (Math.hypot(p.vx, p.vy) < 170) continue;
       const rp = CHARS[p.c].radius;
       for (const q of this.players.values()) {
-        if (q === p || (q.c === IDX.frog && q.abT > 0) || (p.bowled && p.bowled.has(q.id))) continue;
+        if (q === p || q.out || (q.c === IDX.frog && q.abT > 0) || (p.bowled && p.bowled.has(q.id))) continue;
         const dx = q.x - p.x, dy = q.y - p.y, rr = rp + CHARS[q.c].radius + 6;
         if (dx * dx + dy * dy >= rr * rr) continue;
         const d = Math.hypot(dx, dy) || 1;
@@ -402,9 +482,11 @@ class Room {
 
     // ---- tagging & scoring
     if (this.state === STATE.PLAY) {
-      for (const p of this.players.values()) if (!p.it && !p.afk) p.score += DT;
+      const potato = this.mode === 'potato', infection = this.mode === 'infection';
+      for (const p of this.players.values()) if (!p.out && !p.afk && (potato || !p.it)) p.score += DT;          // time survived
       for (const it of this.itPlayers()) {
-        if (!it.it) continue;                                 // already handed over by an earlier tag this tick
+        if (!it.it || it.out) continue;                       // already handed over by an earlier tag this tick
+        if (potato) { it.pot -= DT; if (it.pot <= 0) { this.explode(it); continue; } }
         const ri = CHARS[it.c].radius;
         for (const d of this.decoys.slice()) {
           if (d.o !== it.id && Math.hypot(d.x - it.x, d.y - it.y) < ri + 16) { this.popDecoy(d); it.stun = Math.max(it.stun, 1.0); }
@@ -414,7 +496,7 @@ class Room {
           // so a tag also counts if the target WAS in reach shortly before. Capped at LAG_COMP_MAX so dodging still works.
           const comp = it.bot ? 0 : T.clamp((it.rtt + 90) / 1000 * 0.8, 0, T.LAG_COMP_MAX), kmax = Math.min(HIST - 2, Math.round(comp * T.TICK));
           for (const q of this.players.values()) {
-            if (q === it || q.it || q.imm > 0 || (q.c === IDX.frog && q.abT > 0)) continue;
+            if (q === it || q.it || q.out || q.imm > 0 || (q.c === IDX.frog && q.abT > 0)) continue;
             const rr = ri + CHARS[q.c].radius + T.TAG_REACH;
             let dx = q.x - it.x, dy = q.y - it.y, hit = dx * dx + dy * dy < rr * rr;
             if (!hit && kmax >= 2) {
@@ -434,8 +516,16 @@ class Room {
           }
         }
       }
-      const want = Math.min(this.itWant || 1, Math.max(1, this.players.size - 1));
-      if (this.itPlayers().length < want && this.players.size >= 2) this.reassignIt();
+      if (this.state === STATE.PLAY) {
+        if (!infection && !potato) {
+          const want = Math.min(this.itWant || 1, Math.max(1, this.players.size - 1));
+          if (this.itPlayers().length < want && this.activeCount() >= 2) this.reassignIt();
+        } else if (!this.itPlayers().length && this.aliveCount() >= 2) this.reassignIt();                    // the last tagger/potato holder left
+        // last one standing: Hot Potato ends with one player left; Infection when one survivor is left after the outbreak began
+        if (potato && this.aliveCount() <= 1) this.endRound();
+        else if (infection) { let surv = 0; for (const p of this.players.values()) if (!p.out && !p.it) surv++; if (surv <= (this.tagCount > 0 ? 1 : 0)) this.endRound(); }
+        else if (this.activeCount() < 2) this.toWait();
+      }
     }
 
     // ---- afk handling (once per second). Only counts while a round is being played: waiting in an empty lobby is fine.
@@ -443,7 +533,7 @@ class Room {
       const now = Date.now();
       for (const p of [...this.players.values()]) {
         if (p.bot) continue;
-        if (this.state !== STATE.PLAY) { p.lastActiveAt = now; p.afk = false; continue; }
+        if (this.state !== STATE.PLAY || p.out) { p.lastActiveAt = now; p.afk = false; continue; }
         const idle = now - p.lastActiveAt;
         p.afk = idle > 6000;
         if (p.afk && p.it) { p.it = 0; this.reassignIt(); }
@@ -458,7 +548,7 @@ class Room {
   }
 
   /* ------------------------------ networking ---------------------------- */
-  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0 })); }
+  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0, w: p.wait ? 1 : 0 })); }
 
   send(p, obj) { if (p.ws && p.ws.readyState === 1) p.ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); }
 
@@ -470,16 +560,18 @@ class Room {
   sendSnapshots() {
     const ps = [];
     for (const p of this.players.values()) {
-      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0);
+      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out ? 16 : 0) | (p.wait ? 32 : 0);
       ps.push([p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags]);
     }
     const head = {
-      t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, p: ps,
+      t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, md: this.mode, p: ps,
       g: this.goos.map((g) => [g.id, r1(g.x), r1(g.y), g.r, g.o, r1(g.ttl), g.splash ? 1 : 0]),
       d: this.decoys.map((d) => [d.id, r1(d.x), r1(d.y), r1(d.vx), r1(d.vy), d.c, d.k, d.o, r1(d.ttl)]),
       sd: this.seeds.map((x) => [x.id, r1(x.x), r1(x.y), r1(x.vx), r1(x.vy), x.o]),
     };
     if (this.state === STATE.RESULTS) head.res = this.results;
+    if (this.mode === 'potato' && this.state === STATE.PLAY) head.pt = this.itPlayers().map((p) => [p.id, r1(Math.max(0, p.pot))]);
+    if (this.state === STATE.VOTE && this.vote) { head.vc = { m: this.vote.maps, d: this.vote.modes }; head.vt = this.tally(); }
     const base = JSON.stringify(head).slice(0, -1);
     for (const p of this.players.values()) {
       if (p.bot || !p.ws || p.ws.readyState !== 1) continue;

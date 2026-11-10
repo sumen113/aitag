@@ -110,6 +110,7 @@
 
   /* ---- server browser ---- */
   const svList = $('svList'), svErr = $('svErr'), svForm = $('svForm'), svPick = $('svPick'), svFormErr = $('svFormErr');
+  const modeLbl = (m) => ({ classic: 'Classic', infection: 'Infection', potato: 'Hot Potato' }[m] || 'Vote each round');
   const fmtTime = (s) => (s % 60 ? s + 's' : (s / 60) + ' min');
   let svTimer = 0, svMapsDone = false;
   const svPassForm = $('svPassForm');
@@ -128,7 +129,7 @@
     for (const s of d.servers) {
       const li = el('li', 'sv' + (s.regular ? ' reg' : '') + (s.full ? ' full' : ''));
       const info = el('div', 'sv-info');
-      info.append(el('b', 'sv-name', (s.lock ? '🔒 ' : '') + s.name), el('span', 'sv-meta mono', s.regular ? 'always on · standard rules · earns wins' : fmtTime(s.time) + ' games · ' + (s.bots ? s.bots + ' bots' : 'no bots') + ' · ' + (s.state === 2 ? 'round in progress' : 'lobby')));
+      info.append(el('b', 'sv-name', (s.lock ? '🔒 ' : '') + s.name), el('span', 'sv-meta mono', s.regular ? 'always on · vote on arena + mode every round · earns wins' + (s.state === 2 ? ' · match running, new players wait' : '') : modeLbl(s.mode) + ' · ' + fmtTime(s.time) + ' · ' + (s.bots ? s.bots + ' bots' : 'no bots') + ' · ' + (s.state === 2 ? 'match running, you wait' : 'lobby')));
       const cnt = el('span', 'sv-count mono', s.regular ? s.players + ' playing' : s.players + '/' + s.max);
       const b = el('button', 'btn ' + (s.regular ? 'btn-primary' : 'btn-ghost'), null);
       b.type = 'button'; b.disabled = !!s.full; b.append(el('span', 'btn-label', s.full ? 'Full' : 'Join'));
@@ -150,7 +151,7 @@
   $('svBack').addEventListener('click', () => { svView(false); Sfx.play('click'); });
   svForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const o = { name: $('svName').value, time: Number($('svTime').value), max: Number($('svMax').value), map: $('svMap').value, bots: Number($('svBots').value) || 0, diff: $('svDiff').value, pass: $('svPassNew').value };
+    const o = { name: $('svName').value, time: Number($('svTime').value), max: Number($('svMax').value), map: $('svMap').value, bots: Number($('svBots').value) || 0, diff: $('svDiff').value, pass: $('svPassNew').value, mode: $('svMode').value };
     const v = C.validateServer(o);
     if (!v.ok) { svFormErr.textContent = v.err; Sfx.play('deny'); return; }
     svFormErr.textContent = ''; closeModal(); go('online', { create: o });
@@ -639,9 +640,15 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-8';
+  const NEWS_VERSION = 'update-9';
   const NEWS = [
-    { v: 'Update 8', tag: 'Newest', items: [
+    { v: 'Update 9 · Game modes', tag: 'Newest', items: [
+      ['Vote every round', 'On the Regular server everyone now votes on the next arena and the next game mode before each round.'],
+      ['Infection', 'Zombie tag. Every tag spreads the infection and the tagger keeps going. Last survivor wins. Plays on a brand new big arena, Outbreak.'],
+      ['Hot Potato', 'The tag is a potato with a 10 second fuse. Pass it on or you blow up. Every pass resets the fuse, and it gets shorter with each player eliminated. Last one standing wins.'],
+      ['No joining mid-match', 'If a match is running when you arrive, you watch as a ghost and jump in next round. Want to play now? Make your own server (with a fixed game mode if you like).'],
+    ] },
+    { v: 'Update 8', items: [
       ['Guac the Avocado', 'The priciest fighter yet, 6 wins. Pit Shot spits a seed in a straight line: as IT it tags the first runner it hits, as a runner it stuns the tagger.'],
       ['Two taggers', 'Rooms with 7 or more players now start every round with two taggers.'],
       ['Hide interface', 'New eye button in the game (or press H) hides the HUD for a clean view.'],

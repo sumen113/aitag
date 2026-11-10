@@ -565,3 +565,43 @@ body.in-game .news-card { display: none !important; }
 .tone { width: 28px; height: 28px; border-radius: 50%; border: var(--bw) solid var(--ink); padding: 0; transition: box-shadow .2s, filter .2s; }      /* no CSS transform transition here: GSAP animates this element's scale */
 .tone:hover { filter: brightness(1.1) saturate(1.1); }
 .tone[aria-checked="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--ink); }
+
+/* ---- game modes: vote screen, potato fuse, spectators ---- */
+#vote { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; background: rgba(20, 18, 43, .42); z-index: 6; }
+#vote.hidden { display: none; }
+.vote-card { width: min(720px, 100%); max-height: 100%; overflow: auto; padding: 16px 18px 14px; display: grid; gap: 8px; box-shadow: 6px 6px 0 var(--ink) !important; }
+.vote-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.vote-head b { font-size: 26px; }
+.vote-bar { height: 10px; border: var(--bw) solid var(--ink); border-radius: 999px; background: var(--paper-2); overflow: hidden; }
+.vote-bar i { display: block; height: 100%; width: 100%; background: var(--red); transform-origin: left center; }
+.vote-sub { margin: 4px 0 0; color: var(--muted); }
+.vote-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.vote-row.one { grid-template-columns: minmax(0, 1fr); }
+.vopt { position: relative; text-align: left; display: grid; gap: 2px; padding: 10px 12px; min-height: 74px; background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 14px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; transition: background .15s, box-shadow .15s; }
+.vopt:hover { background: #fff; }
+.vopt:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+.vopt b { font: 800 17px/1.1 var(--display); letter-spacing: -.02em; padding-right: 34px; }
+.vopt span { font-size: 12.5px; line-height: 1.25; color: var(--muted); }
+.vopt .vn { position: absolute; right: 8px; top: 8px; min-width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; background: var(--ink); color: var(--paper); font: 700 12px var(--mono); padding: 0 6px; }
+.vopt .vk { position: absolute; right: 10px; bottom: 6px; font: 700 10px var(--mono); color: var(--muted); opacity: .7; }
+.vopt.picked { background: var(--yellow); box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink), 3px 3px 0 6px var(--ink); }
+.vopt.picked span { color: var(--ink); }
+.vopt.lead:not(.picked) { background: #ffe7a1; }
+.vopt[data-mode="infection"] b { color: #1f9d55; } .vopt[data-mode="potato"] b { color: #d6711a; }
+.vote-hint { margin: 2px 0 0; text-align: center; color: var(--muted); font-size: 10.5px; }
+#app.ui-off #vote { display: none !important; }
+
+.fuse { display: flex; align-items: baseline; gap: 8px; padding: 4px 16px; border: var(--bw) solid var(--ink); border-radius: 999px; background: var(--orange); color: #fff; box-shadow: 2px 2px 0 var(--ink); }
+.fuse.hidden { display: none; }
+.fuse b { font: 800 30px/1 var(--display); min-width: 3.2ch; text-align: center; font-variant-numeric: tabular-nums; }
+.fuse.danger { background: var(--red); }
+.role.zombie { background: #2f9e57; color: #fff; }
+.role.potato { background: var(--orange); color: #fff; }
+.role.ghost { background: var(--ink); color: var(--paper); }
+.brow.out { opacity: .45; }
+.brow .tg.pt { background: var(--orange); } .brow .tg.zb { background: #2f9e57; } .brow .tg.gh { background: var(--ink); }
+.bn.green { background: #7ddc4f; } .bn.orange { background: var(--orange); color: #fff; }
+@media (max-width: 760px) {
+  .vote-row { grid-template-columns: 1fr; gap: 6px; } .vopt { min-height: 0; padding: 7px 10px; } .vopt span { display: none; }
+  .vote-card { padding: 12px; } .vote-hint { display: none; }
+}

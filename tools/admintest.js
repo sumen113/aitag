@@ -1,4 +1,5 @@
 'use strict';
+process.env.VOTE_TIME = process.env.VOTE_TIME || '0.4';   // regular/solo rooms vote before each round: keep it short in tests
 /* Admin API integration test: access control, passcode, moderation, wins/items, password reset, announce, banner, leaderboard. */
 process.env.PORT = '3120';
 const srv = require('../server.js');

@@ -26,7 +26,18 @@
   const TAG_IMMUNITY = 2.0, TAG_LOCK = 0.6;
   const TAG_REACH = 10;                      // extra px of tag range beyond touching: generous on purpose (players are far from the server)
   const LAG_COMP_MAX = 0.16;                 // seconds of server-side rewind granted to the tagger
-  const STATE = { WAIT: 0, COUNT: 1, PLAY: 2, RESULTS: 3 };
+  const STATE = { WAIT: 0, COUNT: 1, PLAY: 2, RESULTS: 3, VOTE: 4 };
+  const VOTE_TIME = 14;                      // seconds the map + mode vote stays open
+
+  /* game modes: what a tag means and when a round ends */
+  const MODES = [
+    { id: 'classic',   name: 'Classic Tag', short: 'Classic', time: 0,   map: '',         boost: 1.07, blurb: 'One tagger. Stay untagged the longest to win.' },
+    { id: 'infection', name: 'Infection',   short: 'Infection', time: 150, map: 'outbreak', boost: 1.0, blurb: 'Every tag infects. Be the last survivor. Plays on the big Outbreak map.' },
+    { id: 'potato',    name: 'Hot Potato',  short: 'Potato',  time: 180, map: '',         boost: 1.1, blurb: 'Pass the potato before it blows up. Last one standing wins.' },
+  ];
+  const MODE_BY_ID = {}; MODES.forEach((m, i) => { m.i = i; MODE_BY_ID[m.id] = m; });
+  const POTATO_START = 10, POTATO_MIN = 4, POTATO_STEP = 0.75;      // fuse seconds, shrinking a little with every elimination
+  const potatoFuse = (elims) => Math.max(POTATO_MIN, POTATO_START - POTATO_STEP * elims);
 
   /* ----------------------------- characters ----------------------------- */
   // color index 0 = the character's natural color
@@ -126,7 +137,9 @@
     const diff = ['easy', 'normal', 'hard'].includes(o.diff) ? o.diff : 'normal';
     const pass = o.pass == null ? '' : String(o.pass);
     if (pass && (pass.length < SERVER_LIMITS.PASS_MIN || pass.length > SERVER_LIMITS.PASS_MAX)) return { ok: false, err: `Passwords are ${SERVER_LIMITS.PASS_MIN}-${SERVER_LIMITS.PASS_MAX} characters (or leave it empty for an open server).` };
-    return { ok: true, name, time, max, map, bots, diff, pass };
+    const mode = o.mode === undefined || o.mode === '' ? 'vote' : String(o.mode);
+    if (mode !== 'vote' && !MODE_BY_ID[mode]) return { ok: false, err: 'Unknown game mode.' };
+    return { ok: true, name, time, max, map, bots, diff, pass, mode };
   }
 
   /** True when a player holding `owned` (array of item ids; may be empty for guests) may use character `charId`. */
@@ -280,6 +293,43 @@
     return { id: 'station', name: 'Space Station', blurb: 'Teleporters, conveyors and a glowing reactor.', w: 2000, h: 1300, theme: 'station', baseIce: false, obs, zones };
   }
 
+
+  /* Outbreak: a big city for Infection. Streets 240 px wide, blocks with alleys, parked cars, barrels and a central plaza. */
+  function buildCity() {
+    const obs = [], W = 3600, H = 2400, M = 200, ST = 240, cols = 5, rows = 3;
+    const bw = (W - 2 * M - (cols - 1) * ST) / cols, bh = (H - 2 * M - (rows - 1) * ST) / rows;
+    const R = mulberry32(4242);
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const x = M + i * (bw + ST), y = M + j * (bh + ST);
+      if (i === 2 && j === 1) {                                           // central plaza
+        obs.push({ t: 'c', x: x + bw / 2, y: y + bh / 2, r: 110, k: 'fountain' });
+        for (const [dx, dy, w, h] of [[40, 40, 110, 28], [bw - 150, 40, 110, 28], [40, bh - 68, 110, 28], [bw - 150, bh - 68, 110, 28]]) obs.push({ t: 'r', x: x + dx, y: y + dy, w, h, k: 'barrier' });
+        continue;
+      }
+      const v = (i * 3 + j * 5) % 4, a = 110;                             // alley width between split buildings
+      if (v === 0) obs.push({ t: 'r', x: x + 30, y: y + 30, w: bw - 60, h: bh - 60, k: 'bldg' });
+      else if (v === 1) { const w1 = (bw - a - 60) * 0.5; obs.push({ t: 'r', x: x + 30, y: y + 30, w: w1, h: bh - 60, k: 'bldg' }, { t: 'r', x: x + 30 + w1 + a, y: y + 30, w: bw - 60 - w1 - a, h: bh - 60, k: 'bldg' }); }
+      else if (v === 2) { const h1 = (bh - a - 60) * 0.5; obs.push({ t: 'r', x: x + 30, y: y + 30, w: bw - 60, h: h1, k: 'bldg' }, { t: 'r', x: x + 30, y: y + 30 + h1 + a, w: bw - 60, h: bh - 60 - h1 - a, k: 'bldg' }); }
+      else {                                                              // L-shaped pair with a courtyard
+        const w1 = bw * 0.55, h1 = bh * 0.5;
+        obs.push({ t: 'r', x: x + 30, y: y + 30, w: w1, h: h1 - 20, k: 'bldg' }, { t: 'r', x: x + 30 + w1 + a * 0.6, y: y + 30, w: bw - 60 - w1 - a * 0.6, h: bh - 60, k: 'bldg' }, { t: 'r', x: x + 30, y: y + h1 + 70, w: w1, h: bh - h1 - 100, k: 'bldg' });
+      }
+    }
+    // parked cars and barrels, kept to the edges of the streets so the avenues stay open
+    for (let i = 0; i < 26; i++) {
+      const horiz = R() < 0.5, lane = (R() * (horiz ? rows - 1 : cols - 1)) | 0, cross = (R() * (horiz ? cols : cols)) | 0;
+      if (horiz) { const cy = M + (lane + 1) * bh + lane * ST + ST * (R() < 0.5 ? 0.18 : 0.82), cx = M + cross * (bw + ST) + 80 + R() * (bw - 160); if (cx < W - 200) obs.push({ t: 'r', x: cx, y: cy - 23, w: 92, h: 46, k: 'car' }); }
+      else { const cx = M + (lane + 1) * bw + lane * ST + ST * (R() < 0.5 ? 0.18 : 0.82), cy = M + ((R() * rows) | 0) * (bh + ST) + 80 + R() * (bh - 160); if (cy < H - 200) obs.push({ t: 'r', x: cx - 23, y: cy, w: 46, h: 92, k: 'car' }); }
+    }
+    for (let i = 0; i < 18; i++) { const x = 260 + R() * (W - 520), y = 260 + R() * (H - 520); obs.push({ t: 'c', x, y, r: 17, k: 'barrel' }); }
+    // drop anything that overlaps a building (cars/barrels can land inside blocks)
+    const solid = obs.filter((o) => o.k === 'bldg' || o.k === 'fountain' || o.k === 'barrier');
+    const hits = (o) => solid.some((b) => (b.t === 'r' ? (o.t === 'r' ? !(o.x > b.x + b.w + 14 || o.x + o.w < b.x - 14 || o.y > b.y + b.h + 14 || o.y + o.h < b.y - 14) : (Math.max(b.x - o.x, 0, o.x - b.x - b.w) ** 2 + Math.max(b.y - o.y, 0, o.y - b.y - b.h) ** 2) < (o.r + 14) ** 2)
+      : (o.t === 'r' ? (Math.hypot(Math.max(o.x - b.x, 0, b.x - o.x - o.w), Math.max(o.y - b.y, 0, b.y - o.y - o.h)) < b.r + 14) : Math.hypot(o.x - b.x, o.y - b.y) < o.r + b.r + 14)));
+    const keep = obs.filter((o) => o.k === 'bldg' || o.k === 'fountain' || o.k === 'barrier' || !hits(o));
+    return { id: 'outbreak', name: 'Outbreak', blurb: 'A huge ruined city. Made for Infection.', w: W, h: H, theme: 'city', baseIce: false, obs: keep, zones: [], big: true };
+  }
+
   /* ------------------------------ collision ----------------------------- */
   function circleFree(map, x, y, r) {
     if (x < r || y < r || x > map.w - r || y > map.h - r) return false;
@@ -372,9 +422,10 @@
     return out;
   }
 
-  const MAPS = [buildPark(), buildNeon(), buildFrost(), buildCandy(), buildStation()];
+  const MAPS = [buildPark(), buildNeon(), buildFrost(), buildCandy(), buildStation()];       // the vote / rotation pool
+  const BIG_MAPS = [buildCity()];                                                         // only used by Infection
   const MAP_BY_ID = {};
-  for (const m of MAPS) {
+  for (const m of MAPS.concat(BIG_MAPS)) {
     MAP_BY_ID[m.id] = m;
     m.tele = m.zones.filter((z) => z.k === 'tele');
     m.spawns = computeSpawns(m, 16);
@@ -382,11 +433,11 @@
 
   /* ------------------------- player simulation -------------------------- */
   // The subset of a player's state that is simulated identically client + server.
-  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'aux', 'bx', 'by'];
+  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by'];
   const rnd = (v) => Math.round(v * 1000) / 1000;
 
   function newSim(id, c, x, y) {
-    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, aux: 0, bx: 0, by: 0 };
+    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0 };
   }
   function packSim(p) { const a = new Array(SIM.length); for (let i = 0; i < SIM.length; i++) a[i] = rnd(+p[SIM[i]] || 0); return a; }
   function unpackSim(p, a) { for (let i = 0; i < SIM.length; i++) p[SIM[i]] = a[i]; }
@@ -434,7 +485,7 @@
     if (len > 1) { mx /= len; my /= len; len = 1; }
     if (len > 0.15) { p.fx = mx / len; p.fy = my / len; }
     const stunned = p.stun > 0;
-    if (inp.a && !stunned) {
+    if (inp.a && !stunned && !p.out) {                         // spectators (waiting or eliminated) can't use abilities
       if (def.id === 'bat' && p.aux > 0 && p.cd <= 0) {          // second press: snap back to the beacon
         if (ev) ev.push({ k: 'ab', n: 'recall', id: p.id, x: p.x, y: p.y, x1: p.bx, y1: p.by });
         p.x = p.bx; p.y = p.by; p.vx = 0; p.vy = 0; p.aux = 0; p.cd = def.cd;
@@ -454,7 +505,7 @@
     if (id === 'star' && p.abT > 0 && stunned) p.abT = 0;      // a stun uncurls Andy
     const inRoll = id === 'star' && p.abT > 0;
 
-    let maxSp = BASE_SPEED * def.speed * (p.it ? IT_BOOST : 1) * (p.sm || 1);
+    let maxSp = BASE_SPEED * def.speed * (p.it ? (ctx.itBoost || IT_BOOST) : 1) * (p.sm || 1);
     if (id === 'cat' && p.abT > 0) maxSp *= 1.08;
     else if (id === 'robot' && p.abT > 0) maxSp *= p.it ? 1.3 : 0.88;
     let accel = ACCEL, fric = FRIC, inGrip = false, inIce = false;
@@ -521,8 +572,8 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, MAP_BY_ID, SIM,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, potatoFuse, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

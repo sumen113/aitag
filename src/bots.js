@@ -165,7 +165,7 @@ function botAbility(room, p, itp, d, los, target) {
 }
 
 function thinkBot(room, p) {
-  if (room.state !== T.STATE.PLAY) { p.input.x = 0; p.input.y = 0; return; }
+  if (room.state !== T.STATE.PLAY || p.out) { p.input.x = 0; p.input.y = 0; p.input.a = 0; return; }
   const ai = p.ai || (p.ai = { next: 0, tgt: -1, wp: null, wpUntil: 0 });
   if (room.tickN < ai.next) return;
   const df = DIFFS[room.diff || 'normal']; WOB = df.wobble;
@@ -177,7 +177,7 @@ function thinkBot(room, p) {
   if (p.it) {
     let best = null, bd = 1e9, fallback = null, fd = 1e9;
     for (const q of room.players.values()) {
-      if (q === p) continue;
+      if (q === p || q.it || q.out) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
       if (d < fd) { fd = d; fallback = q; }
       if (q.imm > 0.25) continue;

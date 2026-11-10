@@ -1,12 +1,12 @@
 {
   "name": "tag-rush",
-  "version": "6.3.0",
+  "version": "7.0.0",
   "description": "Tag Rush - a real-time multiplayer game of tag with unique characters, accounts and a shop.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node tools/dbtest.js && node tools/admintest.js && node tools/fuzz.js",
+    "test": "node tools/modetest.js && node tools/dbtest.js && node tools/admintest.js && node tools/fuzz.js",
     "balance": "node tools/balance.js 120"
   },
   "engines": {
