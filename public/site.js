@@ -640,13 +640,16 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-9';
+  const NEWS_VERSION = 'update-9b';
   const NEWS = [
     { v: 'Update 9 · Game modes', tag: 'Newest', items: [
       ['Vote every round', 'On the Regular server everyone now votes on the next arena and the next game mode before each round.'],
       ['Infection', 'Zombie tag. Every tag spreads the infection and the tagger keeps going. Last survivor wins. Plays on a brand new big arena, Outbreak.'],
-      ['Hot Potato', 'The tag is a potato with a 10 second fuse. Pass it on or you blow up. Every pass resets the fuse, and it gets shorter with each player eliminated. Last one standing wins.'],
-      ['No joining mid-match', 'If a match is running when you arrive, you watch as a ghost and jump in next round. Want to play now? Make your own server (with a fixed game mode if you like).'],
+      ['Hot Potato', 'The tag is a potato with a 10 second fuse. Pass it on or you blow up. Every pass resets the fuse but makes it a little shorter, and so does every player eliminated. Last one standing wins.'],
+      ['7+ players', 'Infection and Hot Potato only appear when 7 or more players are in the server. With fewer it is normal tag, and you can still join mid-round.'],
+      ['Balance', 'Guac now aims with the mouse (click or Space; touch aims with the stick) and recharges in 15s. Hop the Frog recharges in 14s.'],
+      ['Leaving', 'Closing a tab or laptop now removes you from the game almost instantly: you can no longer be tagged or keep the tag.'],
+      ['No joining mid-match', 'If an Infection or Hot Potato match is running when you arrive, you watch as a ghost and jump in next round. Normal tag can be joined any time.'],
     ] },
     { v: 'Update 8', items: [
       ['Guac the Avocado', 'The priciest fighter yet, 6 wins. Pit Shot spits a seed in a straight line: as IT it tags the first runner it hits, as a runner it stuns the tagger.'],

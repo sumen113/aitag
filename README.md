@@ -53,13 +53,13 @@ Pressing **Play online** opens a server picker.
 
 ## Game modes (v7)
 
-Regular servers (and practice) open a 14 s vote before every round: 3 random arenas and 3 modes, one vote each, most votes wins (random tie-break; no votes in practice means Classic). Player-made servers can fix a mode or keep the vote.
+Regular servers (and practice) open a 14 s vote before every round: 3 random arenas and, with **7+ players**, the 3 modes (fewer players: arena vote only, classic tag). Most votes wins, random tie-break; no votes in practice means Classic. Player-made servers can fix a mode or keep the vote, and fall back to classic below 7 players.
 
 - **Classic**: one tagger (two at 7+ players), score for time spent untagged.
 - **Infection**: every tag infects the victim and the tagger stays a zombie. Always plays on the big *Outbreak* arena. Ends when one survivor is left (or time runs out).
-- **Hot Potato**: the tagger holds a potato with a 10 s fuse. A pass resets the fuse; each elimination shortens it (floor 4 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
+- **Hot Potato**: the tagger holds a potato with a 10 s fuse. Every pass resets the fuse but shortens it by 0.4 s, every elimination by 0.5 s (floor 3 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
 
-Nobody can join a running match: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
+Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
 
 ## Admin panel (`/hq`, also reachable at `/admin`)
 
@@ -158,3 +158,7 @@ src/admin.js       admin API: moderation, wins/items, password reset, announceme
 public/            website + game client (index.html, style.css, site.js, game.js, render.js, chars.js, audio.js, shared.js), hq.html/hq.js/hq.css (the admin panel)
 tools/             balance.js, fuzz.js (integration), dbtest.js (database), admintest.js (admin API)
 ```
+
+### Dead connections
+
+The server pings every second. A socket that hasn't answered for 1.5 s is marked `gone`: invisible, untaggable, and its tag/potato is passed on at once; after 6 s it is dropped. The client also closes its socket on `pagehide`.

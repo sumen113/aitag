@@ -184,6 +184,7 @@ wss.on('connection', (ws, req) => {
     if (ws.pingAt) { const rtt = now - ws.pingAt; ws.rtt = ws.rtt ? ws.rtt * 0.6 + rtt * 0.4 : rtt; if (c.player) c.player.rtt = ws.rtt; }
   });
   const c = { room: null, player: null, user: null, joining: false, tokens: 120, last: Date.now() };
+  ws.c = c;
   const fail = (m) => { try { ws.send(JSON.stringify({ t: 'err', m })); } catch (e) { /* closed */ } };
 
   const ipKeyOf = () => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
@@ -289,13 +290,18 @@ setInterval(() => {
 }, 6);
 
 // latency probe every 2 s (also keeps idle connections alive behind Render's proxy); drop sockets that stopped answering
+// A socket that stops answering pings (laptop lid closed, tab killed, network gone) is marked "gone" after 1.5 s: untaggable and it
+// can't keep the tag/potato. After 6 s it is dropped for good. TCP alone can take much longer to notice.
 setInterval(() => {
   const now = Date.now();
   for (const ws of wss.clients) {
-    if (now - ws.lastPong > 30000) { ws.terminate(); continue; }
+    const age = now - ws.lastPong;
+    if (age > 6000) { ws.terminate(); continue; }
+    const p = ws.c && ws.c.player;
+    if (p && ws.c.room) ws.c.room.markGone(p, age > 1500);
     ws.pingAt = performance.now(); try { ws.ping(); } catch (e) { /* closing */ }
   }
-}, 2000);
+}, 1000);
 
 if (require.main === module) {
   ensureRegular();

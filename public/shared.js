@@ -36,8 +36,9 @@
     { id: 'potato',    name: 'Hot Potato',  short: 'Potato',  time: 180, map: '',         boost: 1.1, blurb: 'Pass the potato before it blows up. Last one standing wins.' },
   ];
   const MODE_BY_ID = {}; MODES.forEach((m, i) => { m.i = i; MODE_BY_ID[m.id] = m; });
-  const POTATO_START = 10, POTATO_MIN = 4, POTATO_STEP = 0.75;      // fuse seconds, shrinking a little with every elimination
-  const potatoFuse = (elims) => Math.max(POTATO_MIN, POTATO_START - POTATO_STEP * elims);
+  const POTATO_START = 10, POTATO_MIN = 3, POTATO_PASS_STEP = 0.4, POTATO_ELIM_STEP = 0.5;      // fuse seconds: every pass and every elimination shortens it
+  const potatoFuse = (passes, elims) => Math.max(POTATO_MIN, POTATO_START - POTATO_PASS_STEP * (passes || 0) - POTATO_ELIM_STEP * (elims || 0));
+  const MODE_MIN_PLAYERS = 7;                                      // Infection and Hot Potato need a crowd; below this everything is classic tag
 
   /* ----------------------------- characters ----------------------------- */
   // color index 0 = the character's natural color
@@ -76,7 +77,7 @@
   const CHARS = [
     { id: 'fox',   fx: 'dash',   name: 'Ziggy', species: 'Fox',     natural: '#ff8a3d', ability: 'Dash',      cd: 8,  dur: 0.2,  speed: 1.00, radius: 18, role: 'Skirmisher', starter: true,
       desc: 'A lightning burst of speed in the direction you are moving.' },
-    { id: 'frog',  fx: 'leap',   name: 'Hop',   species: 'Frog',    natural: '#55d16b', ability: 'Leap',      cd: 20, dur: 0.5,  speed: 0.95, radius: 18, role: 'Escape artist', price: 1,
+    { id: 'frog',  fx: 'leap',   name: 'Hop',   species: 'Frog',    natural: '#55d16b', ability: 'Leap',      cd: 14, dur: 0.5,  speed: 0.95, radius: 18, role: 'Escape artist', price: 1,
       desc: 'Jump clean over walls and cannot be tagged in the air. Lands with a sticky splash.' },
     { id: 'ghost', fx: 'phase',  name: 'Boo',   species: 'Ghost',   natural: '#dfe7ff', ability: 'Phase',     cd: 11, dur: 2.0,  speed: 0.98, radius: 18, role: 'Wall walker', starter: true,
       desc: 'Drift straight through walls and obstacles for two seconds.' },
@@ -100,8 +101,8 @@
       desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
     { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 12, dur: 0, speed: 1.02, radius: 17, role: 'Wind caller', price: 2,
       desc: 'Flap a mighty gust that blows everyone nearby away, then glide off in a burst of speed.' },
-    { id: 'avocado', fx: 'seed', name: 'Guac',  species: 'Avocado', natural: '#6aa84f', ability: 'Pit Shot', cd: 9, dur: 0, speed: 0.97, radius: 18, role: 'Sharpshooter', price: 6,
-      desc: 'Spit a hard seed in a straight line. As IT it tags the first runner it hits; as a runner it stuns whoever is IT.' },
+    { id: 'avocado', fx: 'seed', name: 'Guac',  species: 'Avocado', natural: '#6aa84f', ability: 'Pit Shot', cd: 15, dur: 0, speed: 0.97, radius: 18, role: 'Sharpshooter', price: 6,
+      desc: 'Spit a hard seed at your mouse (click or Space; on touch it goes where you steer). As IT it tags the first runner it hits; as a runner it stuns whoever is IT.' },
   ];
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -442,9 +443,11 @@
   function packSim(p) { const a = new Array(SIM.length); for (let i = 0; i < SIM.length; i++) a[i] = rnd(+p[SIM[i]] || 0); return a; }
   function unpackSim(p, a) { for (let i = 0; i < SIM.length; i++) p[SIM[i]] = a[i]; }
 
-  function useAbility(p, def, ctx, ev, mx, my, len) {
+  function useAbility(p, def, ctx, ev, mx, my, len, inp) {
     let dx, dy;
-    if (len > 0.15) { dx = mx / len; dy = my / len; } else { dx = p.fx; dy = p.fy; }
+    const al = inp && def.id === 'avocado' ? Math.hypot(inp.ax || 0, inp.ay || 0) : 0;      // the avocado shoots where the mouse points, not where it walks
+    if (al > 0.1) { dx = inp.ax / al; dy = inp.ay / al; }
+    else if (len > 0.15) { dx = mx / len; dy = my / len; } else { dx = p.fx; dy = p.fy; }
     const e = { k: 'ab', n: def.fx, id: p.id, x: p.x, y: p.y, dx, dy };
     switch (def.id) {
       case 'fox': case 'frog': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
@@ -493,7 +496,7 @@
         const ax = len > 0.15 ? mx / len : p.fx, ay = len > 0.15 ? my / len : p.fy;
         p.adx = ax; p.ady = ay; p.abT = 0; p.aux = 0.2;
         if (ev) ev.push({ k: 'ab', n: 'pounce', id: p.id, x: p.x, y: p.y, dx: ax, dy: ay });
-      } else if (p.cd <= 0) useAbility(p, def, ctx, ev, mx, my, len);
+      } else if (p.cd <= 0) useAbility(p, def, ctx, ev, mx, my, len, inp);
     }
 
     const id = def.id;
@@ -572,7 +575,7 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, potatoFuse, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };

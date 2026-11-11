@@ -334,6 +334,7 @@
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
   window.addEventListener('keyup', (e) => { if (MOVE[e.code]) K[MOVE[e.code]] = false; });
+  window.addEventListener('pagehide', () => closeWs());
   const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.joy.active = false; $('joy').classList.add('hidden'); };
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => { G.acc = 0; if (document.hidden) releaseAll(); });
@@ -441,6 +442,18 @@
   window.addEventListener('touchend', joyEnd, { passive: true }); window.addEventListener('touchcancel', joyEnd, { passive: true });
   document.addEventListener('contextmenu', (e) => { if (live()) e.preventDefault(); });
 
+  /* ===== avocado aiming: the seed goes where the mouse is (touch screens keep aiming with the move stick) ===== */
+  const mouse = { on: false, x: 0, y: 0 };
+  window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mouse.on = true; mouse.x = e.clientX; mouse.y = e.clientY; } else mouse.on = false; }, { passive: true });
+  window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') { mouse.on = true; mouse.x = e.clientX; mouse.y = e.clientY; } else mouse.on = false; }, { passive: true, capture: true });
+  const isAvocado = () => !!G.me && CHARS[G.me.c].id === 'avocado';
+  function mouseAim() {
+    if (!mouse.on || !isAvocado() || !G.me) return null;
+    const dx = G.cam.x + (mouse.x - G.W / 2) / G.zoom - G.me.x, dy = G.cam.y + (mouse.y - G.H / 2) / G.zoom - G.me.y, l = Math.hypot(dx, dy);
+    return l < 8 ? null : [Math.round(dx / l * 100) / 100, Math.round(dy / l * 100) / 100];
+  }
+  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; Sfx.unlock(); } });
+
   /* ============================= simulation step ============================ */
   const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed']);
   function simStep() {
@@ -449,6 +462,7 @@
     let a = G.abilityQueued ? 1 : 0; G.abilityQueued = false;
     if (G.state === STATE.COUNT) { x = y = a = 0; }
     const inp = { s: ++G.seq, x, y, a };
+    if (a) { const aim = mouseAim(); if (aim) { inp.ax = aim[0]; inp.ay = aim[1]; } }
     G.pending.push(inp); G.sendBuf.push(inp);
     if (G.pending.length > 180) G.pending.shift();
     G.px = G.me.x; G.py = G.me.y;
@@ -460,7 +474,7 @@
   function flushInputs() {
     if (!G.sendBuf.length) return;
     G.lastSend = performance.now();
-    send({ t: 'in', i: G.sendBuf.slice(-10).map((i) => [i.s, i.x, i.y, i.a]) });
+    send({ t: 'in', i: G.sendBuf.slice(-10).map((i) => (i.ax === undefined ? [i.s, i.x, i.y, i.a] : [i.s, i.x, i.y, i.a, i.ax, i.ay])) });
     G.sendBuf.length = 0;
   }
 
@@ -692,8 +706,8 @@
   // a faint dotted line while the avocado's seed is ready, so you can see where it will go
   function drawAim(g, me, t) {
     if (CHARS[me.c].id !== 'avocado' || me.cd > 0 || me.stun > 0 || G.state !== STATE.PLAY) return;
-    const mvx = G.joy.active ? G.joy.x : (K.r ? 1 : 0) - (K.l ? 1 : 0), mvy = G.joy.active ? G.joy.y : (K.d ? 1 : 0) - (K.u ? 1 : 0), len = Math.hypot(mvx, mvy);
-    const dx = len > 0.15 ? mvx / len : me.fx, dy = len > 0.15 ? mvy / len : me.fy;
+    const mvx = G.joy.active ? G.joy.x : (K.r ? 1 : 0) - (K.l ? 1 : 0), mvy = G.joy.active ? G.joy.y : (K.d ? 1 : 0) - (K.u ? 1 : 0), len = Math.hypot(mvx, mvy), aim = mouseAim();
+    const dx = aim ? aim[0] : len > 0.15 ? mvx / len : me.fx, dy = aim ? aim[1] : len > 0.15 ? mvy / len : me.fy;
     g.save(); g.globalAlpha = 0.5; g.strokeStyle = '#e9f3a8'; g.lineWidth = 3; g.lineCap = 'round'; g.setLineDash([2, 14]); g.lineDashOffset = -t * 40;
     g.beginPath(); g.moveTo(G.px + dx * 30, G.py + dy * 30); g.lineTo(G.px + dx * C.SEED_RANGE, G.py + dy * C.SEED_RANGE); g.stroke(); g.restore();
   }
@@ -838,17 +852,36 @@
     paintVote();
     if (!RM.matches && btn) gsap.fromTo(btn, { scale: 0.93 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', clearProps: 'transform' });
   }
+  const thumbs = new Map();
+  function mapThumb(m) {
+    let base = thumbs.get(m.id); if (!base) { base = MapRender.miniBase(m, 240, true); thumbs.set(m.id, base); }
+    const cv = document.createElement('canvas'); cv.width = base.width; cv.height = base.height; cv.getContext('2d').drawImage(base, 0, 0);
+    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.name + ' map'); return cv;
+  }
+  const MODE_ICONS = {
+    classic: '<rect width="64" height="64" rx="12" fill="#ffe0e3"/><circle cx="32" cy="32" r="19" fill="#ff4d5e" stroke="#14122b" stroke-width="3.5"/><text x="32" y="39" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="20" fill="#fff">IT</text><path d="M10 14l9 5M54 14l-9 5M8 50l10-4M56 50l-10-4" stroke="#14122b" stroke-width="3" stroke-linecap="round"/>',
+    infection: '<rect width="64" height="64" rx="12" fill="#dff7e3"/><g stroke="#14122b" stroke-width="3" stroke-linecap="round"><path d="M32 8v8M32 48v8M8 32h8M48 32h8M15 15l6 6M43 43l6 6M49 15l-6 6M21 43l-6 6"/></g><circle cx="32" cy="32" r="17" fill="#4fcf6a" stroke="#14122b" stroke-width="3.5"/><circle cx="26" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="38" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="26.5" cy="29.5" r="1.6" fill="#14122b"/><circle cx="37.5" cy="29.5" r="1.6" fill="#14122b"/><path d="M25 39h14" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M28 39v3M32 39v3M36 39v3" stroke="#14122b" stroke-width="2"/>',
+    potato: '<rect width="64" height="64" rx="12" fill="#ffeacc"/><ellipse cx="31" cy="40" rx="20" ry="15" fill="#c98a4b" stroke="#14122b" stroke-width="3.5" transform="rotate(-12 31 40)"/><g fill="#7a4a22" opacity=".6"><circle cx="22" cy="38" r="2.2"/><circle cx="34" cy="45" r="2.2"/><circle cx="40" cy="35" r="2.2"/><circle cx="28" cy="46" r="1.6"/></g><path d="M36 26c4-5 8-5 11-9" fill="none" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M50 8l2.6 5.4 5.4 2.6-5.4 2.6L50 24l-2.6-5.4-5.4-2.6 5.4-2.6z" fill="#ffd23f" stroke="#14122b" stroke-width="2.2" stroke-linejoin="round"/>',
+  };
+  function modeIcon(id) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = MODE_ICONS[id] || MODE_ICONS.classic; return s;
+  }
   function buildVote(vc, key) {
     voteKey = key; myVote = { m: -1, d: -1 }; voteBtns.m = []; voteBtns.d = []; G.voteDur = Math.max(1, G.tl);
-    const mk = (kind, i, name, blurb, keyNo, id) => {
+    const mk = (kind, i, name, blurb, keyNo, id, img) => {
       const b = el('button', 'vopt'); b.type = 'button'; if (id) b.dataset.mode = id;
-      b.append(el('b', '', name), el('span', '', blurb), el('i', 'vn', '0'), el('i', 'vk', String(keyNo)));
+      img.classList.add('vimg');
+      b.append(img, el('b', '', name), el('span', '', blurb), el('i', 'vn', '0'), el('i', 'vk', String(keyNo)));
       b.addEventListener('click', () => castVote(kind, i, b)); b._n = 0; return b;
     };
     const maps = $('voteMaps'), modes = $('voteModes'); maps.replaceChildren(); modes.replaceChildren();
     maps.classList.toggle('one', vc.m.length === 1); $('voteMapsLbl').textContent = vc.m.length === 1 ? 'Arena (fixed on this server)' : 'Arena';
-    vc.m.forEach((id, i) => { const m = C.MAP_BY_ID[id]; if (!m) return; const b = mk('m', i, m.name, m.blurb || '', i + 1); voteBtns.m.push(b); maps.appendChild(b); });
-    vc.d.forEach((id, i) => { const m = C.MODE_BY_ID[id]; if (!m) return; const b = mk('d', i, m.name, m.blurb, i + 4, id); voteBtns.d.push(b); modes.appendChild(b); });
+    vc.m.forEach((id, i) => { const m = C.MAP_BY_ID[id]; if (!m) return; const b = mk('m', i, m.name, m.blurb || '', i + 1, '', mapThumb(m)); voteBtns.m.push(b); maps.appendChild(b); });
+    vc.d.forEach((id, i) => { const m = C.MODE_BY_ID[id]; if (!m) return; const b = mk('d', i, m.name, m.blurb, i + 4, id, modeIcon(id)); voteBtns.d.push(b); modes.appendChild(b); });
+    const few = vc.d.length < 2;       // under 7 players: only classic tag, so there is nothing to vote on
+    modes.classList.toggle('hidden', few); $('voteModesLbl').textContent = few ? `Infection & Hot Potato unlock at ${C.MODE_MIN_PLAYERS}+ players` : 'Game mode';
+    $('voteHint').textContent = few ? 'Tap an arena to vote · keys 1-3' : 'Tap to vote · keys 1-3 arena, 4-6 mode';
     const wasHidden = voteEl.classList.contains('hidden');
     voteEl.classList.remove('hidden');
     if (voteTween) voteTween.kill();
@@ -943,7 +976,7 @@
       .from('#chat', { x: -80, opacity: 0, duration: 0.6, clearProps: 'transform,opacity' }, 0.25)
       .from('#abilityBtn', { scale: 0, rotation: -90, duration: 0.7, ease: 'back.out(2.4)' }, 0.3);
     const def = CHARS[G.sel.c];
-    setTimeout(() => { if (G.inGame) toast(touchy ? `Drag to move · tap ${def.ability}` : `WASD to move · SPACE for ${def.ability} · ENTER to chat`); }, 900);
+    setTimeout(() => { if (G.inGame) toast(touchy ? `Drag to move · tap ${def.ability}` : def.id === 'avocado' ? 'WASD to move · aim with the mouse · CLICK or SPACE to shoot' : `WASD to move · SPACE for ${def.ability} · ENTER to chat`); }, 900);
   };
   Game.leave = () => {
     closeWs(); G.inGame = false; G.me = null; G.state = STATE.WAIT; G.joinResolve = null;

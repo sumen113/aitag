@@ -605,3 +605,11 @@ body.in-game .news-card { display: none !important; }
   .vote-row { grid-template-columns: 1fr; gap: 6px; } .vopt { min-height: 0; padding: 7px 10px; } .vopt span { display: none; }
   .vote-card { padding: 12px; } .vote-hint { display: none; }
 }
+
+/* vote options carry a picture: a map preview or a mode icon */
+.vopt { grid-template-columns: 84px minmax(0, 1fr); column-gap: 10px; align-items: center; }
+.vopt .vimg { grid-row: 1 / span 2; width: 84px; height: 60px; border: var(--bw) solid var(--ink); border-radius: 10px; background: var(--paper-2); object-fit: cover; display: block; }
+.vopt svg.vimg { height: 60px; padding: 0; object-fit: contain; }
+.vopt b { grid-column: 2; align-self: end; } .vopt span { grid-column: 2; align-self: start; }
+.vote-row.hidden { display: none; }
+@media (max-width: 760px) { .vopt { grid-template-columns: 52px minmax(0, 1fr); } .vopt .vimg { width: 52px; height: 38px; grid-row: 1; } .vopt b { grid-row: 1; align-self: center; } }
