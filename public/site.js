@@ -331,7 +331,7 @@
   }
   function buildArenas() {
     const grid = $('arenaGrid');
-    C.MAPS.forEach((m) => {
+    C.MAPS.concat(C.BIG_MAPS).forEach((m) => {
       const card = el('article', 'arena-card card'); const cv = document.createElement('canvas');
       const base = MapRender.miniBase(m, 640, true); cv.width = base.width; cv.height = base.height; cv.getContext('2d').drawImage(base, 0, 0);
       cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', m.name + ' map');
@@ -640,9 +640,17 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-9b';
+  const NEWS_VERSION = 'update-10';
   const NEWS = [
-    { v: 'Update 9 · Game modes', tag: 'Newest', items: [
+    { v: 'Update 10 · Map update', tag: 'Newest', items: [
+      ['9 arenas', 'Three brand new arenas, a remaster of the old five, and Outbreak for Infection. Every one has its own trick.'],
+      ['Coral Reef', 'Four whirlpools swing you round the reef. Kelp forests hide you from anyone who is not close.'],
+      ['Factory Floor', 'A clockwise conveyor ring around the edge and two feed belts into the big press. Run with the belts, or against them.'],
+      ['Pinball Palace', 'Bumpers kick you across the table and flipper pads fire you back in. Chaos on purpose.'],
+      ['Remastered', 'Sunny Park has bushes to hide in. Neon Grid has data-stream conveyors and a racing line round the core. Frosty Lake has snow drifts and corner shelters. Candy Maze has licorice conveyors. The Space Station reactor now spins you round it.'],
+      ['Balance', 'Hot Potato and Infection now always start with exactly one potato / one zombie. Andy the Starfish rolls slower, for less time, and takes 17s to recharge. Pip the Bird recharges in 9s, with a wider and stronger Gale and a longer glide.'],
+    ] },
+    { v: 'Update 9 · Game modes', items: [
       ['Vote every round', 'On the Regular server everyone now votes on the next arena and the next game mode before each round.'],
       ['Infection', 'Zombie tag. Every tag spreads the infection and the tagger keeps going. Last survivor wins. Plays on a brand new big arena, Outbreak.'],
       ['Hot Potato', 'The tag is a potato with a 10 second fuse. Pass it on or you blow up. Every pass resets the fuse but makes it a little shorter, and so does every player eliminated. Last one standing wins.'],

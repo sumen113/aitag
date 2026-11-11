@@ -8,7 +8,7 @@
   const clamp = C.clamp, TAU = Math.PI * 2;
   const q2 = (v) => Math.round(v * 100) / 100;
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8', city: '#b9bcc6' };
+  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8', city: '#b9bcc6', reef: '#e8fdff', factory: '#b9bcc6', pinball: '#ffd666' };
   const FONT = "'Bricolage Grotesque', system-ui, sans-serif";
   const touchy = window.matchMedia && matchMedia('(pointer: coarse)').matches;
 
@@ -496,7 +496,15 @@
     return v;
   }
   const project = (x, y) => [(x - G.cam.x) * G.zoom + G.W / 2, (y - G.cam.y) * G.zoom + G.H / 2];
-  const isCloaked = (e) => e.abT > 0 && CHARS[e.c].id === 'cat' && !e.isMe;
+  const HIDE_SEE = 250;                       // bushes and kelp: you only see someone hiding in one from this close
+  let hideMap = null, hideZones = [];
+  function inHide(x, y) {
+    const map = G.map; if (!map) return false;
+    if (hideMap !== map) { hideMap = map; hideZones = map.zones.filter((z) => z.k === 'hide'); }
+    for (const z of hideZones) if ((x - z.x) * (x - z.x) + (y - z.y) * (y - z.y) < z.r * z.r) return true;
+    return false;
+  }
+  const isCloaked = (e) => (e.abT > 0 && CHARS[e.c].id === 'cat' && !e.isMe) || (!e.isMe && !e.decoy && inHide(e.x, e.y) && G.me && Math.hypot(e.x - G.me.x, e.y - G.me.y) > HIDE_SEE);
 
   function drawEnt(g, e, t, dt, labels) {
     const def = CHARS[e.c], id = def.id, r = def.radius, s = r / 18, v = visOf(e.key);
@@ -669,6 +677,7 @@
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
+      if (inHide(s.x, s.y) && Math.hypot(s.x - mx, s.y - my) > HIDE_SEE) continue;      // in a bush and not close: out of sight
       ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
@@ -681,6 +690,7 @@
       if (e.x < v.x0 - 60 || e.x > v.x1 + 60 || e.y < v.y0 - 80 || e.y > v.y1 + 60) continue;
       drawEnt(g, e, t, dt, labels);
     }
+    MapRender.drawCanopy(g, map, v, t, { x: mx, y: my });
     if (CHARS[me.c].id === 'bat' && me.aux > 0 && G.state !== STATE.RESULTS) drawBeacon(g, me, t);
     drawSeeds(g, t);
     drawAim(g, me, t);

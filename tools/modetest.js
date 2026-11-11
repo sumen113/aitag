@@ -37,7 +37,7 @@ r.castVote(null, 'd', 0); ok(true, 'bad vote caller ignored');
 
 // Hot Potato
 r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY);
-ok(r.mode === 'potato' && r.itPlayers().length === 2 && r.itPlayers()[0].pot > 9, 'potato starts with two holders (7 players) and a ~10 s fuse');
+ok(r.mode === 'potato' && r.itPlayers().length === 1 && r.itPlayers()[0].pot > 9, 'potato starts with exactly one holder (even at 7+ players) and a ~10 s fuse');
 run(r, 90, () => r.state === T.STATE.RESULTS);
 ok(r.state === T.STATE.RESULTS && r.evs.filter((e) => e.k === 'boom').length === 6, 'idle holders explode one by one until a single player is left');
 ok(r.results.length === 7 && r.results[0][1] > r.results[1][1], 'winner is the unique top scorer');
@@ -52,17 +52,17 @@ ok(T.potatoFuse(0, 0) === 10 && T.potatoFuse(5, 0) < T.potatoFuse(1, 0) && T.pot
 // eliminated players never get the potato or tags
 r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY);
 const first = r.itPlayers()[0]; r.explode(first);
-ok(first.out === 1 && !first.it && r.itPlayers().length === 2 && !r.itPlayers().includes(first), 'explosion eliminates the holder and passes the potato on');
+ok(first.out === 1 && !first.it && r.itPlayers().length === 1 && !r.itPlayers().includes(first), 'explosion eliminates the holder and passes the potato on');
 
 // Infection
 r = mk('infection', 7); run(r, 6, () => r.state === T.STATE.PLAY);
-ok(r.map.id === 'outbreak' && r.itPlayers().length === 2, 'infection starts with two zombies on Outbreak at 7 players');
+ok(r.map.id === 'outbreak' && r.itPlayers().length === 1, 'infection starts with exactly one zombie on Outbreak');
 let z = r.itPlayers()[0], surv = [...r.players.values()].filter((p) => !p.it);
 r.tag(z, surv[0]);
-ok(z.it && surv[0].it && r.itPlayers().length === 3, 'a tag infects the victim and the tagger stays a zombie');
-r.tag(z, surv[1]); r.tag(z, surv[2]); run(r, 0.1);
+ok(z.it && surv[0].it && r.itPlayers().length === 2, 'a tag infects the victim and the tagger stays a zombie');
+r.tag(z, surv[1]); r.tag(z, surv[2]); r.tag(z, surv[3]); run(r, 0.1);
 ok(r.state === T.STATE.PLAY, 'round continues while 2 or more survive');
-r.tag(z, surv[3]); run(r, 0.1);
+r.tag(z, surv[4]); run(r, 0.1);
 ok(r.state === T.STATE.RESULTS, 'round ends when the last survivor is the only one left');
 
 // classic tag can be joined mid-round, special modes can't
@@ -96,5 +96,31 @@ ok(sd && sd.vy < -700 && Math.abs(sd.vx) < 50, 'avocado seed flies toward the mo
 ok(av.cd === 15 && T.CHARS.find((c) => c.id === 'frog').cd === 14, 'avocado recharges in 15 s, frog in 14 s');
 r.queueInputs(av, [[2, 0, 0, 1, 3, 4]]); const q = av.queue[av.queue.length - 1]; ok(Math.abs(q.ax - 0.6) < 0.011 && Math.abs(q.ay - 0.8) < 0.011, 'server normalises the aim vector');
 r.queueInputs(av, [[3, 0, 0, 1, 'x', null]]); ok(av.queue[av.queue.length - 1].ax === undefined, 'junk aim is ignored');
+
+// ---- arenas: nine of them, each playable, and the floor mechanics push the way they should
+ok(T.MAPS.length === 8 && T.BIG_MAPS.length === 1 && T.MAPS.concat(T.BIG_MAPS).every((m) => T.MAP_BY_ID[m.id] === m), '9 arenas in total (8 regular + Outbreak)');
+const sim = (map, x, y, secs, inp) => {
+  const p = T.newSim(1, 0, x, y), ctx = { map, goos: [], itBoost: 1 };
+  for (let i = 0; i < secs * 60; i++) T.stepPlayer(p, Object.assign({ s: i, x: 0, y: 0, a: 0 }, inp), ctx, null);
+  return p;
+};
+const fac = T.MAP_BY_ID.factory, topBelt = fac.zones[0];
+let qq = sim(fac, 600, 215, 1);
+ok(qq.x > 600 + 150 && Math.abs(qq.y - 215) < 5, 'a conveyor carries a standing player along its direction');
+qq = sim(fac, 1000, 215, 1, { x: -1 });
+ok(qq.x > 1000 - 250 && qq.x < 1000 - 40, 'running against a belt is slower than running with it');
+const reef = T.MAP_BY_ID.reef, wp = reef.zones.find((z) => z.k === 'swirl');
+qq = sim(reef, wp.x + 100, wp.y, 0.6);
+ok(Math.abs(qq.y - wp.y) > 40, 'a whirlpool pulls a standing player round its centre');
+const pin = T.MAP_BY_ID.pinball, bz = pin.zones.find((z) => z.k === 'bump');
+qq = sim(pin, bz.x + 40, bz.y, 0.5);
+ok(Math.hypot(qq.x - bz.x, qq.y - bz.y) > Math.hypot(40, 0), 'a bumper kicks a player outwards');
+for (const m of T.MAPS.concat(T.BIG_MAPS)) {
+  const r2 = new Room('m' + m.id, { kind: 'custom', name: 't', max: 8, mode: m.big ? 'infection' : 'classic', roundTime: 120, bots: 3, map: m.id, mapMode: m.id });
+  for (let i = 0; i < 5; i++) r2.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'P' + i, 0, 0, 0, 0);
+  for (let i = 0; i < 60 * 14; i++) r2.tick();
+  const bad = [...r2.players.values()].filter((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < -50 || p.y < -50 || p.x > m.w + 50 || p.y > m.h + 50);
+  ok(r2.map.id === m.id && bad.length === 0, m.id + ': round runs and nobody leaves the arena');
+}
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED'); process.exit(fails ? 1 : 0);

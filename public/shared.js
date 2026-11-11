@@ -97,9 +97,9 @@
       desc: 'Trade places with the nearest player in range. They are left dizzy for a moment.' },
     { id: 'bat',   fx: 'echo',   name: 'Echo',  species: 'Bat',     natural: '#8a64d6', ability: 'Echo Beacon', cd: 10, dur: 0, speed: 1.02, radius: 16, role: 'Time traveller', price: 3,
       desc: 'Drop a beacon, then press again within 4 seconds to snap back to it. Leave a trail, vanish, reappear.' },
-    { id: 'star',  fx: 'spin',   name: 'Andy',  species: 'Starfish', natural: '#ef6a4c', ability: 'Ricochet', cd: 13, dur: 1.5, speed: 0.99, radius: 19, role: 'Pinball', price: 3,
+    { id: 'star',  fx: 'spin',   name: 'Andy',  species: 'Starfish', natural: '#ef6a4c', ability: 'Ricochet', cd: 17, dur: 1.2, speed: 0.99, radius: 19, role: 'Pinball', price: 3,
       desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
-    { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 12, dur: 0, speed: 1.02, radius: 17, role: 'Wind caller', price: 2,
+    { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 9, dur: 0, speed: 1.04, radius: 17, role: 'Wind caller', price: 2,
       desc: 'Flap a mighty gust that blows everyone nearby away, then glide off in a burst of speed.' },
     { id: 'avocado', fx: 'seed', name: 'Guac',  species: 'Avocado', natural: '#6aa84f', ability: 'Pit Shot', cd: 15, dur: 0, speed: 0.97, radius: 18, role: 'Sharpshooter', price: 6,
       desc: 'Spit a hard seed at your mouse (click or Space; on touch it goes where you steer). As IT it tags the first runner it hits; as a runner it stuns whoever is IT.' },
@@ -206,6 +206,7 @@
   /* -------------------------------- maps -------------------------------- */
   // obstacles: {t:'c',x,y,r,k} circle | {t:'r',x,y,w,h,k} rect
   // zones:     {k:'mud'|'grip'|'ice', t:'c'|'r', ...} | {k:'boost',x,y,r,a} | {k:'tele',x,y,r,to}
+  //            {k:'belt',t:'r',x,y,w,h,a,s} conveyor | {k:'swirl',x,y,r,dir,s} whirlpool | {k:'bump',x,y,r} pinball kicker | {k:'hide',x,y,r} bush (client-side stealth)
   function buildPark() {
     const obs = [], zones = [];
     obs.push({ t: 'c', x: 1000, y: 650, r: 150, k: 'pond' });
@@ -218,7 +219,9 @@
       obs.push({ t: 'r', x, y, w, h, k: 'bench' });
     for (const [x, y] of [[400, 430], [1600, 430], [400, 870], [1600, 870]])
       zones.push({ k: 'mud', t: 'c', x, y, r: 95 });
-    return { id: 'park', name: 'Sunny Park', blurb: 'Trees, hedges and sticky mud.', w: 2000, h: 1300, theme: 'park', baseIce: false, obs, zones };
+    for (const [x, y] of [[850, 190], [1150, 190], [850, 1110], [1150, 1110], [330, 650], [1670, 650]])      // bushes: other players can't see you in there unless they are close
+      zones.push({ k: 'hide', t: 'c', x, y, r: 88 });
+    return { id: 'park', name: 'Sunny Park', blurb: 'Trees, sticky mud and bushes to hide in.', w: 2000, h: 1300, theme: 'park', baseIce: false, obs, zones };
   }
 
   function buildNeon() {
@@ -228,9 +231,10 @@
     obs.push({ t: 'r', x: 940, y: 590, w: 120, h: 120, k: 'core' });
     obs.push({ t: 'r', x: 640, y: 636, w: 220, h: 28, k: 'bar' }, { t: 'r', x: 1140, y: 636, w: 220, h: 28, k: 'bar' });
     obs.push({ t: 'r', x: 150, y: 480, w: 30, h: 340, k: 'bar' }, { t: 'r', x: 1820, y: 480, w: 30, h: 340, k: 'bar' });
-    zones.push({ k: 'boost', x: 270, y: 650, r: 50, a: 0 }, { k: 'boost', x: 1730, y: 650, r: 50, a: Math.PI },
-      { k: 'boost', x: 1000, y: 190, r: 50, a: Math.PI / 2 }, { k: 'boost', x: 1000, y: 1110, r: 50, a: -Math.PI / 2 });
-    return { id: 'neon', name: 'Neon Grid', blurb: 'Pillars and boost pads in the dark.', w: 2000, h: 1300, theme: 'neon', baseIce: false, obs, zones };
+    zones.push({ k: 'boost', x: 270, y: 650, r: 50, a: 0 }, { k: 'boost', x: 1730, y: 650, r: 50, a: Math.PI });
+    zones.push({ k: 'boost', x: 1000, y: 410, r: 46, a: 0 }, { k: 'boost', x: 1480, y: 650, r: 46, a: Math.PI / 2 }, { k: 'boost', x: 1000, y: 890, r: 46, a: Math.PI }, { k: 'boost', x: 520, y: 650, r: 46, a: -Math.PI / 2 });      // a racing line round the core
+    zones.push({ k: 'belt', t: 'r', x: 380, y: 150, w: 1240, h: 90, a: 0, s: 190 }, { k: 'belt', t: 'r', x: 380, y: 1060, w: 1240, h: 90, a: Math.PI, s: 190 });     // data streams: ride them or fight them
+    return { id: 'neon', name: 'Neon Grid', blurb: 'Pillars, boost pads and data streams in the dark.', w: 2000, h: 1300, theme: 'neon', baseIce: false, obs, zones };
   }
 
   function buildFrost() {
@@ -239,9 +243,11 @@
       obs.push({ t: 'c', x, y, r: 52, k: 'rock' });
     for (const [x, y, w, h] of [[820, 170, 360, 56], [820, 1074, 360, 56], [230, 600, 56, 100], [1714, 600, 56, 100]])
       obs.push({ t: 'r', x, y, w, h, k: 'berg' });
+    for (const [x, y, w, h] of [[310, 376, 130, 44], [1560, 880, 130, 44], [310, 880, 130, 44], [1560, 376, 130, 44]]) obs.push({ t: 'r', x, y, w, h, k: 'berg' });      // corner shelters
     for (const [x, y, r] of [[1000, 650, 190], [400, 650, 110], [1600, 650, 110], [1000, 330, 100], [1000, 970, 100]])
       zones.push({ k: 'grip', t: 'c', x, y, r });
-    return { id: 'frost', name: 'Frosty Lake', blurb: 'Slippery ice. Find the snow for grip.', w: 2000, h: 1300, theme: 'frost', baseIce: true, obs, zones };
+    for (const [x, y, r] of [[600, 700, 85], [1400, 600, 85], [1000, 1210, 75], [1000, 90, 70]]) zones.push({ k: 'hide', t: 'c', x, y, r });      // snow drifts
+    return { id: 'frost', name: 'Frosty Lake', blurb: 'Slippery ice, snow for grip and drifts to hide in.', w: 2000, h: 1300, theme: 'frost', baseIce: true, obs, zones };
   }
 
   function buildCandy() {
@@ -275,7 +281,8 @@
     for (let i = 0; i < 3; i++) { const [c, r] = cells[i]; zones.push({ k: 'mud', t: 'c', x: (c + 0.5) * cw, y: (r + 0.5) * ch, r: 80 }); }
     const angs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
     for (let i = 3; i < 6; i++) { const [c, r] = cells[i]; zones.push({ k: 'boost', x: (c + 0.5) * cw, y: (r + 0.5) * ch, r: 46, a: angs[Math.floor(R() * 4)] }); }
-    return { id: 'candy', name: 'Candy Maze', blurb: 'Sweet corridors, jelly and sugar rush pads.', w: W, h: H, theme: 'candy', baseIce: false, obs, zones };
+    for (let i = 6; i < 9; i++) { const [c, r] = cells[i]; zones.push({ k: 'belt', t: 'r', x: (c + 0.5) * cw - 95, y: (r + 0.5) * ch - 36, w: 190, h: 72, a: angs[Math.floor(R() * 4)], s: 160 }); }      // licorice conveyors
+    return { id: 'candy', name: 'Candy Maze', blurb: 'Sweet corridors, jelly, sugar rush pads and licorice conveyors.', w: W, h: H, theme: 'candy', baseIce: false, obs, zones };
   }
 
   function buildStation() {
@@ -291,9 +298,52 @@
       { k: 'tele', x: 1860, y: 140, r: 48, to: 3, pair: 1 }, { k: 'tele', x: 140, y: 1160, r: 48, to: 2, pair: 1 });
     zones.push({ k: 'boost', x: 600, y: 260, r: 46, a: 0 }, { k: 'boost', x: 1400, y: 1040, r: 46, a: Math.PI },
       { k: 'boost', x: 330, y: 840, r: 46, a: -Math.PI / 2 }, { k: 'boost', x: 1670, y: 460, r: 46, a: Math.PI / 2 });
-    return { id: 'station', name: 'Space Station', blurb: 'Teleporters, conveyors and a glowing reactor.', w: 2000, h: 1300, theme: 'station', baseIce: false, obs, zones };
+    zones.push({ k: 'swirl', t: 'c', x: 1000, y: 650, r: 260, dir: 1, s: 215 });         // the reactor's gravity well swings you round it
+    return { id: 'station', name: 'Space Station', blurb: 'Teleporters, boost pads and a reactor that spins you round.', w: 2000, h: 1300, theme: 'station', baseIce: false, obs, zones };
   }
 
+
+  /* Coral Reef: four whirlpools fling you round the reef; kelp forests hide you. */
+  function buildReef() {
+    const obs = [], zones = [];
+    for (const [x, y, r] of [[300, 200, 50], [1700, 200, 50], [300, 1100, 50], [1700, 1100, 50], [760, 230, 42], [1240, 230, 42], [760, 1070, 42], [1240, 1070, 42], [1000, 650, 58], [150, 650, 44], [1850, 650, 44]])
+      obs.push({ t: 'c', x, y, r, k: 'coral' });
+    for (const [x, y, w, h] of [[684, 520, 32, 260], [1284, 520, 32, 260], [880, 410, 240, 32], [880, 858, 240, 32]])
+      obs.push({ t: 'r', x, y, w, h, k: 'reef' });
+    for (const [x, y, dir] of [[480, 330, 1], [1520, 330, -1], [480, 970, -1], [1520, 970, 1]])
+      zones.push({ k: 'swirl', t: 'c', x, y, r: 175, dir, s: 235 });
+    for (const [x, y, r] of [[1000, 650, 135], [1000, 170, 90], [1000, 1130, 90], [340, 650, 95], [1660, 650, 95]])
+      zones.push({ k: 'hide', t: 'c', x, y, r });
+    return { id: 'reef', name: 'Coral Reef', blurb: 'Whirlpools that fling you around and kelp to hide in.', w: 2000, h: 1300, theme: 'reef', baseIce: false, obs, zones };
+  }
+
+  /* Factory Floor: a clockwise conveyor ring around the edge, two feed belts into a big press. */
+  function buildFactory() {
+    const obs = [], zones = [], PI = Math.PI;
+    zones.push({ k: 'belt', t: 'r', x: 300, y: 170, w: 1400, h: 90, a: 0, s: 185 }, { k: 'belt', t: 'r', x: 1740, y: 300, w: 90, h: 700, a: PI / 2, s: 185 },
+      { k: 'belt', t: 'r', x: 300, y: 1040, w: 1400, h: 90, a: PI, s: 185 }, { k: 'belt', t: 'r', x: 170, y: 300, w: 90, h: 700, a: -PI / 2, s: 185 },
+      { k: 'belt', t: 'r', x: 420, y: 600, w: 400, h: 100, a: 0, s: 150 }, { k: 'belt', t: 'r', x: 1180, y: 600, w: 400, h: 100, a: PI, s: 150 });
+    obs.push({ t: 'r', x: 880, y: 520, w: 240, h: 260, k: 'machine' });
+    for (const [x, y] of [[520, 380], [1420, 880], [600, 900], [1340, 350], [1000, 960]]) obs.push({ t: 'r', x: x - 32, y: y - 32, w: 64, h: 64, k: 'crate' });
+    for (const [x, y, w, h] of [[380, 330, 28, 170], [1592, 800, 28, 170], [1000, 330, 160, 28]]) obs.push({ t: 'r', x, y, w, h, k: 'pipe' });
+    for (const [x, y, w, h] of [[640, 770, 130, 66], [1230, 464, 130, 66]]) obs.push({ t: 'r', x, y, w, h, k: 'press' });
+    return { id: 'factory', name: 'Factory Floor', blurb: 'Conveyor belts everywhere. Run with them, or against them.', w: 2000, h: 1300, theme: 'factory', baseIce: false, obs, zones };
+  }
+
+  /* Pinball Palace: bumpers kick you, flipper pads fire you back into the table. */
+  function buildPinball() {
+    const obs = [], zones = [];
+    for (const [x, y] of [[1000, 300], [850, 440], [1150, 440], [520, 640], [1480, 640], [1000, 650], [740, 900], [1260, 900]]) {
+      obs.push({ t: 'c', x, y, r: 34, k: 'bumper' });
+      zones.push({ k: 'bump', t: 'c', x, y, r: 62 });
+    }
+    for (const [x, y] of [[110, 110], [1890, 110], [110, 1190], [1890, 1190]]) obs.push({ t: 'c', x, y, r: 62, k: 'post' });
+    obs.push({ t: 'r', x: 250, y: 330, w: 26, h: 640, k: 'rail' }, { t: 'r', x: 1724, y: 330, w: 26, h: 640, k: 'rail' });
+    obs.push({ t: 'r', x: 560, y: 1040, w: 26, h: 130, k: 'rail' }, { t: 'r', x: 1414, y: 1040, w: 26, h: 130, k: 'rail' });
+    zones.push({ k: 'boost', x: 130, y: 950, r: 46, a: -Math.PI / 2 }, { k: 'boost', x: 130, y: 650, r: 46, a: -Math.PI / 2 }, { k: 'boost', x: 1870, y: 950, r: 46, a: -Math.PI / 2 }, { k: 'boost', x: 1870, y: 650, r: 46, a: -Math.PI / 2 },
+      { k: 'boost', x: 700, y: 1130, r: 50, a: -0.95 }, { k: 'boost', x: 1300, y: 1130, r: 50, a: -Math.PI + 0.95 });
+    return { id: 'pinball', name: 'Pinball Palace', blurb: 'Bumpers kick you around, flipper pads fire you back.', w: 2000, h: 1300, theme: 'pinball', baseIce: false, obs, zones };
+  }
 
   /* Outbreak: a big city for Infection. Streets 240 px wide, blocks with alleys, parked cars, barrels and a central plaza. */
   function buildCity() {
@@ -405,7 +455,7 @@
       if (!circleFree(map, x, y, 36)) continue;
       let bad = false;
       for (const z of map.zones) {
-        if (z.k === 'grip' || z.k === 'ice') continue;
+        if (z.k === 'grip' || z.k === 'ice' || z.k === 'hide') continue;
         if (z.t === 'r' ? inZone(z, x, y) : Math.hypot(x - z.x, y - z.y) < z.r + 30) { bad = true; break; }
       }
       if (!bad) cands.push([x, y]);
@@ -423,7 +473,7 @@
     return out;
   }
 
-  const MAPS = [buildPark(), buildNeon(), buildFrost(), buildCandy(), buildStation()];       // the vote / rotation pool
+  const MAPS = [buildPark(), buildNeon(), buildFrost(), buildCandy(), buildStation(), buildReef(), buildFactory(), buildPinball()];       // the vote / rotation pool
   const BIG_MAPS = [buildCity()];                                                         // only used by Infection
   const MAP_BY_ID = {};
   for (const m of MAPS.concat(BIG_MAPS)) {
@@ -454,7 +504,7 @@
       case 'ghost': case 'cat': case 'robot': p.abT = def.dur; break;
       case 'penguin': p.abT = def.dur; p.vx = dx * 420; p.vy = dy * 420; break;
       case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
-      case 'bird': p.boostT = 0.3; break;           // the gale itself is resolved by the server; the bird glides off in a burst
+      case 'bird': p.boostT = 0.8; break;           // the gale itself is resolved by the server; the bird glides off in a burst
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
       default: break;                              // bear / octo / owl / raccoon / avocado: world effects (incl. the flying seed) resolved by the server
     }
@@ -511,11 +561,16 @@
     let maxSp = BASE_SPEED * def.speed * (p.it ? (ctx.itBoost || IT_BOOST) : 1) * (p.sm || 1);
     if (id === 'cat' && p.abT > 0) maxSp *= 1.08;
     else if (id === 'robot' && p.abT > 0) maxSp *= p.it ? 1.3 : 0.88;
-    let accel = ACCEL, fric = FRIC, inGrip = false, inIce = false;
+    let accel = ACCEL, fric = FRIC, inGrip = false, inIce = false, driftX = 0, driftY = 0;
     const x = p.x, y = p.y;
     for (const z of map.zones) {
-      if (z.k === 'tele' || !inZone(z, x, y)) continue;
+      if (z.k === 'tele' || z.k === 'hide' || !inZone(z, x, y)) continue;
       if (z.k === 'mud') maxSp *= 0.55;
+      else if (z.k === 'belt') { const s = z.s || 175; driftX += Math.cos(z.a) * s; driftY += Math.sin(z.a) * s; }                       // conveyor: everything on it is carried along
+      else if (z.k === 'swirl') {                                                                                                  // whirlpool: carried round the centre, a little inward, faster near the middle
+        const dx = x - z.x, dy = y - z.y, d = Math.sqrt(dx * dx + dy * dy) || 1, k = 0.45 + 0.55 * (1 - Math.min(1, d / z.r)), s = (z.s || 230) * k;
+        driftX += (-dy / d) * z.dir * s - (dx / d) * 60 * k; driftY += (dx / d) * z.dir * s - (dy / d) * 60 * k;
+      } else if (z.k === 'bump') { const dx = x - z.x, dy = y - z.y, d = Math.sqrt(dx * dx + dy * dy) || 1; p.vx += (dx / d) * 6500 * dt; p.vy += (dy / d) * 6500 * dt; }   // pinball bumper: kicked outwards
       else if (z.k === 'ice') inIce = true;
       else if (z.k === 'grip') inGrip = true;
       else if (z.k === 'boost') { p.boostT = 0.55; p.vx += Math.cos(z.a) * 3200 * dt; p.vy += Math.sin(z.a) * 3200 * dt; }
@@ -539,14 +594,14 @@
         const k = Math.min(1, 3.2 * dt), tx = p.adx + (mx / len - p.adx) * k, ty = p.ady + (my / len - p.ady) * k, tl = Math.sqrt(tx * tx + ty * ty) || 1;
         p.adx = tx / tl; p.ady = ty / tl;
       }
-      p.vx = p.adx * 500; p.vy = p.ady * 500;
+      p.vx = p.adx * 430; p.vy = p.ady * 430;
     } else if (stunned) {
       approach(p, 0, 0, FRIC * 0.6 * dt);
     } else {
       approach(p, mx * maxSp, my * maxSp, (len > 0.01 ? accel : fric) * dt);
     }
 
-    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.x += (p.vx + driftX) * dt; p.y += (p.vy + driftY) * dt;
     const px = p.x, py = p.y;
     if (!inLeap && !inPhase) collide(map, p, r);
     clampBounds(map, p, r);

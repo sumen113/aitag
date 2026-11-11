@@ -61,6 +61,22 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 
 Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
 
+## Arenas (v7.2)
+
+Nine arenas: Sunny Park, Neon Grid, Frosty Lake, Candy Maze, Space Station, Coral Reef, Factory Floor, Pinball Palace (the vote / rotation pool) and Outbreak (Infection only). Maps are built in `public/shared.js` (`build*`), drawn in `public/render.js`. Floor zones, all simulated identically on server and client in `stepPlayer`:
+
+| zone | effect |
+| --- | --- |
+| `mud` / `ice` / `grip` | slow / slippery / grip on an icy map |
+| `boost` | pad that fires you in a direction |
+| `tele` | teleporter pair |
+| `belt` | conveyor: carries everything on it (`a` angle, `s` px/s) |
+| `swirl` | whirlpool: carries you round its centre (`dir` = ±1) |
+| `bump` | pinball kicker: pushes you out of its circle |
+| `hide` | bush / kelp / snow drift: the client doesn't draw other players inside one unless they are within 250 px |
+
+`node tools/modetest.js` plays a round on every arena and checks the zones push the right way.
+
 ## Admin panel (`/hq`, also reachable at `/admin`)
 
 For you and one other person. Two things decide who gets in, both set as environment variables on Render:

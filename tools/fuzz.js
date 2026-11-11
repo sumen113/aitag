@@ -208,7 +208,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
     const starI = T.CHARS.findIndex((x) => x.id === 'star'), map = T.MAP_BY_ID[T.MAPS[0].id];
     const p = T.newSim(1, starI, map.w - 120, map.h / 2); const ctx = { map, goos: [] };
     T.stepPlayer(p, { s: 1, x: 1, y: 0, a: 1 }, ctx, []);
-    ok(p.abT > 1.4 && p.adx > 0.9, 'starfish starts rolling in the aimed direction');
+    ok(p.abT > 1.1 && p.adx > 0.9, 'starfish starts rolling in the aimed direction');
     let bounced = 0, ev = [];
     for (let i = 0; i < 90; i++) { ev = []; T.stepPlayer(p, { s: i + 2, x: 0, y: 0, a: 0 }, ctx, ev); if (ev.some((e) => e.n === 'bounce')) bounced++; }
     ok(bounced >= 1 && p.x <= map.w, 'starfish ricochets off walls and stays inside the arena (bounces: ' + bounced + ')');

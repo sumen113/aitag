@@ -165,7 +165,10 @@ class Room {
 
   /** Everything between rounds starts here: a vote (regular servers, practice, "vote" custom servers) or straight into the countdown. */
   beginRound() {
-    if (this.modeOpt === 'vote') this.startVote(); else { this.setMode(this.modeOpt); this.startCountdown(); }
+    if (this.modeOpt === 'vote') {
+      const choice = this.mapMode === 'rotate' || this.players.size >= T.MODE_MIN_PLAYERS;      // nothing to vote on (fixed arena, too few players for special modes): skip the vote
+      if (choice) this.startVote(); else { this.setMode('classic'); this.startCountdown(); }
+    } else { this.setMode(this.modeOpt); this.startCountdown(); }
   }
 
   startVote() {
@@ -218,7 +221,7 @@ class Room {
 
   startPlay() {
     const arr = shuffle([...this.players.values()].filter((p) => !p.out));
-    this.itWant = T.itCountFor(arr.length);              // 7+ players: two taggers (or two potatoes)
+    this.itWant = this.mode === 'classic' ? T.itCountFor(arr.length) : 1;      // 7+ players: two taggers in classic tag; Infection and Hot Potato always start with exactly one
     const its = arr.slice(0, this.itWant);
     const fuse = T.potatoFuse(0, 0);
     for (const it of its) { it.it = 1; it.stun = T.HEAD_START; if (this.mode === 'potato') it.pot = fuse + T.HEAD_START; }
@@ -343,15 +346,15 @@ class Room {
       }
       for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);
     } else if (e.n === 'gust') {
-      const R = 270;                                          // a wide, stun-free blast: it buys distance, not a free tag
+      const R = 340;                                          // a wide, stun-free blast: it buys distance, not a free tag
       for (const q of this.players.values()) {
         if (q === p || (q.out || q.gone)) continue;
         if (q.c === IDX.frog && q.abT > 0) continue;
         let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
         if (d > R) continue;
         if (d < 1) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
-        const f = 1 - d / R * 0.5;
-        q.vx += dx * 640 * f; q.vy += dy * 640 * f;
+        const f = 1 - d / R * 0.45;
+        q.vx += dx * 860 * f; q.vy += dy * 860 * f;
         if (q.c === IDX.fox) q.abT = 0;
       }
       for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);

@@ -26,6 +26,13 @@ const MapRender = (() => {
     } else if (map.theme === 'city') {
       for (let i = 0; i < 160; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 10)) items.push({ k: 'crack', pts: [[x, y], [x + (R() - 0.5) * 60, y + (R() - 0.5) * 60], [x + (R() - 0.5) * 110, y + (R() - 0.5) * 110]] }); }
       for (let i = 0; i < 70; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 24)) items.push({ k: 'puddle', x, y, s: 14 + R() * 20 }); }
+    } else if (map.theme === 'reef') {
+      for (let i = 0; i < 90; i++) items.push({ k: 'bubble', x: R() * map.w, y: R() * map.h, p: R(), s: 2 + R() * 4 });
+      for (let i = 0; i < 70; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 10)) items.push({ k: 'shell', x, y, a: R() * TAU, c: ['#ffd1dc', '#fff1c1', '#ffc9a8'][(R() * 3) | 0] }); }
+    } else if (map.theme === 'factory') {
+      for (let i = 0; i < 40; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 20)) items.push({ k: 'stain', x, y, s: 16 + R() * 28 }); }
+    } else if (map.theme === 'pinball') {
+      for (let i = 0; i < 110; i++) items.push({ k: 'spark', x: R() * map.w, y: R() * map.h, p: R() * TAU, s: 1 + R() * 2.4 });
     } else if (map.theme === 'neon') {
       for (let i = 0; i < 60; i++) items.push({ k: 'spark', x: R() * map.w, y: R() * map.h, p: R() * TAU, s: 1 + R() * 2 });
     }
@@ -91,6 +98,34 @@ const MapRender = (() => {
         if (d.k === 'crack') { const q = d.pts[0]; if (q[0] < x0 - 120 || q[0] > x1 + 120 || q[1] < y0 - 120 || q[1] > y1 + 120) continue; g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 2; g.beginPath(); d.pts.forEach((pt, i) => (i ? g.lineTo(pt[0], pt[1]) : g.moveTo(pt[0], pt[1]))); g.stroke(); }
         else { if (d.x < x0 - 40 || d.x > x1 + 40 || d.y < y0 - 40 || d.y > y1 + 40) continue; g.fillStyle = 'rgba(120,170,220,.22)'; g.beginPath(); g.ellipse(d.x, d.y, d.s * 1.4, d.s, 0.3, 0, TAU); g.fill(); }
       }
+    } else if (th === 'reef') {
+      const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#35c7cf'); gr.addColorStop(1, '#1479a8');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(255,255,255,.13)'; g.lineWidth = 5;                                 // drifting caustic light
+      for (let y = Math.floor(y0 / 90) * 90; y < y1; y += 90) { g.beginPath(); for (let x = x0; x <= x1 + 30; x += 30) { const yy = y + Math.sin(x * 0.012 + t * 0.9 + y) * 16; x === x0 ? g.moveTo(x, yy) : g.lineTo(x, yy); } g.stroke(); }
+      for (const d of decorFor(map)) {
+        if (d.x < x0 - 20 || d.x > x1 + 20 || d.y < y0 - 20 || d.y > y1 + 20) continue;
+        if (d.k === 'shell') { g.fillStyle = d.c; g.beginPath(); g.ellipse(d.x, d.y, 7, 5, d.a, 0, TAU); g.fill(); g.strokeStyle = 'rgba(120,70,60,.35)'; g.lineWidth = 1.2; g.stroke(); }
+        else { const py = (d.y - ((t * 18 * (0.5 + d.p)) % map.h) + map.h) % map.h; g.globalAlpha = 0.5; g.strokeStyle = '#e8fdff'; g.lineWidth = 1.5; g.beginPath(); g.arc(d.x + Math.sin(t + d.p * 9) * 6, py, d.s, 0, TAU); g.stroke(); g.globalAlpha = 1; }
+      }
+    } else if (th === 'factory') {
+      g.fillStyle = '#4b4f59'; g.fillRect(0, 0, W, H);
+      const s = 130; g.lineWidth = 2; g.strokeStyle = 'rgba(0,0,0,.25)';
+      for (let x = Math.floor(x0 / s) * s; x <= x1; x += s) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); }
+      for (let y = Math.floor(y0 / s) * s; y <= y1; y += s) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.07)';
+      for (let x = Math.floor(x0 / s) * s; x <= x1; x += s) for (let y = Math.floor(y0 / s) * s; y <= y1; y += s) { g.fillRect(x + 6, y + 6, 4, 4); g.fillRect(x + s - 10, y + 6, 4, 4); g.fillRect(x + 6, y + s - 10, 4, 4); g.fillRect(x + s - 10, y + s - 10, 4, 4); }
+      for (const d of decorFor(map)) { if (d.x < x0 - 40 || d.x > x1 + 40 || d.y < y0 - 40 || d.y > y1 + 40) continue; g.fillStyle = 'rgba(15,15,20,.22)'; g.beginPath(); g.ellipse(d.x, d.y, d.s * 1.3, d.s, 0.4, 0, TAU); g.fill(); }
+      g.save(); g.strokeStyle = 'rgba(255,207,77,.8)'; g.lineWidth = 10;                         // hazard stripes along the walls
+      g.setLineDash([36, 36]); g.strokeRect(34, 34, W - 68, H - 68); g.setLineDash([]); g.restore();
+    } else if (th === 'pinball') {
+      g.fillStyle = '#150a35'; g.fillRect(0, 0, W, H);
+      const rg = g.createRadialGradient(W / 2, H * 0.45, 60, W / 2, H * 0.45, W * 0.6); rg.addColorStop(0, 'rgba(255,61,150,.3)'); rg.addColorStop(1, 'rgba(60,20,120,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(255,214,102,.18)'; g.lineWidth = 3;
+      for (let i = 1; i < 6; i++) { g.beginPath(); g.arc(W / 2, H * 0.5, i * 170, 0, TAU); g.stroke(); }
+      for (const d of decorFor(map)) { g.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(t * 1.6 + d.p)); g.fillStyle = '#ffd666'; g.fillRect(d.x - d.s, d.y - 0.6, d.s * 2, 1.2); g.fillRect(d.x - 0.6, d.y - d.s, 1.2, d.s * 2); }
+      g.globalAlpha = 1;
     } else {                                                          // station
       g.fillStyle = '#1b2340'; g.fillRect(0, 0, W, H);
       const s = 160;
@@ -105,11 +140,11 @@ const MapRender = (() => {
   }
 
   function drawBorder(g, map) {
-    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'], city: ['#ffb64d', '#6b4a1a'] }[map.theme];
+    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'], city: ['#ffb64d', '#6b4a1a'], reef: ['#ff9d6b', '#9c4a2c'], factory: ['#ffcf4d', '#6b5a10'], pinball: ['#ff4d8d', '#7a1a4a'] }[map.theme];
     g.lineJoin = 'round';
     g.strokeStyle = col[1]; g.lineWidth = 40; g.strokeRect(-14, -14, map.w + 28, map.h + 28);
     g.strokeStyle = col[0]; g.lineWidth = 14; g.strokeRect(-4, -4, map.w + 8, map.h + 8);
-    if (map.theme === 'neon') { g.strokeStyle = 'rgba(255,61,242,.25)'; g.lineWidth = 34; g.strokeRect(-4, -4, map.w + 8, map.h + 8); }
+    if (map.theme === 'neon' || map.theme === 'pinball') { g.strokeStyle = map.theme === 'neon' ? 'rgba(255,61,242,.25)' : 'rgba(255,77,141,.25)'; g.lineWidth = 34; g.strokeRect(-4, -4, map.w + 8, map.h + 8); }
   }
 
   /* -------------------------------- zones ----------------------------------- */
@@ -132,13 +167,35 @@ const MapRender = (() => {
         for (let i = 0; i < 9; i++) { const a = i * 2.4 + z.y; const rr = z.r * (0.2 + 0.65 * ((i * 53) % 10) / 10); g.beginPath(); g.arc(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, 3, 0, TAU); g.fill(); }
       } else if (z.k === 'boost') {
         if (z.x + z.r < v.x0 || z.x - z.r > v.x1 || z.y + z.r < v.y0 || z.y - z.r > v.y1) continue;
-        const col = { neon: '#2ff3ff', candy: '#a6ff5e', station: '#ffd166', park: '#ffd166', frost: '#ffd166' }[th];
+        const col = { neon: '#2ff3ff', candy: '#a6ff5e', station: '#ffd166', park: '#ffd166', frost: '#ffd166', pinball: '#ff6ac8' }[th] || '#ffd166';
         g.beginPath(); g.arc(z.x, z.y, z.r, 0, TAU); g.fillStyle = 'rgba(8,14,36,.72)'; g.fill();
         g.lineWidth = 4; g.strokeStyle = col; g.stroke();
         g.save(); g.translate(z.x, z.y); g.rotate(z.a); g.beginPath(); g.arc(0, 0, z.r - 2, 0, TAU); g.clip();
         g.strokeStyle = col; g.lineWidth = 6; g.lineCap = 'round'; g.lineJoin = 'round';
         for (let i = 0; i < 3; i++) { const ph = ((t * 1.4 + i / 3) % 1); const x = -z.r * 0.7 + ph * z.r * 1.4; g.globalAlpha = Math.sin(ph * Math.PI); g.beginPath(); g.moveTo(x - 9, -14); g.lineTo(x + 5, 0); g.lineTo(x - 9, 14); g.stroke(); }
         g.restore(); g.globalAlpha = 1;
+      } else if (z.k === 'belt') {
+        if (!vis(v, z.x, z.y, z.w, z.h)) continue;
+        const col = { neon: '#2ff3ff', candy: '#ffffff', factory: '#ffcf4d' }[th] || '#ffd166', base = { neon: 'rgba(8,14,50,.78)', candy: 'rgba(40,20,40,.85)', factory: 'rgba(28,30,36,.88)' }[th] || 'rgba(20,24,40,.8)';
+        g.save(); g.beginPath(); g.roundRect(z.x, z.y, z.w, z.h, 10); g.fillStyle = base; g.fill(); g.clip();
+        g.translate(z.x + z.w / 2, z.y + z.h / 2); g.rotate(z.a);
+        const L = Math.abs(Math.cos(z.a)) > 0.5 ? z.w : z.h, Wd = L === z.w ? z.h : z.w, step = 46, off = (t * (z.s || 175) * 0.55) % step;
+        g.strokeStyle = col; g.lineWidth = 6; g.lineCap = 'round'; g.lineJoin = 'round'; g.globalAlpha = 0.85;
+        for (let x = -L / 2 - step + off; x < L / 2 + step; x += step) { g.beginPath(); g.moveTo(x - 8, -Wd / 2 + 12); g.lineTo(x + 8, 0); g.lineTo(x - 8, Wd / 2 - 12); g.stroke(); }
+        g.globalAlpha = 1; g.restore();
+        g.lineWidth = 4; g.strokeStyle = th === 'factory' ? '#ffcf4d' : col; g.globalAlpha = 0.7; g.beginPath(); g.roundRect(z.x, z.y, z.w, z.h, 10); g.stroke(); g.globalAlpha = 1;
+      } else if (z.k === 'swirl') {
+        if (z.x + z.r < v.x0 || z.x - z.r > v.x1 || z.y + z.r < v.y0 || z.y - z.r > v.y1) continue;
+        const gr = g.createRadialGradient(z.x, z.y, 6, z.x, z.y, z.r); const reef = th === 'reef';
+        gr.addColorStop(0, reef ? 'rgba(6,50,100,.75)' : 'rgba(150,200,255,.6)'); gr.addColorStop(0.7, reef ? 'rgba(20,110,170,.35)' : 'rgba(90,120,255,.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(z.x, z.y, z.r, 0, TAU); g.fill();
+        g.save(); g.translate(z.x, z.y); g.rotate(t * 1.3 * z.dir); g.lineCap = 'round'; g.strokeStyle = reef ? 'rgba(220,250,255,.75)' : 'rgba(210,230,255,.8)';
+        for (let arm = 0; arm < 3; arm++) { g.lineWidth = 6; g.beginPath(); for (let i = 0; i <= 26; i++) { const f = i / 26, a = arm * TAU / 3 + f * 3.2 * z.dir, rr2 = 14 + f * (z.r - 24); i ? g.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2) : g.moveTo(Math.cos(a) * rr2, Math.sin(a) * rr2); } g.globalAlpha = 0.8; g.stroke(); }
+        g.restore(); g.globalAlpha = 1;
+      } else if (z.k === 'bump') {
+        if (z.x + z.r < v.x0 || z.x - z.r > v.x1 || z.y + z.r < v.y0 || z.y - z.r > v.y1) continue;
+        const p = 0.5 + 0.5 * Math.sin(t * 5 + z.x);
+        g.beginPath(); g.arc(z.x, z.y, z.r, 0, TAU); g.fillStyle = 'rgba(255,214,102,' + (0.12 + 0.1 * p) + ')'; g.fill(); g.lineWidth = 3; g.strokeStyle = 'rgba(255,214,102,' + (0.45 + 0.3 * p) + ')'; g.setLineDash([10, 8]); g.stroke(); g.setLineDash([]);
       } else if (z.k === 'tele') {
         if (z.x + z.r < v.x0 || z.x - z.r > v.x1 || z.y + z.r < v.y0 || z.y - z.r > v.y1) continue;
         const col = z.pair ? '#ff78c4' : '#4cc9f0';
@@ -216,6 +273,30 @@ const MapRender = (() => {
             block(g, o, '#ffcf4d', '#a67d10', '#6b4f08', 10, 4);
             g.strokeStyle = '#2b2b2b'; g.lineWidth = 7; g.save(); rr(g, o.x, o.y, o.w, o.h, 4); g.clip(); g.beginPath(); for (let i = -o.h; i < o.w + o.h; i += 26) { g.moveTo(o.x + i, o.y + o.h + 2); g.lineTo(o.x + i + o.h + 4, o.y - 2); } g.stroke(); g.restore();
             break;
+          case 'machine': {
+            block(g, o, '#6a707e', '#2f333d', '#1b1e26', 22, 8);
+            g.fillStyle = '#3d424e'; rr(g, o.x + 14, o.y + 14, o.w - 28, o.h - 28, 6); g.fill();
+            g.fillStyle = '#ffcf4d'; g.fillRect(o.x + 20, o.y + o.h - 30, o.w - 40, 8);
+            for (let i = 0; i < 4; i++) { g.fillStyle = ((Math.floor(t * 2) + i) % 4 === 0) ? '#ff5a4d' : '#5cff9d'; g.beginPath(); g.arc(o.x + 36 + i * 28, o.y + 40, 6, 0, TAU); g.fill(); }
+            g.strokeStyle = '#1b1e26'; g.lineWidth = 3; g.beginPath(); g.arc(o.x + o.w / 2, o.y + o.h / 2 - 6, 38, 0, TAU); g.stroke();
+            g.save(); g.translate(o.x + o.w / 2, o.y + o.h / 2 - 6); g.rotate(t * 1.5); g.beginPath(); for (let i = 0; i < 3; i++) { g.moveTo(0, 0); g.lineTo(Math.cos(i * TAU / 3) * 30, Math.sin(i * TAU / 3) * 30); } g.stroke(); g.restore();
+            break; }
+          case 'pipe':
+            block(g, o, '#9aa3b4', '#566075', '#2f3748', 10, 7);
+            g.fillStyle = 'rgba(255,255,255,.35)'; if (o.w >= o.h) rr(g, o.x + 4, o.y + 3, o.w - 8, 4, 2); else rr(g, o.x + 3, o.y + 4, 4, o.h - 8, 2); g.fill();
+            break;
+          case 'press': {
+            block(g, o, '#ffcf4d', '#a67d10', '#6b4f08', 16, 6);
+            g.strokeStyle = '#2b2b2b'; g.lineWidth = 8; g.save(); rr(g, o.x, o.y, o.w, o.h, 6); g.clip(); g.beginPath(); for (let i = -o.h; i < o.w + o.h; i += 28) { g.moveTo(o.x + i, o.y + o.h + 2); g.lineTo(o.x + i + o.h + 4, o.y - 2); } g.stroke(); g.restore();
+            break; }
+          case 'reef':
+            block(g, o, '#d98c6b', '#8e4d37', '#5e2f20', 12, 10);
+            g.fillStyle = 'rgba(255,230,210,.45)'; rr(g, o.x + 4, o.y + 4, Math.max(6, o.w * 0.45), 6, 3); g.fill();
+            break;
+          case 'rail':
+            block(g, o, '#ff6ac8', '#8e2a73', '#5a1748', 10, 8);
+            g.fillStyle = 'rgba(255,255,255,.5)'; if (o.w >= o.h) rr(g, o.x + 6, o.y + 4, o.w - 12, 4, 2); else rr(g, o.x + 4, o.y + 6, 4, o.h - 12, 2); g.fill();
+            break;
           case 'wall':
             if (th === 'candy') {
               block(g, o, '#ff82b8', '#d4487f', '#a52c61', 12, 12);
@@ -266,6 +347,23 @@ const MapRender = (() => {
           g.beginPath(); g.arc(o.x, o.y, o.r - 8, 0, TAU); g.fillStyle = gr; g.fill(); g.stroke();
           g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 2.5; for (let i = 0; i < 3; i++) { const ph = (t * 0.3 + i / 3) % 1; g.globalAlpha = 1 - ph; g.beginPath(); g.arc(o.x, o.y, 14 + ph * (o.r - 30), 0, TAU); g.stroke(); } g.globalAlpha = 1;
           g.beginPath(); g.arc(o.x, o.y, 16, 0, TAU); g.fillStyle = '#c9d3e8'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#4b5470'; g.stroke();
+        } else if (o.k === 'coral') {
+          g.fillStyle = 'rgba(0,40,80,.25)'; g.beginPath(); g.ellipse(o.x + 8, o.y + 14, o.r * 1.05, o.r * 0.7, 0, 0, TAU); g.fill();
+          const cols = ['#ff7a9c', '#ff9d5c', '#c46cff'], c0 = cols[((o.x / 50 + o.y / 70) | 0) % 3];
+          for (let i = 0; i < 7; i++) { const a = i * TAU / 7 + o.x, rd = o.r * (0.55 + 0.35 * ((i * 5) % 3) / 2), px = o.x + Math.cos(a) * rd * 0.7, py = o.y - 4 + Math.sin(a) * rd * 0.6; g.beginPath(); g.arc(px, py, o.r * 0.42, 0, TAU); g.fillStyle = c0; g.fill(); g.lineWidth = 2.5; g.strokeStyle = 'rgba(70,20,50,.55)'; g.stroke(); }
+          g.beginPath(); g.arc(o.x, o.y - 6, o.r * 0.62, 0, TAU); g.fillStyle = c0; g.fill(); g.lineWidth = 3; g.stroke();
+          g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.arc(o.x - o.r * 0.2, o.y - o.r * 0.35, o.r * 0.18, 0, TAU); g.fill();
+        } else if (o.k === 'bumper') {
+          const p = 0.5 + 0.5 * Math.sin(t * 5 + o.x);
+          g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(o.x + 5, o.y + 12, o.r + 4, 0, TAU); g.fill();
+          g.beginPath(); g.arc(o.x, o.y + 6, o.r + 4, 0, TAU); g.fillStyle = '#7a1a4a'; g.fill();
+          g.beginPath(); g.arc(o.x, o.y, o.r + 4, 0, TAU); g.fillStyle = '#ff4d8d'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#2a0a22'; g.stroke();
+          g.beginPath(); g.arc(o.x, o.y, o.r * 0.62, 0, TAU); g.fillStyle = '#ffd666'; g.fill(); g.stroke();
+          g.beginPath(); g.arc(o.x, o.y, o.r * (0.2 + 0.18 * p), 0, TAU); g.fillStyle = '#fff'; g.fill();
+        } else if (o.k === 'post') {
+          g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.arc(o.x + 5, o.y + 12, o.r, 0, TAU); g.fill();
+          g.beginPath(); g.arc(o.x, o.y, o.r, 0, TAU); g.fillStyle = '#3a2a7a'; g.fill(); g.lineWidth = 4; g.strokeStyle = '#ffd666'; g.stroke();
+          g.beginPath(); g.arc(o.x, o.y, o.r * 0.45, 0, TAU); g.fillStyle = '#5b44c4'; g.fill();
         } else if (o.k === 'reactor') {
           g.fillStyle = 'rgba(0,0,0,.28)'; g.beginPath(); g.arc(o.x + 7, o.y + 18, o.r, 0, TAU); g.fill();
           g.beginPath(); g.arc(o.x, o.y + 12, o.r, 0, TAU); g.fillStyle = '#2b365a'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#8fa0d6'; g.stroke();
@@ -277,6 +375,35 @@ const MapRender = (() => {
           g.beginPath(); g.arc(o.x, o.y, o.r, 0, TAU); g.fillStyle = '#999'; g.fill();
         }
       }
+    }
+  }
+
+  /* canopy: bushes / kelp drawn OVER the players. Seen from inside they turn see-through. */
+  function drawCanopy(g, map, v, t, viewer) {
+    for (const z of map.zones) {
+      if (z.k !== 'hide' || z.x + z.r < v.x0 || z.x - z.r > v.x1 || z.y + z.r < v.y0 || z.y - z.r > v.y1) continue;
+      const inside = viewer && Math.hypot(viewer.x - z.x, viewer.y - z.y) < z.r, reef = map.theme === 'reef', snow = map.theme === 'frost';
+      g.save(); g.globalAlpha = inside ? 0.45 : 0.93;
+      if (reef) {
+        for (let i = 0; i < 16; i++) {
+          const a = i * 2.4 + z.x, rd = z.r * 0.8 * (((i * 37) % 10) / 10 + 0.15), bx = z.x + Math.cos(a) * rd, by = z.y + Math.sin(a) * rd * 0.8 + 18, h = 46 + ((i * 13) % 5) * 9;
+          g.strokeStyle = i % 2 ? '#2f9e5a' : '#46c473'; g.lineWidth = 9; g.lineCap = 'round'; g.beginPath(); g.moveTo(bx, by);
+          g.quadraticCurveTo(bx + Math.sin(t * 1.4 + i) * 14, by - h / 2, bx + Math.sin(t * 1.4 + i + 1) * 10, by - h); g.stroke();
+        }
+      } else if (snow) {
+        for (let i = 0; i < 9; i++) {
+          const a = i * 2.3 + z.y, rd = z.r * 0.55 * (((i * 31) % 10) / 10 + 0.15), bx = z.x + Math.cos(a) * rd, by = z.y + Math.sin(a) * rd * 0.7, rr2 = z.r * (0.36 + ((i * 5) % 4) * 0.04);
+          g.beginPath(); g.ellipse(bx, by + 6, rr2, rr2 * 0.82, 0, 0, TAU); g.fillStyle = '#b9d9ee'; g.fill();
+          g.beginPath(); g.ellipse(bx, by, rr2, rr2 * 0.82, 0, 0, TAU); g.fillStyle = i % 2 ? '#ffffff' : '#f0f9ff'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#8fbad6'; g.stroke();
+        }
+      } else {
+        for (let i = 0; i < 11; i++) {
+          const a = i * 2.1 + z.y, rd = z.r * 0.62 * (((i * 29) % 10) / 10 + 0.2), bx = z.x + Math.cos(a) * rd, by = z.y + Math.sin(a) * rd * 0.8, rr2 = z.r * (0.34 + ((i * 7) % 4) * 0.04);
+          g.beginPath(); g.arc(bx, by, rr2, 0, TAU); g.fillStyle = i % 3 === 0 ? '#2e9348' : i % 3 === 1 ? '#3fb05b' : '#58cc72'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#1d6a31'; g.stroke();
+        }
+        g.fillStyle = '#ff6b9a'; for (let i = 0; i < 5; i++) { const a = i * 1.3 + z.x; g.beginPath(); g.arc(z.x + Math.cos(a) * z.r * 0.55, z.y + Math.sin(a) * z.r * 0.45, 4, 0, TAU); g.fill(); }
+      }
+      g.restore();
     }
   }
 
@@ -305,12 +432,13 @@ const MapRender = (() => {
     if (!flat) { g.globalAlpha = 0.22; g.fillStyle = '#000'; g.fillRect(0, 0, map.w, map.h); g.globalAlpha = 1; }   // dim a little so minimap dots pop
     drawZones(g, map, whole, 0);
     drawObstacles(g, map, { x0: -50, y0: -50, x1: map.w + 50, y1: map.h + 50 }, 0);
+    drawCanopy(g, map, whole, 0, null);
     drawBorder(g, map);
     miniCache.set(key, c);
     return c;
   }
 
-  return { drawFloor, drawBorder, drawZones, drawObstacles, drawGoo, miniBase };
+  return { drawFloor, drawBorder, drawZones, drawObstacles, drawCanopy, drawGoo, miniBase };
 })();
 
 /* ================================ particles ================================== */
