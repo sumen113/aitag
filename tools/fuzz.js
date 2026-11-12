@@ -163,7 +163,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   console.log('prediction drift: replay client inputs through the shared sim and compare with the server');
   for (const h of [...humans, dup, refill, solo]) try { h.ws.close(); } catch (e) { /* noop */ }   // a lone player: no tags/stomps to confuse the replay
   await sleep(400);
-  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat', 'bird', 'avocado'];
+  const driftIds = ['fox', 'frog', 'ghost', 'bear', 'penguin', 'cat', 'bat', 'bird', 'avocado', 'dog', 'mole', 'donkey', 'skunk'];
   for (const cid of driftIds) {                              // dash, leap, phase, stomp, slide, cloak+pounce, beacon+recall
     const ci = T.CHARS.findIndex((x) => x.id === cid);
     const acc = await account('Drift' + cid, { wins: 20, items: T.CHARS[ci].starter ? [] : [cid] });

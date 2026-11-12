@@ -145,6 +145,9 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'penguin') use = td > 170 && td < 380 && los;
     else if (id === 'star') use = td > 90 && td < 330 && los;
     else if (id === 'avocado') use = td > 110 && td < 460 && los;       // the bot is already steering at the target
+    else if (id === 'dog') use = td > 60 && td < 340;                    // leave pits across the runners' paths
+    else if (id === 'mole') use = p.abT > 0 ? td < 120 : td > 170 && td < 440 && los;   // tunnel in, pop up under them
+    else if (id === 'skunk') use = td > 70 && td < 280 && los;
   } else if (itp) {
     if (id === 'fox') use = d < 140;
     else if (id === 'frog') use = d < 120;
@@ -159,6 +162,10 @@ function botAbility(room, p, itp, d, los, target) {
     else if (id === 'star') use = d < 210;
     else if (id === 'bird') use = d < 190;
     else if (id === 'avocado') { use = d > 100 && d < 400 && lineClear(room.map, p.x, p.y, itp.x, itp.y, 12); aim = itp; }   // turn and spit at IT
+    else if (id === 'dog') use = d < 280;
+    else if (id === 'mole') use = p.abT > 0 ? d < 100 : d < 210;
+    else if (id === 'donkey') use = d < 140;                                 // IT is right behind: kick it off
+    else if (id === 'skunk') use = d < 230;
     else if (id === 'bat') use = p.aux > 0 ? d < 130 : p.cd <= 0 && d > 240 && d < 520;     // drop a beacon while safe, snap back when IT closes in
   }
   if (use && Math.random() < DIFFS[room.diff || 'normal'].abil) { p.input.a = 1; if (aim) setDir(p, aim.x + aim.vx * 0.15, aim.y + aim.vy * 0.15, 0); }
@@ -181,7 +188,7 @@ function thinkBot(room, p) {
       const d = Math.hypot(q.x - p.x, q.y - p.y);
       if (d < fd) { fd = d; fallback = q; }
       if (q.imm > 0.25) continue;
-      if (q.c === IDX.frog && q.abT > 0) continue;
+      if ((q.c === IDX.frog || q.c === IDX.mole) && q.abT > 0) continue;
       if (q.c === IDX.cat && q.abT > 0 && d > 200) continue;     // cloaked: bots lose sight
       if (d < bd) { bd = d; best = q; }
     }

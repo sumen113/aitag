@@ -17,7 +17,7 @@
     ws: null, inGame: false, id: 0, solo: false, diff: 'normal', sel: { name: '', c: 0, k: 0 },
     roster: new Map(), map: null, ctx: { map: null, goos: [] },
     me: null, px: 0, py: 0, pending: [], seq: 0, sendBuf: [], acc: 0, err: { x: 0, y: 0 },
-    snaps: [], offset: null, goos: [], decoys: [], decoysAt: 0, seeds: [], seedsAt: 0, uiOff: false,
+    snaps: [], offset: null, goos: [], pits: [], decoys: [], decoysAt: 0, seeds: [], seedsAt: 0, uiOff: false,
     state: STATE.WAIT, tl: 0, tlAt: 0, rd: 0, itId: 0, res: null, mode: 'classic', pt: new Map(), ptAt: 0, voteDur: 14,
     cam: { x: 0, y: 0 }, zoom: 1, zoomT: 1, shake: 0, camSnap: true,
     vis: new Map(), bubbles: new Map(), muted: new Set(), acct: false, t: 0, ping: 0, jit: 0, snapInt: 33, lastArr: 0, lastTs: 0, delay: 100, lastSend: 0,
@@ -61,6 +61,7 @@
       case 'pg': { const rtt = performance.now() - m.ts; G.ping = G.ping ? G.ping * 0.7 + rtt * 0.3 : rtt; $('ping').textContent = Math.round(G.ping); break; }
       case 'err': { const f = G.joinResolve, ws = G.ws; G.ws = null; try { ws && ws.close(); } catch (e) { /* noop */ } if (f) f({ ok: false, err: m.m }); else overlay(m.m); break; }
       case 'kick': G.kicked = m.m; break;
+      case 'idle': toast(`Move or you'll be removed in ${m.s}s`); break;
       case 'award': onAward(m); break;
       case 'announce': onAnnounce(m); break;
       default: break;
@@ -88,7 +89,7 @@
     for (const p of list) {
       seen.add(p.id);
       const r = G.roster.get(p.id);
-      if (r) Object.assign(r, p); else G.roster.set(p.id, Object.assign({ sc: 0, tg: 0, fl: 0 }, p));
+      if (r) { delete r.tt; delete r.tc; Object.assign(r, p); } else G.roster.set(p.id, Object.assign({ sc: 0, tg: 0, fl: 0 }, p));
     }
     for (const id of [...G.roster.keys()]) if (!seen.has(id)) { G.roster.delete(id); G.vis.delete(id); }
     const humans = [...G.roster.values()].filter((r) => !r.b).length;
@@ -119,6 +120,7 @@
     for (const e of m.p) { const r = G.roster.get(e[0]); if (r) { r.sc = e[9]; r.tg = e[10]; r.fl = e[7]; } }
     G.goos = m.g.map((a) => ({ id: a[0], x: a[1], y: a[2], r: a[3], o: a[4], ttl: a[5], s: a[6] }));
     G.ctx.goos = G.goos;
+    G.pits = (m.pi || []).map((a) => ({ id: a[0], x: a[1], y: a[2], r: a[3], o: a[4], ttl: a[5] }));
     G.seeds = (m.sd || []).map((a) => ({ id: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], o: a[5] })); G.seedsAt = now;
     G.decoys = m.d.map((a) => ({ id: a[0], x: a[1], y: a[2], vx: a[3], vy: a[4], c: a[5], k: a[6], o: a[7], ttl: a[8] })); G.decoysAt = now;
     if (G.vis.size > 40) { const live = new Set(G.decoys.map((d) => 'd' + d.id)); for (const k of [...G.vis.keys()]) if (typeof k === 'string' && !live.has(k)) G.vis.delete(k); }
@@ -158,6 +160,8 @@
   }
 
   /* ============================ HUD feedback (GSAP) ========================== */
+  /** A player's custom title as a small coloured pill (DOM version; the canvas nameplate draws its own). */
+  function titlePill(text, color) { const s = el('span', 'ttl', text); s.style.background = C.titleColor(color); s.style.color = C.titleInk(color); return s; }
   const rname = (id) => { const r = G.roster.get(id); return r ? r.n : '???'; };
 
   // enter, hold, leave as ONE timeline (rather than chaining a second tween with `delay`)
@@ -240,12 +244,13 @@
       case 'chat': onChat(e); break;
       case 'join': toast(`${e.n} joined`); Sfx.play('join'); break;
       case 'leave': toast(`${e.n} left`); break;
+      case 'redo': toast(e.m); break;
       default: break;
     }
   }
 
-  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust', 'seed']);
-  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl', 'seedhit', 'seedpop']);   // effects the local sim doesn't predict: show them for me too
+  const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
+  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl', 'seedhit', 'seedpop', 'pitfall']);   // effects the local sim doesn't predict: show them for me too
   function abilityFx(e, local) {
     const id = e.n, x = e.x, y = e.y;
     const loud = local || near(x, y);
@@ -264,6 +269,32 @@
         Particles.puff(x + e.dx * 24, y + e.dy * 24, '#e9f3a8', 10, 0.3); Particles.ring(x + e.dx * 20, y + e.dy * 20, 4, 36, '#8a5a35', 0.25, 4);
         for (let i = 0; i < 4; i++) Particles.streak(x + e.dx * 26, y + e.dy * 26, e.dx, e.dy, '#b88556', 80 + Math.random() * 60, 0.25);
         if (loud) Sfx.play('seed'); break;
+      case 'pit':
+        Particles.burst(x, y + 10, '#8a6038', 16, 220, 6, 0.5); Particles.puff(x, y + 12, '#c9a06a', 14, 0.45); Particles.ring(x, y + 10, 6, 44, '#6b4a2b', 0.3, 5);
+        if (loud) Sfx.play('dig'); break;
+      case 'pitfall':
+        Particles.burst(x, y + 6, '#8a6038', 20, 300, 7, 0.55); Particles.puff(x, y + 8, '#c9a06a', 16, 0.5); Particles.ring(x, y + 8, 6, 70, '#ffd23f', 0.4, 6);
+        for (let i = 0; i < 4; i++) Particles.star(x, y - 14, '#ffe27a', 8, 0.7, (Math.random() - 0.5) * 220, -80 - Math.random() * 100);
+        if (loud) { Sfx.play('pitfall'); G.shake = Math.max(G.shake, e.id === G.id ? 5 : 2); }
+        if (e.id === G.id) toast('You fell in a pit!'); break;
+      case 'burrow':
+        Particles.burst(x, y + 10, '#7a5a3a', 18, 260, 7, 0.55); Particles.puff(x, y + 12, '#b08a5e', 16, 0.5); Particles.ring(x, y + 10, 6, 56, '#6b4a2b', 0.35, 6);
+        if (loud) Sfx.play('burrow'); break;
+      case 'surface':
+        Particles.burst(x, y + 6, '#8a6038', 26, 420, 8, 0.65); Particles.ring(x, y + 8, 10, 100, '#c9a06a', 0.45, 9); Particles.puff(x, y + 8, '#b08a5e', 14, 0.55);
+        for (let i = 0; i < 5; i++) Particles.star(x, y - 10, '#ffe27a', 8, 0.6, (Math.random() - 0.5) * 300, -90 - Math.random() * 110);
+        if (loud) { Sfx.play('surface'); if (local) G.shake = Math.max(G.shake, 4); } break;
+      case 'kick': {
+        const bx = -e.dx, by = -e.dy;
+        Particles.ring(x + bx * 40, y + by * 40, 8, 120, '#ffd23f', 0.4, 8);
+        for (let i = 0; i < 9; i++) { const a = Math.atan2(by, bx) + (Math.random() - 0.5) * 1.8; Particles.streak(x + bx * 26, y + by * 26, Math.cos(a), Math.sin(a), '#fff1c2', 90 + Math.random() * 90, 0.3); }
+        Particles.burst(x + bx * 30, y + by * 30 + 10, '#c9a06a', 12, 320, 6, 0.45);
+        if (loud) { Sfx.play('kick'); if (local) G.shake = Math.max(G.shake, 6); } break;
+      }
+      case 'stink':
+        for (let i = 0; i < 10; i++) Particles.puff(x + (Math.random() - 0.5) * 50, y + 6 + (Math.random() - 0.5) * 24, '#b8d65a', 18 + Math.random() * 10, 0.9);
+        Particles.ring(x, y + 8, 8, 90, '#cfe66a', 0.45, 7);
+        if (loud) Sfx.play('stink'); break;
       case 'seedhit':
         Particles.burst(x, y, '#8a5a35', 12, 280, 5, 0.45); Particles.ring(x, y, 6, 64, '#ffd23f', 0.35, 6);
         for (let i = 0; i < 5; i++) Particles.star(x, y - 14, '#ffe27a', 8, 0.7, (Math.random() - 0.5) * 220, -80 - Math.random() * 120);
@@ -376,8 +407,7 @@
     if (G.muted.has(e.id)) return;
     const mine = e.id === G.id, d = el('div', 'msg' + (mine ? ' me' : '')), who = el('b', e.a ? 'reg' : '', e.n);
     who.title = mine ? '' : 'Click to mute / unmute'; if (!mine) who.addEventListener('click', () => muteToggle(e.id, e.n));
-    if (e.s) d.classList.add('staff');
-    d.append(...(e.s ? [el('span', 'stf', 'ADMIN')] : []), who, el('span', '', e.m)); chatLog.appendChild(d);
+    d.append(...(e.tt ? [titlePill(e.tt, e.tc)] : []), who, el('span', '', e.m)); chatLog.appendChild(d);
     while (chatLog.children.length > 7) chatLog.firstChild.remove();
     gsap.fromTo(d, { x: -30, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3, ease: 'back.out(2)' });
     setTimeout(() => d.classList.add('old'), 14000);
@@ -455,7 +485,7 @@
   $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; Sfx.unlock(); } });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed']);
+  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
@@ -520,6 +550,10 @@
     let alpha = 1;
     if (cloak && !e.isMe) return;      // a cloaked cat is fully invisible to everyone else: no body, shadow, marker or name
     if (cloak) alpha = 0.42;
+    if (on && id === 'mole') {
+      if (!e.isMe) { drawMound(g, e.x, e.y + r, r, t, v, spd, dt, e.out ? 0.4 : 1); labels.push({ e, x: e.x, y: e.y + r - 24, alpha: 0.75 }); return; }
+      drawMound(g, e.x, e.y + r, r, t, v, spd, dt, 0.9); alpha *= 0.35;
+    }
     if (phase) alpha = 0.5;
     if (e.out) alpha *= 0.4;
     if (e.imm && !e.it && !e.decoy) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(t * 13));
@@ -570,6 +604,20 @@
     if (!cloak || e.isMe) labels.push({ e, x, y: fyPos - 50 * s - air * 46, alpha: phase ? 0.7 : 1 });
   }
 
+  /* a burrowed mole is just a moving mound of dirt: a dome with a crumbly trail */
+  function drawMound(g, x, fy, r, t, v, spd, dt, alpha) {
+    v.trail -= dt; if (v.trail < 0) { v.trail = 0.06; Particles.puff(x, fy - 2, '#8a6038', 6 + Math.random() * 4, 0.45); }
+    g.save(); g.globalAlpha = alpha;
+    g.beginPath(); g.ellipse(x, fy + 3, r * 1.5, r * 0.5, 0, 0, TAU); g.fillStyle = 'rgba(0,0,0,.25)'; g.fill();
+    const wob = Math.sin(t * 14) * (0.04 + 0.06 * spd);
+    g.beginPath(); g.moveTo(x - r * 1.25, fy);
+    g.bezierCurveTo(x - r * 1.1, fy - r * 1.1 * (1 + wob), x + r * 1.1, fy - r * 1.1 * (1 - wob), x + r * 1.25, fy); g.closePath();
+    g.fillStyle = '#9a6e43'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#1a1633'; g.stroke();
+    g.fillStyle = '#b98a58'; g.beginPath(); g.ellipse(x - r * 0.3, fy - r * 0.55, r * 0.42, r * 0.2, -0.4, 0, TAU); g.fill();
+    g.fillStyle = '#6b4a2b'; for (const [dx, dy, rr] of [[0.5, -0.3, 2.6], [-0.7, -0.15, 2], [0.1, -0.65, 1.8]]) { g.beginPath(); g.arc(x + dx * r, fy + dy * r, rr, 0, TAU); g.fill(); }
+    g.restore();
+  }
+
   /* your Echo Beacon (only you see it): pulsing ring with a countdown arc */
   function drawBeacon(g, me, t) {
     const x = me.bx, y = me.by, p = 0.5 + 0.5 * Math.sin(t * 7), frac = clamp(me.aux / 4, 0, 1);
@@ -607,10 +655,18 @@
           lift = 24;
         }
       }
-      const name = e.name; g.font = `700 14px ${FONT}`;
-      g.lineWidth = 4; g.strokeStyle = 'rgba(20,18,43,.92)'; g.strokeText(name, sx, sy - 4);
-      g.fillStyle = e.isMe ? '#ffd23f' : '#fffaf0'; g.fillText(name, sx, sy - 4);
-      if (e.afk) { g.font = '16px sans-serif'; g.fillText('💤', sx + g.measureText(name).width / 2 + 10, sy - 10); }
+      const name = e.name, rr = e.decoy ? null : G.roster.get(e.id); g.font = `700 14px ${FONT}`;
+      let nx = sx, half = g.measureText(name).width / 2;
+      if (rr && rr.tt) {                                  // custom title: a coloured pill in front of the name
+        g.font = `800 11px ${FONT}`; const tw = g.measureText(rr.tt).width + 12, nw = (g.font = `700 14px ${FONT}`, g.measureText(name).width), total = tw + 5 + nw, x0 = sx - total / 2;
+        g.beginPath(); g.roundRect(x0, sy - 17, tw, 16, 8); g.fillStyle = C.titleColor(rr.tc); g.fill(); g.lineWidth = 2; g.strokeStyle = 'rgba(20,18,43,.92)'; g.stroke();
+        g.font = `800 11px ${FONT}`; g.textAlign = 'center'; g.fillStyle = C.titleInk(rr.tc); g.fillText(rr.tt, x0 + tw / 2, sy - 5);
+        nx = x0 + tw + 5 + nw / 2; half = x0 + total - sx;          // name sits after the pill; the 💤 goes at the right edge
+      }
+      g.font = `700 14px ${FONT}`; g.textAlign = 'center';
+      g.lineWidth = 4; g.strokeStyle = 'rgba(20,18,43,.92)'; g.strokeText(name, nx, sy - 4);
+      g.fillStyle = e.isMe ? '#ffd23f' : '#fffaf0'; g.fillText(name, nx, sy - 4);
+      if (e.afk) { g.font = '16px sans-serif'; g.fillText('💤', sx + half + 10, sy - 10); }
       if (bb && !e.decoy && G.t - bb.t < 5.5) drawBubble(g, bb, sx, sy - 22 - lift, l.alpha);
       g.globalAlpha = 1;
     }
@@ -668,6 +724,7 @@
     const v = { x0: G.cam.x - hw - 40, y0: G.cam.y - hh - 40, x1: G.cam.x + hw + 40, y1: G.cam.y + hh + 40 };
     MapRender.drawFloor(g, map, v, t); MapRender.drawBorder(g, map); MapRender.drawZones(g, map, v, t);
     for (const goo of G.goos) MapRender.drawGoo(g, goo, t);
+    for (const pit of G.pits) MapRender.drawPit(g, pit, t, pit.o === G.id);
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
@@ -819,7 +876,8 @@
   /* scoreboard: rows are persistent elements, re-ordered with GSAP Flip */
   function makeRow(r) {
     const d = el('div', 'brow'); const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, r.k, 48, r.h);
-    d.append(el('span', 'rk'), img, el('span', 'nm', r.n));
+    const nm = el('span', 'nm'); if (r.tt) nm.append(titlePill(r.tt, r.tc)); nm.append(r.n); nm.dataset.tt = r.tt || '';
+    d.append(el('span', 'rk'), img, nm);
     if (r.a) d.append(el('span', 'ck', '✓'));
     if (r.b) d.append(el('span', 'bt', 'BOT'));
     d.append(el('span', 'tg', 'IT'), el('span', 'sc'));
@@ -840,6 +898,8 @@
       const tg = e.querySelector('.tg'), lbl = isIt ? (G.mode === 'potato' ? 'POTATO' : G.mode === 'infection' ? 'ZOMBIE' : 'IT') : waitR ? 'NEXT' : outR ? 'OUT' : '';
       const tcls = 'tg' + (isIt ? (G.mode === 'potato' ? ' pt' : G.mode === 'infection' ? ' zb' : '') : lbl ? ' gh' : '');
       if (tg.textContent !== lbl) tg.textContent = lbl; if (tg.className !== tcls) tg.className = tcls; tg.style.display = lbl ? '' : 'none';
+      const nmEl = e.querySelector('.nm');
+      if ((nmEl.dataset.tt || '') !== (r.tt || '')) { nmEl.replaceChildren(...(r.tt ? [titlePill(r.tt, r.tc)] : []), r.n); nmEl.dataset.tt = r.tt || ''; }
       const rk = e.querySelector('.rk'), sc = e.querySelector('.sc');
       if (rk.textContent !== String(i + 1)) rk.textContent = i + 1;
       if (sc.textContent !== String(r.sc)) sc.textContent = r.sc;
@@ -947,7 +1007,7 @@
     [1, 0, 2].forEach((i) => {
       const x = res[i]; if (!x) return;
       const d = el('div', 'pod p' + Math.min(3, x.rank)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h);
-      d.append(img, el('div', 'pn', x.r.n), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(x.rank))); pod.appendChild(d);
+      d.append(img, (() => { const pn = el('div', 'pn'); if (x.r.tt) pn.append(titlePill(x.r.tt, x.r.tc)); pn.append(x.r.n); return pn; })(), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(x.rank))); pod.appendChild(d);
     });
     const list = $('resList'); list.innerHTML = '';
     res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h); d.append(el('span', 'rk', String(x.rank)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });

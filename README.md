@@ -61,6 +61,12 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 
 Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
 
+## Leaving, standing still and lone zombies (v7.3)
+
+- **Standing still** (no ability use and less than 50 px travelled, so wiggling or pushing into a wall doesn't count) for **10 s during a round** removes you from the server with a message; a warning toast appears for the last 6 s and a 💤 marker from 4 s. Practice rooms allow 30 s. Waiting in the countdown/vote doesn't count. Tagging someone idle just tags them: tags are never bounced onward.
+- **Closing the tab / laptop lid**: the server pings every second, marks a silent socket `gone` after 1.5 s (invisible, untaggable) and removes the player after 4 s (a clean tab close is instant).
+- **The only zombie leaves** (Infection): the round is scrapped and the vote / countdown restarts. Infection is never handed to a new player. Classic and Hot Potato still pass the tag on.
+
 ## Arenas (v7.2)
 
 Nine arenas: Sunny Park, Neon Grid, Frosty Lake, Candy Maze, Space Station, Coral Reef, Factory Floor, Pinball Palace (the vote / rotation pool) and Outbreak (Infection only). Maps are built in `public/shared.js` (`build*`), drawn in `public/render.js`. Floor zones, all simulated identically on server and client in `stepPlayer`:
@@ -93,7 +99,8 @@ What it does:
   ban or unban. Takes effect next time they join; a banned account is signed out immediately and cannot log in.
 - **Broadcast & bans**: **announce** a message that pops up in every open game, set a **banner** on the home page ("Maintenance at 5pm"), see and undo bans and mutes.
 - **Log**: the last 100 admin actions (also printed in the server log).
-Admin messages in chat carry an **ADMIN** tag. Bans, mutes (accounts) and the banner are stored in the database; guest mutes last until the server restarts.
+- **Titles**: type an account username, a title (up to 16 characters) and pick a colour (or a swatch): it appears as a coloured pill next to that player's name on the field, scoreboard, results, chat and leaderboard, live in games already running. Empty text removes it. Nobody has a title by default, staff included. Stored with the other staff data (`titles`).
+Bans, mutes (accounts) and the banner are stored in the database; guest mutes last until the server restarts.
 The rest of the safety is the same as the main site: same-origin JSON only, passcode attempts are rate limited, and admin accounts cannot be banned.
 
 ## Leaderboard, quick chat, news
@@ -148,6 +155,10 @@ is one database transaction (charge + grant) so wins can never be double-spent. 
 | Bat | Echo Beacon | 10 s | 3 ★ | drop a beacon, press again within 4 s to snap back to it |
 | Starfish | Ricochet | 13 s | 3 ★ | steerable 1.5 s roll that bounces off walls |
 | Avocado | Pit Shot | 9 s | 6 ★ | spits a seed in a straight line (640 px). From IT it tags the first runner hit; from a runner it stuns IT for 1.3 s. Seeds stop at walls and fly through other taggers |
+| Dog (Max) | Dig Pit | 12 s | 4 ★ | digs a hidden pit (up to 3, 16 s). Whoever is on the other side of the tag who steps in is stuck for 1.8 s, then gets 1.4 s of grace. Frogs in the air, ghosts phasing and moles underground don't fall |
+| Mole (Marty) | Burrow | 13 s | 5 ★ | 2.4 s underground: untaggable, can't tag, not slowed by mud/goo/stink, 12 % faster, shown as a moving mound. Press again (after 0.35 s) to pop up early; surfacing dazes everyone within 100 px for 0.65 s |
+| Donkey (Dusty) | Mule Kick | 10 s | 3 ★ | everyone in a ~130° cone behind your direction of travel (150 px) is launched and stunned 0.8 s; you lunge forward. A shield eats the kick |
+| Skunk (Pepper) | Stink Cloud | 11 s | 4 ★ | 3.2 s cloud (88 px) that flips the controls of everyone but the skunk (max 2) |
 | Bird | Gale | 12 s | 2 ★ | stun-free blast (270 px) that shoves everyone away, then a short glide boost |
 
 ### Customisation and animation
@@ -177,4 +188,4 @@ tools/             balance.js, fuzz.js (integration), dbtest.js (database), admi
 
 ### Dead connections
 
-The server pings every second. A socket that hasn't answered for 1.5 s is marked `gone`: invisible, untaggable, and its tag/potato is passed on at once; after 6 s it is dropped. The client also closes its socket on `pagehide`.
+The server pings every second. A socket that hasn't answered for 1.5 s is marked `gone`: invisible, untaggable, and its tag/potato is passed on at once; after 4 s it is dropped. The client also closes its socket on `pagehide`.

@@ -290,6 +290,81 @@ const Chars = (() => {
       g.beginPath(); g.arc(0, -24.8, 2.6, 0.25, Math.PI - 0.25); g.lineWidth = 1.7; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
       cheek(g, -9.8, -25.2, 2.9, 1.9); cheek(g, 9.8, -25.2, 2.9, 1.9);
     },
+    dog(g, c, o) {
+      g.save(); g.translate(-13, -13); g.rotate(-0.9 + Math.sin(o.t * 13) * (0.18 + 0.32 * o.spd));      // wagging tail
+      ell(g, -2, -8, 4.4, 10, c.d, 2.2, 0.25);
+      g.restore();
+      feet(g, c.dd, 8, o);
+      ell(g, 0, -19, 17, 18.5, c.m);
+      ell(g, 6.5, -25.5, 7.2, 7, c.dd, 0.01);                                   // eye patch
+      g.beginPath(); g.ellipse(0, -19, 17, 18.5, 0, 0, Math.PI * 2); g.lineWidth = 2.4; g.strokeStyle = OUT; g.stroke();
+      for (const sd of [-1, 1]) {                                               // floppy ears
+        g.save(); g.translate(sd * 15, -30); g.rotate(sd * (0.45 + Math.sin(o.t * 6 + sd) * 0.05 * (0.4 + o.spd)));
+        ell(g, 0, 5, 5.8, 10.5, c.dd, 2.4); g.restore();
+      }
+      ell(g, 0, -12.5, 11, 8.2, c.ll, 2.2);                                     // muzzle
+      ell(g, 0, -16.5, 3.8, 2.8, OUT, 0.01); ell(g, -1.1, -17.4, 1.1, 0.8, '#fff', 0.01);
+      g.beginPath(); g.moveTo(0, -14); g.lineTo(0, -11.5); g.moveTo(0, -11.5); g.quadraticCurveTo(-3.2, -8.8, -6, -10.8); g.moveTo(0, -11.5); g.quadraticCurveTo(3.2, -8.8, 6, -10.8);
+      g.lineWidth = 1.6; g.strokeStyle = OUT; g.stroke();
+      ell(g, 2.6, -7.4, 2.8, 3.3 + Math.sin(o.t * 9) * 0.5 * o.spd, '#ff7a9a', 1.6);   // tongue
+      eye(g, -7, -25, 4.3, o); eye(g, 7, -25, 4.3, o);
+    },
+    mole(g, c, o) {
+      feet(g, c.dd, 7, o, 0.9);
+      const dig = Math.sin(o.t * 10) * 0.25 * (0.3 + o.spd);
+      for (const sd of [-1, 1]) {                                               // big spade paws
+        g.save(); g.translate(sd * 17.5, -12); g.rotate(sd * (0.5 + dig));
+        ell(g, 0, 0, 6.8, 5, '#f2b6a6', 2.2);
+        for (const k of [-3.2, 0, 3.2]) { g.beginPath(); g.moveTo(k, 3.5); g.lineTo(k * 1.15, 8); g.lineWidth = 2.2; g.strokeStyle = '#f7f0e6'; g.stroke(); g.lineWidth = 1; g.strokeStyle = OUT; g.stroke(); }
+        g.restore();
+      }
+      ell(g, 0, -18, 16.5, 17, c.m);
+      ell(g, 0, -10.5, 10.5, 8, c.l, 0.01);
+      for (const sd of [-1, 1]) ell(g, sd * 12.5, -31.5, 3.6, 3.6, c.d, 2);
+      g.beginPath(); g.moveTo(-6, -15); g.quadraticCurveTo(0, -24, 6, -15); g.quadraticCurveTo(0, -9, -6, -15); g.closePath(); fillStroke(g, '#f4b9b2', 2);           // snout
+      for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + o.t * 0.8; g.beginPath(); g.moveTo(Math.cos(a) * 1.4, -18 + Math.sin(a) * 1.4); g.lineTo(Math.cos(a) * 4.6, -18 + Math.sin(a) * 4.6); g.lineWidth = 1.7; g.strokeStyle = '#ff8fa3'; g.stroke(); }   // star-nose tentacles
+      ell(g, 0, -18, 1.9, 1.9, '#ff6f91', 1.2);
+      for (const sd of [-1, 1]) {                                               // tiny eyes behind round glasses
+        dotEye(g, sd * 8.2, -27, 2.2, o);
+        g.beginPath(); g.arc(sd * 8.2, -27, 4.6, 0, Math.PI * 2); g.lineWidth = 1.5; g.strokeStyle = '#f2e6c8'; g.stroke(); g.lineWidth = 0.9; g.strokeStyle = OUT; g.stroke();
+      }
+      g.beginPath(); g.moveTo(-3.6, -27); g.lineTo(3.6, -27); g.lineWidth = 1.4; g.strokeStyle = '#f2e6c8'; g.stroke();
+      rrect(g, -2.1, -10.8, 4.2, 3.4, 1, '#fff', 1.3);                          // buck tooth
+    },
+    donkey(g, c, o) {
+      g.save(); g.translate(-15, -10); g.rotate(0.5 + Math.sin(o.t * 5) * 0.15);
+      ell(g, -4, 2, 3.2, 6.5, c.d, 2, 0.5); ell(g, -7, 7.5, 4.4, 4.6, c.dd, 2); g.restore();      // swishing tufty tail
+      feet(g, c.dd, 9, o, 1.15);
+      for (const sd of [-1, 1]) {                                               // tall ears with dark tips
+        g.save(); g.translate(sd * 10, -32); g.rotate(sd * (0.55 + Math.sin(o.t * 4 + sd) * 0.04));
+        ell(g, 0, -8.5, 5.6, 10.5, c.m, 2.4); ell(g, 0, -7.5, 3, 7, c.ll, 0.01); ell(g, 0, -15.5, 4.2, 3.4, c.dd, 0.01); g.restore();
+      }
+      ell(g, 0, -18, 18, 18.5, c.m);
+      poly(g, [-3.4, -36, 3.4, -36, 0, -41.5], c.dd, 2);                         // forelock
+      ell(g, 0, -10.5, 13.5, 10, c.ll, 2.4);                                    // big pale muzzle
+      for (const sd of [-1, 1]) ell(g, sd * 4.6, -12.5, 1.9, 1.4, OUT, 0.01);
+      g.beginPath(); g.moveTo(-5, -7.6); g.quadraticCurveTo(0, -4.8, 5, -7.6); g.lineWidth = 1.7; g.strokeStyle = OUT; g.stroke();
+      rrect(g, -2.6, -8, 5.2, 3.6, 1, '#fff', 1.3);
+      eye(g, -8, -25, 4.5, o); eye(g, 8, -25, 4.5, o);
+      cheek(g, -14, -17, 3.2, 2); cheek(g, 14, -17, 3.2, 2);
+    },
+    skunk(g, c, o) {
+      g.save(); g.translate(-12, -15); g.rotate(-0.55 + Math.sin(o.t * 5) * 0.1 + o.spd * 0.18);      // big bushy tail, curled up
+      ell(g, -7, -10, 9.5, 18, c.m, 2.4, -0.35); ell(g, -6.2, -10.5, 3.4, 15, '#f6f3ff', 0.01, -0.35);
+      g.restore();
+      feet(g, c.dd, 7.5, o, 0.95);
+      for (const sd of [-1, 1]) { ell(g, sd * 12, -32.5, 4.4, 5, c.m, 2.2); ell(g, sd * 12, -32, 2.1, 2.8, '#ffb3c6', 0.01); }
+      ell(g, 0, -18.5, 16.5, 17.5, c.m);
+      g.save(); g.beginPath(); g.ellipse(0, -18.5, 16.5, 17.5, 0, 0, Math.PI * 2); g.clip();
+      ell(g, 0, -28, 3.6, 13, '#f6f3ff', 0.01);                                 // the stripe
+      g.restore();
+      g.beginPath(); g.ellipse(0, -18.5, 16.5, 17.5, 0, 0, Math.PI * 2); g.lineWidth = 2.4; g.strokeStyle = OUT; g.stroke();
+      ell(g, 0, -11.5, 9.6, 7, c.l, 2);
+      ell(g, 0, -15.2, 2.9, 2.2, OUT, 0.01); ell(g, -0.9, -15.9, 0.9, 0.7, '#fff', 0.01);
+      g.beginPath(); g.moveTo(0, -13); g.quadraticCurveTo(-2.4, -9.8, -5, -11.4); g.moveTo(0, -13); g.quadraticCurveTo(2.4, -9.8, 5, -11.4); g.lineWidth = 1.5; g.strokeStyle = OUT; g.stroke();
+      eye(g, -7.2, -22.5, 4.2, o); eye(g, 7.2, -22.5, 4.2, o);
+      cheek(g, -11.5, -15.5, 3, 1.9); cheek(g, 11.5, -15.5, 3, 1.9);
+    },
     star(g, c, o) {
       const cy = -20, R = 33.5, r = 11.5, TAU = Math.PI * 2;
       g.save(); g.translate(0, cy);
@@ -324,7 +399,7 @@ const Chars = (() => {
   // where the top of each character's head is (the hat's base sits here) and how wide the hat may be
   const HEAD = {
     fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
-    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11], avocado: [0, -43.5, 10],
+    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11], avocado: [0, -43.5, 10], dog: [0, -36.5, 12], mole: [0, -34.5, 11], donkey: [0, -36, 9], skunk: [0, -35.5, 11],
     icon: [0, -1.5, 12],      // used by hatIcon(): hat sits on the origin at natural size
   };
   function drawHat(g, id, hat, o) {
@@ -398,6 +473,10 @@ const Chars = (() => {
     star:    { f: 9,  bob: 2.4, sq: 0.06, sway: 0.07, lean: 0.04, crouch: 0 },
     avocado: { f: 9,  bob: 2.6, sq: 0.05, sway: 0.06, lean: 0.05, crouch: 0 },
     bird:    { f: 14, bob: 4.2, sq: 0.03, sway: 0.04, lean: 0.05, crouch: 0 },      // quick pecking hops
+    dog:     { f: 12, bob: 3.4, sq: 0.05, sway: 0.02, lean: 0.08, crouch: 0 },      // bouncy trot
+    mole:    { f: 11, bob: 1.6, sq: 0.04, sway: 0.09, lean: 0.04, crouch: 0.05 },   // shuffling scurry
+    donkey:  { f: 9,  bob: 2.6, sq: 0.03, sway: 0.05, lean: 0.02, crouch: 0 },      // sturdy trot
+    skunk:   { f: 11, bob: 2.2, sq: 0.04, sway: 0.06, lean: 0.07, crouch: 0.02 },
   };
 
   /* -------------------------------- public API ------------------------------ */
@@ -530,6 +609,11 @@ const Chars = (() => {
     gust:    () => [[{ sq: 0.3, duration: 0.1, ease: 'power2.out' }], [{ up: 14, sq: -0.22, rot: -0.14, duration: 0.14, ease: 'power3.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
     bounce:  () => [[{ sq: 0.2, duration: 0.05, ease: 'power2.out' }], [{ ...REST, duration: 0.3, ease: 'elastic.out(1, 0.45)' }]],
     hit:     () => [[{ sq: 0.24, rot: -0.2, duration: 0.07, ease: 'power2.out' }], [{ rot: 0.12, sq: -0.1, duration: 0.1, ease: 'power2.inOut' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.4)' }]],
+    pit:     () => [[{ sq: 0.3, up: -2, duration: 0.09, ease: 'power2.out' }], [{ up: 5, sq: -0.2, rot: 0.2, duration: 0.1, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.45)' }]],
+    burrow:  () => [[{ sq: 0.34, duration: 0.1, ease: 'power2.out' }], [{ ...REST, duration: 0.25, ease: 'power2.in' }]],
+    surface: () => [[{ sq: 0.3, duration: 0.07, ease: 'power2.out' }], [{ up: 20, sq: -0.24, duration: 0.14, ease: 'power3.out' }], [{ up: 0, sq: 0.22, duration: 0.1, ease: 'power4.in' }], [{ ...REST, duration: 0.5, ease: 'elastic.out(1, 0.4)' }]],
+    kick:    (p, f) => [[{ sq: -0.2, rot: -0.3 * f, duration: 0.07, ease: 'power2.out' }], [{ up: 8, sq: 0.2, rot: 0.5 * f, duration: 0.1, ease: 'power3.out' }], [{ ...REST, duration: 0.45, ease: 'elastic.out(1, 0.4)' }]],
+    stink:   () => [[{ sq: 0.28, up: -2, duration: 0.1, ease: 'power2.out' }], [{ sq: -0.14, duration: 0.14, ease: 'power2.out' }], [{ ...REST, duration: 0.4, ease: 'elastic.out(1, 0.45)' }]],
     hello:   () => [[{ up: 12, sq: -0.14, duration: 0.16, ease: 'power2.out' }], [{ up: 0, sq: 0.18, duration: 0.14, ease: 'power2.in' }], [{ ...REST, duration: 0.5, ease: 'elastic.out(1, 0.4)' }]],
   };
   /** Play a named pose on `v` (any object; v.pose is created on demand). face = +1/-1 so spins go the way you face. */

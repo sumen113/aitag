@@ -35,6 +35,7 @@
       <nav class="ad-tabs" id="adTabs" role="tablist">
         <button type="button" data-tab="live" aria-selected="true">Live</button>
         <button type="button" data-tab="accounts" aria-selected="false">Accounts</button>
+        <button type="button" data-tab="titles" aria-selected="false">Titles</button>
         <button type="button" data-tab="broadcast" aria-selected="false">Broadcast &amp; bans</button>
         <button type="button" data-tab="log" aria-selected="false">Log</button>
       </nav>
@@ -53,6 +54,23 @@
       <section data-pane="accounts" class="hidden">
         <form id="adSearch" class="ad-search"><input id="adQ" class="inp" placeholder="Search usernames (starts with…) or leave empty for newest" autocomplete="off" maxlength="20"><button class="btn btn-ghost" type="submit"><span class="btn-label">Search</span></button></form>
         <div id="adUsers" class="ad-users"></div>
+      </section>
+
+      <!-- TITLES -->
+      <section data-pane="titles" class="hidden">
+        <form id="adTitleForm" class="card ad-box">
+          <h2>Give a title</h2>
+          <p>A short label with a colour that shows next to that player's name in games, chat and the leaderboard. Nobody has one until you give it, staff included. Leave the text empty to take it away.</p>
+          <div class="ad-tform">
+            <input id="adTUser" class="inp" placeholder="Account username" maxlength="20" autocomplete="off">
+            <input id="adTText" class="inp" placeholder="Title (up to 16 characters)" maxlength="16" autocomplete="off">
+            <input id="adTColor" class="ad-color" type="color" value="#ff8a3d" aria-label="Title colour">
+          </div>
+          <div id="adTSwatches" class="ad-swatches" aria-label="Quick colours"></div>
+          <div class="ad-tprev"><span class="mono">Preview</span><span id="adTPrev" class="ttl">Title</span><b id="adTPrevName">Name</b></div>
+          <button class="btn btn-primary" type="submit"><span class="btn-label">Save title</span></button>
+        </form>
+        <h2>Players with titles</h2><div id="adTitles" class="ad-chips"></div>
       </section>
 
       <!-- BROADCAST -->

@@ -6,8 +6,11 @@ const { thinkBot, DIFFS } = require('./bots');
 
 const { CHARS, DT, STATE } = T;
 const IDX = {}; CHARS.forEach((c, i) => (IDX[c.id] = i));
+const ghosted = (q) => q.abT > 0 && (q.c === IDX.frog || q.c === IDX.mole);      // mid-leap or underground: can't be tagged, shoved, shot or trapped
+const PIT_R = 34, PIT_TTL = 16, PIT_STUN = 1.8, PIT_SAFE = 1.4;                  // dog pits: radius, lifetime, how long a fallen player is stuck, grace after climbing out
 const BOT_COUNT = 4;                   // practice rooms: you + 4 bots
 const SNAP_HZ = Math.max(10, Math.min(60, +process.env.SNAP_HZ || 30));
+const IDLE_KICK = 10000, IDLE_MOVE = 50;      // ms of standing still before you're removed; px you have to travel to count as moving
 const SNAP_EVERY = Math.max(1, Math.round(T.TICK / SNAP_HZ));   // 60 Hz sim -> 30 Hz snapshots by default
 const MIN_WIN_PLAYERS = +process.env.MIN_WIN_PLAYERS || 3;      // humans needed in a public lobby for a win to count (anti-farming)
 const CUSTOM_MIN_WIN_PLAYERS = Math.max(MIN_WIN_PLAYERS, +process.env.CUSTOM_MIN_WIN_PLAYERS || 3);   // custom servers need a few more humans (private rooms are easy to farm)
@@ -45,6 +48,7 @@ class Room {
     this.players = new Map();
     this.decoys = [];
     this.seeds = [];                                   // avocado seeds in flight
+    this.pits = [];                                    // dog pit traps
     this.events = [];
     this.state = STATE.WAIT;
     this.timer = 0; this.tl = 0; this.round = 0; this.tickN = 0;
@@ -67,7 +71,7 @@ class Room {
     const p = T.newSim(nextPlayerId++, c, 0, 0);
     Object.assign(p, {
       name, col, bot, hat: bot && Math.random() < 0.5 ? 1 + ((Math.random() * (T.HATS.length - 1)) | 0) : 0, ws: null, score: 0, tags: 0, queue: [], ack: 0, lastSeq: 0, lastInputAt: Date.now(), lastActiveAt: Date.now(),
-      lastChat: 0, chatLog: [], lastMsg: '', rtt: 0, uid: 0, bowled: null, gone: 0,
+      lastChat: 0, chatLog: [], lastMsg: '', rtt: 0, uid: 0, title: null, bowled: null, gone: 0,
       hx: new Float32Array(HIST), hy: new Float32Array(HIST),
       input: { x: 0, y: 0, a: 0 }, sm: bot ? this.botSpeed : 1,
     });
@@ -132,12 +136,25 @@ class Room {
     for (const g of this.goos.slice()) if (g.o === p.id) this.goos.splice(this.goos.indexOf(g), 1);
     for (const d of this.decoys.slice()) if (d.o === p.id) this.decoys.splice(this.decoys.indexOf(d), 1);
     this.seeds = this.seeds.filter((x) => x.o !== p.id);
+    this.pits = this.pits.filter((x) => x.o !== p.id);
     if (!silent && !p.bot) this.emit({ k: 'leave', n: p.name });
     this.rosterDirty = true;
-    if (p.it) this.reassignIt();
+    let redo = false;
+    if (p.it) {
+      if (this.mode === 'infection') { if (this.state === STATE.PLAY && !this.itPlayers().length) redo = true; }     // the infection is never handed to someone new
+      else this.reassignIt();
+    }
     if (!p.bot) { if (this.humanCount() > 0) this.rebalanceBots(); }
-    if (this.activeCount() < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
+    if (redo) this.redoRound('The infected player left. Voting again!');
+    else if (this.activeCount() < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
     else if (this.state === STATE.VOTE && this.players.size < 2) this.toWait();
+  }
+
+  /** The only infected player left: handing the infection to someone else would be unfair, so the round is scrapped and everyone goes back to the vote. */
+  redoRound(msg) {
+    if (this.activeCount() < 2) { this.toWait(); return; }
+    this.emit({ k: 'redo', m: msg });
+    this.beginRound();
   }
 
   // hand the IT role to one more random player (an IT left or went AFK); never someone who already is IT
@@ -159,7 +176,7 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
@@ -212,7 +229,7 @@ class Room {
     this.nextMap = null; this.vote = null;
     if (m !== this.map) { this.map = m; this.ctx.map = m; this.itFields = null; for (const p of this.players.values()) p.ai = null; }
     this.round++;
-    this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.results = null; this.elims = 0; this.passes = 0; this.tagCount = 0;
+    this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.pits.length = 0; this.results = null; this.elims = 0; this.passes = 0; this.tagCount = 0;
     const sp = shuffle(this.map.spawns.slice()); let i = 0;
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
     this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN; this.tl = T.COUNTDOWN;
@@ -295,7 +312,7 @@ class Room {
       const inp = { s, x, y, a: e[3] ? 1 : 0 };
       if (e[3] && e.length >= 6) { const ax = +e[4], ay = +e[5]; if (Number.isFinite(ax) && Number.isFinite(ay)) { const L = Math.hypot(ax, ay); if (L > 0.05) { inp.ax = Math.round(ax / L * 100) / 100; inp.ay = Math.round(ay / L * 100) / 100; } } }
       p.queue.push(inp);
-      if (e[3] || Math.abs(x) + Math.abs(y) > 0.2) p.lastActiveAt = now;   // idle = not actually moving (the client sends zeros constantly)
+      if (e[3]) p.lastActiveAt = now;           // using an ability counts as playing; plain movement is judged by how far you actually got (see the idle check in tick)
     }
     if (p.queue.length > 24) p.queue.splice(0, p.queue.length - 8);
   }
@@ -309,7 +326,7 @@ class Room {
     const m = T.cleanChat(raw);
     if (!m || (m === p.lastMsg && now - p.lastChat < 6000)) return;
     p.lastChat = now; p.lastMsg = m; p.chatLog.push(now); p.lastActiveAt = now;
-    this.emit({ k: 'chat', id: p.id, n: p.name, m, a: p.uid ? 1 : 0, s: p.staff ? 1 : 0 });
+    this.emit({ k: 'chat', id: p.id, n: p.name, m, a: p.uid ? 1 : 0, ...(p.title ? { tt: p.title.t, tc: p.title.c } : {}) });
   }
 
   emit(e) { this.events.push(e); }
@@ -335,7 +352,7 @@ class Room {
       const R = 175;
       for (const q of this.players.values()) {
         if (q === p || (q.out || q.gone)) continue;
-        if (q.c === IDX.frog && q.abT > 0) continue;
+        if (ghosted(q)) continue;
         let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
         if (d > R) continue;
         if (d < 1) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
@@ -349,7 +366,7 @@ class Room {
       const R = 340;                                          // a wide, stun-free blast: it buys distance, not a free tag
       for (const q of this.players.values()) {
         if (q === p || (q.out || q.gone)) continue;
-        if (q.c === IDX.frog && q.abT > 0) continue;
+        if (ghosted(q)) continue;
         let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
         if (d > R) continue;
         if (d < 1) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
@@ -362,6 +379,39 @@ class Room {
       const L = Math.hypot(e.dx, e.dy) || 1, ux = e.dx / L, uy = e.dy / L, off = CHARS[p.c].radius + 6;
       if (this.seeds.filter((x) => x.o === p.id).length >= 2) return;
       this.seeds.push({ id: this.entId++, o: p.id, x: p.x + ux * off, y: p.y + uy * off, vx: ux * T.SEED_SPEED, vy: uy * T.SEED_SPEED, it: p.it ? 1 : 0, ttl: T.SEED_RANGE / T.SEED_SPEED });
+    } else if (e.n === 'pit') {
+      const mine = this.pits.filter((x) => x.o === p.id);
+      if (mine.length >= 3) this.pits.splice(this.pits.indexOf(mine[0]), 1);
+      this.pits.push({ id: this.entId++, x: p.x, y: p.y + 6, r: PIT_R, o: p.id, ttl: PIT_TTL });
+    } else if (e.n === 'stink') {
+      const mine = this.goos.filter((g) => g.o === p.id && g.s === 2);
+      if (mine.length >= 2) this.goos.splice(this.goos.indexOf(mine[0]), 1);
+      this.goos.push({ id: this.entId++, x: p.x, y: p.y, r: 88, o: p.id, ttl: 3.2, s: 2 });
+    } else if (e.n === 'kick') {                              // both hind legs: a wide cone BEHIND the direction of travel
+      const R = 150, bx = -e.dx, by = -e.dy;
+      for (const q of this.players.values()) {
+        if (q === p || (q.out || q.gone) || ghosted(q)) continue;
+        let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
+        if (d > R + CHARS[q.c].radius) continue;
+        if (d < 1) { dx = bx; dy = by; } else { dx /= d; dy /= d; }
+        if (dx * bx + dy * by < 0.42) continue;                // outside the ~130 degree cone
+        if (q.c === IDX.robot && q.abT > 0) { q.abT = 0; p.stun = Math.max(p.stun, 0.8); this.emit({ k: 'ab', n: 'shieldhit', id: q.id, x: r1(q.x), y: r1(q.y), dx: r2(-dx), dy: r2(-dy) }); continue; }
+        q.vx += dx * 700; q.vy += dy * 700;
+        q.stun = Math.max(q.stun, 0.8);
+        if (q.c === IDX.fox) q.abT = 0;
+      }
+      for (const dd of this.decoys.slice()) { const dx = dd.x - p.x, dy = dd.y - p.y, d = Math.hypot(dx, dy) || 1; if (d < R && (dx * bx + dy * by) / d > 0.42) this.popDecoy(dd); }
+    } else if (e.n === 'surface') {                           // mole pops out of the ground: dirt everywhere dazes everyone close
+      const R = 100;
+      for (const q of this.players.values()) {
+        if (q === p || (q.out || q.gone) || ghosted(q)) continue;
+        let dx = q.x - p.x, dy = q.y - p.y; const d = Math.hypot(dx, dy);
+        if (d > R) continue;
+        if (d < 1) { dx = 1; dy = 0; } else { dx /= d; dy /= d; }
+        q.vx += dx * 260; q.vy += dy * 260;
+        q.stun = Math.max(q.stun, 0.65);
+        if (q.c === IDX.fox) q.abT = 0;
+      }
     } else if (e.n === 'goo') {
       const mine = this.goos.filter((g) => g.o === p.id);
       if (mine.length >= 3) this.goos.splice(this.goos.indexOf(mine[0]), 1);
@@ -374,7 +424,7 @@ class Room {
     else if (e.n === 'swap') {
       let best = null, bd = 380;
       for (const q of this.players.values()) {
-        if (q === p || (q.c === IDX.frog && q.abT > 0)) continue;
+        if (q === p || (ghosted(q))) continue;
         const d = Math.hypot(q.x - p.x, q.y - p.y);
         if (d < bd) { bd = d; best = q; }
       }
@@ -390,6 +440,27 @@ class Room {
     this.emit({ k: 'ab', n: e.n, id: p.id, x: r1(e.x), y: r1(e.y), dx: r2(e.dx || 0), dy: r2(e.dy || 0), x1: e.x1 !== undefined ? r1(e.x1) : undefined, y1: e.y1 !== undefined ? r1(e.y1) : undefined });
   }
 
+  /* dog pits: anyone on the other side of the tag (a runner for an IT dog, the IT for a runner dog) who steps into one drops in and is stuck for a moment. */
+  stepPits() {
+    for (const q of this.players.values()) if (q.pitT > 0) q.pitT -= DT;
+    for (let i = this.pits.length - 1; i >= 0; i--) {
+      const pit = this.pits[i], o = this.players.get(pit.o);
+      pit.ttl -= DT;
+      if (pit.ttl <= 0 || !o || this.state !== STATE.PLAY) { this.pits.splice(i, 1); continue; }
+      for (const q of this.players.values()) {
+        if (q === o || q.out || q.gone || q.pitT > 0 || ghosted(q) || q.it === o.it || (q.c === IDX.ghost && q.abT > 0)) continue;
+        const rr = pit.r + CHARS[q.c].radius * 0.2, dx = q.x - pit.x, dy = q.y - pit.y;
+        if (dx * dx + dy * dy >= rr * rr) continue;
+        q.stun = Math.max(q.stun, PIT_STUN); q.pitT = PIT_STUN + PIT_SAFE; q.vx = q.vy = 0; q.x = pit.x; q.y = pit.y - 6;
+        if (q.c === IDX.star || q.c === IDX.fox) q.abT = 0;
+        this.resetHist(q);
+        this.emit({ k: 'ab', n: 'pitfall', id: q.id, x: r1(pit.x), y: r1(pit.y), dx: 0, dy: 0, o: o.id });
+        this.pits.splice(i, 1);
+        break;
+      }
+    }
+  }
+
   /* avocado seeds: fly straight, stop at walls. From an IT avocado a hit tags the runner; from a runner it stuns the IT. */
   stepSeeds() {
     for (let i = this.seeds.length - 1; i >= 0; i--) {
@@ -399,7 +470,7 @@ class Room {
       if (!dead && !T.circleFree(this.map, s.x, s.y, T.SEED_R * 0.6)) { dead = true; this.emit({ k: 'ab', n: 'seedpop', id: s.o, x: r1(s.x - s.vx * DT), y: r1(s.y - s.vy * DT), dx: 0, dy: 0 }); }
       if (!dead) for (const d of this.decoys.slice()) if (d.o !== s.o && Math.hypot(d.x - s.x, d.y - s.y) < 22 + T.SEED_R) { this.popDecoy(d); dead = true; break; }
       if (!dead) for (const q of this.players.values()) {
-        if (q === o || (q.out || q.gone) || (q.c === IDX.frog && q.abT > 0)) continue;
+        if (q === o || (q.out || q.gone) || (ghosted(q))) continue;
         const rr = CHARS[q.c].radius + T.SEED_R, dx = q.x - s.x, dy = q.y - s.y;
         if (dx * dx + dy * dy >= rr * rr) continue;
         if (q.c === IDX.robot && q.abT > 0) {                  // shield eats the seed
@@ -465,7 +536,7 @@ class Room {
       if (Math.hypot(p.vx, p.vy) < 170) continue;
       const rp = CHARS[p.c].radius;
       for (const q of this.players.values()) {
-        if (q === p || (q.out || q.gone) || (q.c === IDX.frog && q.abT > 0) || (p.bowled && p.bowled.has(q.id))) continue;
+        if (q === p || (q.out || q.gone) || (ghosted(q)) || (p.bowled && p.bowled.has(q.id))) continue;
         const dx = q.x - p.x, dy = q.y - p.y, rr = rp + CHARS[q.c].radius + 6;
         if (dx * dx + dy * dy >= rr * rr) continue;
         const d = Math.hypot(dx, dy) || 1;
@@ -493,6 +564,7 @@ class Room {
     for (let i = this.goos.length - 1; i >= 0; i--) { this.goos[i].ttl -= DT; if (this.goos[i].ttl <= 0) this.goos.splice(i, 1); }
 
     this.stepSeeds();
+    this.stepPits();
 
     // ---- tagging & scoring
     if (this.state === STATE.PLAY) {
@@ -505,12 +577,12 @@ class Room {
         for (const d of this.decoys.slice()) {
           if (d.o !== it.id && Math.hypot(d.x - it.x, d.y - it.y) < ri + 16) { this.popDecoy(d); it.stun = Math.max(it.stun, 1.0); }
         }
-        if (it.stun <= 0 && it.lock <= 0) {
+        if (it.stun <= 0 && it.lock <= 0 && !(it.c === IDX.mole && it.abT > 0)) {       // a mole can't tag from underground
           // Generous reach (TAG_REACH) plus a little rewind for laggy taggers: they saw their target a moment in the past,
           // so a tag also counts if the target WAS in reach shortly before. Capped at LAG_COMP_MAX so dodging still works.
           const comp = it.bot ? 0 : T.clamp((it.rtt + 90) / 1000 * 0.8, 0, T.LAG_COMP_MAX), kmax = Math.min(HIST - 2, Math.round(comp * T.TICK));
           for (const q of this.players.values()) {
-            if (q === it || q.it || (q.out || q.gone) || q.imm > 0 || (q.c === IDX.frog && q.abT > 0)) continue;
+            if (q === it || q.it || (q.out || q.gone) || q.imm > 0 || (ghosted(q))) continue;
             const rr = ri + CHARS[q.c].radius + T.TAG_REACH;
             let dx = q.x - it.x, dy = q.y - it.y, hit = dx * dx + dy * dy < rr * rr;
             if (!hit && kmax >= 2) {
@@ -534,24 +606,32 @@ class Room {
         if (!infection && !potato) {
           const want = Math.min(this.itWant || 1, Math.max(1, this.players.size - 1));
           if (this.itPlayers().length < want && this.activeCount() >= 2) this.reassignIt();
-        } else if (!this.itPlayers().length && this.aliveCount() >= 2) this.reassignIt();                    // the last tagger/potato holder left
+        } else if (!this.itPlayers().length && this.aliveCount() >= 2) {
+          if (infection) this.redoRound('The infected player left. Voting again!');
+          else this.reassignIt();                                                                             // the last potato holder left
+        }
         // last one standing: Hot Potato ends with one player left; Infection when one survivor is left after the outbreak began
-        if (potato && this.aliveCount() <= 1) this.endRound();
+        if (this.state !== STATE.PLAY) { /* the round was just scrapped */ }
+        else if (potato && this.aliveCount() <= 1) this.endRound();
         else if (infection) { let surv = 0; for (const p of this.players.values()) if (!p.out && !p.it) surv++; if (surv <= (this.tagCount > 0 ? 1 : 0)) this.endRound(); }
         else if (this.activeCount() < 2) this.toWait();
       }
     }
 
-    // ---- afk handling (once per second). Only counts while a round is being played: waiting in an empty lobby is fine.
+    // ---- idle handling (once per second). Only counts while a round is being played: waiting in an empty lobby is fine.
+    // Standing still (or wiggling on the spot / pushing into a wall) for IDLE_KICK seconds sends you out of the server.
     if (this.tickN % 60 === 0) {
-      const now = Date.now();
+      const now = Date.now(), limit = this.solo ? 30000 : IDLE_KICK;
       for (const p of [...this.players.values()]) {
         if (p.bot) continue;
-        if (this.state !== STATE.PLAY || p.out) { p.lastActiveAt = now; p.afk = false; continue; }
+        if (this.state !== STATE.PLAY || p.out || !this.players.has(p.id)) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }
+        if (p.ax0 === undefined || Math.hypot(p.x - p.ax0, p.y - p.ay0) > IDLE_MOVE || p.stun > 0.5) { p.ax0 = p.x; p.ay0 = p.y; p.lastActiveAt = now; }
         const idle = now - p.lastActiveAt;
-        p.afk = idle > 6000;
-        if (p.afk && p.it) { p.it = 0; this.reassignIt(); }
-        if (idle > 25000 && p.ws) { this.send(p, { t: 'kick', m: 'You were removed for being inactive.' }); try { p.ws.close(); } catch (e) { /* noop */ } }
+        p.afk = idle > 4000;
+        if (idle >= limit) {
+          this.send(p, { t: 'kick', m: 'You were removed for standing still.' });
+          const ws = p.ws; this.removePlayer(p); p.ws = null; if (ws) try { ws.close(); } catch (e) { /* noop */ }
+        } else if (idle > 4000 && limit - idle <= 6000) this.send(p, { t: 'idle', s: Math.ceil((limit - idle) / 1000) });
       }
     }
 
@@ -562,7 +642,7 @@ class Room {
   }
 
   /* ------------------------------ networking ---------------------------- */
-  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0, w: p.wait ? 1 : 0 })); }
+  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0, w: p.wait ? 1 : 0, ...(p.title ? { tt: p.title.t, tc: p.title.c } : {}) })); }
 
   send(p, obj) { if (p.ws && p.ws.readyState === 1) p.ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); }
 
@@ -579,9 +659,10 @@ class Room {
     }
     const head = {
       t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, md: this.mode, p: ps,
-      g: this.goos.map((g) => [g.id, r1(g.x), r1(g.y), g.r, g.o, r1(g.ttl), g.splash ? 1 : 0]),
+      g: this.goos.map((g) => [g.id, r1(g.x), r1(g.y), g.r, g.o, r1(g.ttl), g.splash ? 1 : g.s === 2 ? 2 : 0]),
       d: this.decoys.map((d) => [d.id, r1(d.x), r1(d.y), r1(d.vx), r1(d.vy), d.c, d.k, d.o, r1(d.ttl)]),
       sd: this.seeds.map((x) => [x.id, r1(x.x), r1(x.y), r1(x.vx), r1(x.vy), x.o]),
+      pi: this.pits.map((x) => [x.id, r1(x.x), r1(x.y), x.r, x.o, r1(x.ttl)]),
     };
     if (this.state === STATE.RESULTS) head.res = this.results;
     if (this.mode === 'potato' && this.state === STATE.PLAY) head.pt = this.itPlayers().map((p) => [p.id, r1(Math.max(0, p.pot))]);

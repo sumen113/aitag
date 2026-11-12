@@ -407,7 +407,21 @@ const MapRender = (() => {
     }
   }
 
+  /* dog pit: a dark hole with a crumbly rim; the owner's side of the field gets a faint dashed ring so you remember where they are */
+  function drawPit(g, pit, t, mine) {
+    const fade = Math.min(1, pit.ttl / 1), rx = pit.r, ry = pit.r * 0.62;
+    g.save(); g.globalAlpha = fade;
+    g.beginPath(); g.ellipse(pit.x, pit.y, rx * 1.12, ry * 1.14, 0, 0, TAU); g.fillStyle = '#a07a4c'; g.fill();
+    g.beginPath(); g.ellipse(pit.x, pit.y, rx, ry, 0, 0, TAU); g.fillStyle = '#2b1d12'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#6b4a2b'; g.stroke();
+    g.beginPath(); g.ellipse(pit.x, pit.y + ry * 0.18, rx * 0.72, ry * 0.6, 0, 0, TAU); g.fillStyle = '#140d08'; g.fill();
+    g.fillStyle = '#c9a06a';
+    for (let i = 0; i < 7; i++) { const a = i * 0.9 + pit.id; g.beginPath(); g.arc(pit.x + Math.cos(a) * rx * 1.08, pit.y + Math.sin(a) * ry * 1.1, 2.4 + (i % 3), 0, TAU); g.fill(); }
+    if (mine) { g.globalAlpha = fade * (0.5 + 0.3 * Math.sin(t * 5)); g.setLineDash([7, 6]); g.lineWidth = 2.5; g.strokeStyle = '#ffe27a'; g.beginPath(); g.ellipse(pit.x, pit.y, rx * 1.3, ry * 1.35, 0, 0, TAU); g.stroke(); g.setLineDash([]); }
+    g.restore();
+  }
+
   function drawGoo(g, goo, t) {
+    if (goo.s === 2) return drawStink(g, goo, t);
     const fade = Math.min(1, goo.ttl / 1.2);
     g.save(); g.globalAlpha = 0.6 * fade;
     g.beginPath();
@@ -415,6 +429,24 @@ const MapRender = (() => {
     g.closePath(); g.fillStyle = goo.s ? '#5ddc8a' : '#b05cff'; g.fill(); g.lineWidth = 4; g.strokeStyle = goo.s ? '#1f9a55' : '#7b2fd6'; g.stroke();
     g.fillStyle = 'rgba(255,255,255,.55)';
     for (let i = 0; i < 4; i++) { const a = i * 1.7 + goo.id, rad = goo.r * 0.5 * ((i % 2) + 0.6), pul = 1 + 0.2 * Math.sin(t * 3 + i); g.beginPath(); g.arc(goo.x + Math.cos(a) * rad, goo.y + Math.sin(a) * rad, (5 + i) * pul, 0, TAU); g.fill(); }
+    g.restore();
+  }
+
+  /* skunk stink cloud: a lumpy yellow-green fog with rising fumes (controls are flipped inside it) */
+  function drawStink(g, goo, t) {
+    const fade = Math.min(1, goo.ttl / 0.8), pulse = 1 + 0.03 * Math.sin(t * 5);
+    g.save(); g.globalAlpha = 0.5 * fade;
+    for (let k = 0; k < 6; k++) {
+      const a = k * 1.05 + goo.id * 0.7 + t * 0.35, d = goo.r * 0.42 * (k ? 1 : 0), rr = goo.r * (k ? 0.52 : 0.8) * pulse;
+      g.beginPath(); g.arc(goo.x + Math.cos(a) * d, goo.y + Math.sin(a) * d * 0.8, rr, 0, TAU); g.fillStyle = k % 2 ? '#a9c94a' : '#c4dc5e'; g.fill();
+    }
+    g.globalAlpha = 0.75 * fade; g.setLineDash([10, 8]); g.lineDashOffset = -t * 20; g.lineWidth = 3; g.strokeStyle = '#6f8f22';
+    g.beginPath(); g.arc(goo.x, goo.y, goo.r, 0, TAU); g.stroke(); g.setLineDash([]);
+    g.globalAlpha = 0.8 * fade; g.lineWidth = 3; g.lineCap = 'round'; g.strokeStyle = '#6f8f22';
+    for (let i = 0; i < 4; i++) {                       // wavy fume lines floating up
+      const ph = ((t * 0.7 + i * 0.25 + goo.id * 0.13) % 1), fx = goo.x + (i - 1.5) * goo.r * 0.36, fy = goo.y - ph * 46;
+      g.globalAlpha = 0.7 * fade * (1 - ph); g.beginPath(); g.moveTo(fx, fy + 16); g.bezierCurveTo(fx - 8, fy + 8, fx + 8, fy, fx, fy - 8); g.stroke();
+    }
     g.restore();
   }
 
@@ -438,7 +470,7 @@ const MapRender = (() => {
     return c;
   }
 
-  return { drawFloor, drawBorder, drawZones, drawObstacles, drawCanopy, drawGoo, miniBase };
+  return { drawFloor, drawBorder, drawZones, drawObstacles, drawCanopy, drawGoo, drawPit, miniBase };
 })();
 
 /* ================================ particles ================================== */

@@ -11,7 +11,10 @@ const mk = (mode, n, extra) => {
   for (let i = 0; i < n; i++) r.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'P' + i, 0, 0, 0, 0);
   return r;
 };
-const run = (r, s, stop) => { for (let i = 0; i < s * 60; i++) { r.tick(); if (stop && stop()) return; } };
+// the sim runs faster than real time here, so give Room (which timestamps activity with Date.now) a clock that moves one tick per tick
+let clk = Date.now(); Date.now = () => clk;
+const step = (r) => { clk += 1000 / 60; if (!r.idleTest) for (const p of r.players.values()) p.lastActiveAt = clk; r.tick(); };     // test players count as playing unless a test is about idling
+const run = (r, s, stop) => { for (let i = 0; i < s * 60; i++) { step(r); if (stop && stop()) return; } };
 
 // under 7 players there is only classic tag
 let r = mk('vote', 6); r.tick();
@@ -86,6 +89,97 @@ const tagger = r.itPlayers()[0]; it0.x = tagger.x + 2; it0.y = tagger.y; it0.imm
 const tc = r.tagCount; run(r, 0.5);
 ok(r.tagCount === tc || !it0.it, 'a gone player can not be tagged');
 r.markGone(it0, false); ok(!it0.gone, 'comes back when the connection answers again');
+
+// standing still for 10 s sends you out; moving keeps you in; wiggling on the spot or pushing into a wall doesn't count
+r = mk('classic', 4); r.idleTest = true; run(r, 6, () => r.state === T.STATE.PLAY);
+{
+  const hs = [...r.players.values()].sort((a, b) => a.it - b.it), camper = hs[0], wiggler = hs[1], mover = hs[2], got = [];
+  camper.ws.send = (m) => got.push(m); camper.ws.close = () => { got.push('closed'); };
+  const bx = wiggler.x;
+  for (let i = 0; i < 60 * 16; i++) { step(r); mover.x = 400 + (i % 300) * 2; wiggler.x = bx + (i % 2) * 10; if (!r.players.has(camper.id) && !r.players.has(wiggler.id)) break; }
+  ok(!r.players.has(camper.id) && got.some((m) => String(m).includes('"kick"')) && got.includes('closed'), 'a player standing still for 10 s is removed and told why');
+  ok(!r.players.has(wiggler.id), 'wiggling on the spot does not count as moving');
+  ok(r.players.has(mover.id), 'a player who keeps moving stays in');
+}
+// ...a warning comes first and the clock only runs during a round
+r = mk('classic', 3); r.idleTest = true; run(r, 3); ok(r.state === T.STATE.COUNT, 'countdown is running');
+{ run(r, 6, () => r.state === T.STATE.PLAY); const w = [], q = [...r.players.values()].find((x) => !x.it); q.ws.send = (m) => w.push(m); run(r, 7); ok(w.some((m) => String(m).includes('"idle"')), 'the player is warned before being removed'); ok(r.players.has(q.id) || w.some((m) => String(m).includes('"kick"')), 'the clock only runs during a round'); }
+// an idle player who gets tagged doesn't make the tag jump
+r = mk('classic', 4); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 5);
+{ const it = r.itPlayers()[0], v = [...r.players.values()].find((p) => !p.it); it.imm = 0; v.imm = 0; r.tag(it, v); run(r, 1); ok(r.itPlayers().length === 1 && v.it === 1, 'tagging someone who stands still hands them the tag for real'); }
+
+// the only infected player leaves: the round is redone (vote again), nobody else gets the infection
+r = mk('vote', 7); r.tick(); { const ps = [...r.players.values()], pi = r.vote.modes.indexOf('infection'); ps.forEach((p) => { r.castVote(p, 'd', pi); r.castVote(p, 'm', 0); }); }
+run(r, 6, () => r.state === T.STATE.PLAY); run(r, 3);
+ok(r.mode === 'infection' && r.itPlayers().length === 1, 'infection starts with one zombie');
+{ const z = r.itPlayers()[0], n = r.players.size; r.removePlayer(z); ok(r.state === T.STATE.VOTE && r.players.size === n - 1 && r.itPlayers().length === 0, 'lone zombie leaves: back to the vote, nobody inherits it'); }
+r = mk('infection', 7); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 2);
+{ const z = r.itPlayers()[0]; r.removePlayer(z); ok(r.state === T.STATE.COUNT && r.itPlayers().length === 0, 'fixed infection server: lone zombie leaves, round restarts'); run(r, 6, () => r.state === T.STATE.PLAY); ok(r.itPlayers().length === 1, 'and a fresh zombie is picked'); }
+// with several zombies the round carries on
+r = mk('infection', 7); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 2);
+{ const z = r.itPlayers()[0], v = [...r.players.values()].find((p) => !p.it); r.tag(z, v); r.removePlayer(z); ok(r.state === T.STATE.PLAY && r.itPlayers().length === 1, 'one of two zombies leaving does not restart the round'); }
+
+// ---- new characters
+const CI = (id) => T.CHARS.findIndex((c) => c.id === id);
+{ // Max the dog: a pit stops the other side, not himself or his own side
+  r = mk('classic', 4); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 1);
+  const it = r.itPlayers()[0], rs = [...r.players.values()].filter((p) => !p.it), dog = rs[0], mate = rs[1];
+  dog.c = CI('dog'); it.stun = 0; it.lock = 0; mate.imm = 0;
+  r.abilityEvent(dog, { n: 'pit', x: dog.x, y: dog.y, dx: 0, dy: 0 });
+  ok(r.pits.length === 1, 'the dog digs a pit');
+  mate.x = r.pits[0].x; mate.y = r.pits[0].y; step(r);
+  ok(!(mate.stun > 0) && r.pits.length === 1, 'a runner on the dog\'s own side does not fall in');
+  step(r); ok(!(dog.stun > 0), 'the dog does not fall in his own pit');
+  it.x = r.pits[0].x + 5; it.y = r.pits[0].y; it.stun = 0; step(r);
+  ok(it.stun > 1.5 && r.pits.length === 0, 'the tagger drops into the pit and is stuck for a moment');
+  it.x = dog.x + 400; r.abilityEvent(dog, { n: 'pit', x: dog.x, y: dog.y, dx: 0, dy: 0 }); it.x = r.pits[0].x; it.y = r.pits[0].y; step(r);
+  ok(!(it.stun > 1.5) || r.pits.length === 1, 'someone just freed from a pit gets a short grace period');
+  for (let i = 0; i < 4; i++) r.abilityEvent(dog, { n: 'pit', x: dog.x + i * 5, y: dog.y, dx: 0, dy: 0 });
+  ok(r.pits.filter((x) => x.o === dog.id).length <= 3, 'at most three pits per dog');
+}
+{ // Marty the mole: untaggable underground, can't tag, pops up with a daze
+  r = mk('classic', 4); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 1);
+  const it = r.itPlayers()[0], rs = [...r.players.values()].filter((p) => !p.it), mole = rs[0];
+  mole.c = CI('mole'); mole.abT = 2; mole.x = 800; mole.y = 800; it.x = 805; it.y = 800; it.stun = 0; it.lock = 0; mole.imm = 0;
+  step(r); step(r); ok(mole.it === 0, 'a tunnelling mole cannot be tagged');
+  mole.abT = 0; it.x = mole.x + 3; it.y = mole.y; it.stun = 0; it.lock = 0; mole.imm = 0; run(r, 0.2);
+  ok(mole.it === 1, 'and can be tagged again once surfaced');
+}
+{ // the mole as IT can't tag from underground, and the sim announces the pop-up
+  r = mk('classic', 4); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 1);
+  const it = r.itPlayers()[0], v = [...r.players.values()].find((p) => !p.it);
+  it.c = CI('mole'); it.abT = 2; it.stun = 0; it.lock = 0; v.x = it.x + 4; v.y = it.y; v.imm = 0; run(r, 0.3);
+  ok(v.it === 0, 'an underground mole can\'t tag');
+  const m = T.newSim(1, CI('mole'), 500, 500), ev = [], ctx2 = { map: T.MAP_BY_ID[T.MAPS[0].id], goos: [] };
+  T.stepPlayer(m, { s: 1, x: 0, y: 0, a: 1 }, ctx2, ev);
+  ok(m.abT > 2.3 && m.cd > 12, 'burrow starts the tunnel and the cooldown');
+  let surfaced = 0; for (let i = 0; i < 60 * 3; i++) { const e2 = []; T.stepPlayer(m, { s: 2 + i, x: 0, y: 0, a: 0 }, ctx2, e2); if (e2.some((e) => e.n === 'surface')) surfaced++; }
+  ok(surfaced === 1 && m.abT === 0, 'the sim announces the pop-up exactly once when time runs out');
+  const m2 = T.newSim(1, CI('mole'), 500, 500); T.stepPlayer(m2, { s: 1, x: 0, y: 0, a: 1 }, ctx2, []);
+  for (let i = 0; i < 30; i++) T.stepPlayer(m2, { s: 2 + i, x: 0, y: 0, a: 0 }, ctx2, []);
+  const e3 = []; T.stepPlayer(m2, { s: 99, x: 0, y: 0, a: 1 }, ctx2, e3);
+  ok(m2.abT === 0 && e3.some((e) => e.n === 'surface'), 'pressing the button again pops up early');
+  const m3 = T.newSim(1, CI('mole'), 500, 500), e4 = []; T.stepPlayer(m3, { s: 1, x: 0, y: 0, a: 1 }, ctx2, e4); T.stepPlayer(m3, { s: 2, x: 0, y: 0, a: 1 }, ctx2, e4);
+  ok(m3.abT > 2, 'pressing straight away does not cancel the burrow');
+}
+{ // Dusty the donkey kicks in a cone behind him
+  r = mk('classic', 5); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 1);
+  const ps = [...r.players.values()], d = ps[0], behind = ps[1], front = ps[2], side = ps[3];
+  d.c = CI('donkey'); d.x = 900; d.y = 700; behind.x = 820; behind.y = 702; front.x = 980; front.y = 700; side.x = 900; side.y = 780;
+  for (const q of ps) { q.stun = 0; q.vx = q.vy = 0; }
+  r.abilityEvent(d, { n: 'kick', x: d.x, y: d.y, dx: 1, dy: 0 });
+  ok(behind.stun >= 0.7 && behind.vx < -300, 'a player behind the donkey is launched away and stunned');
+  ok(!(front.stun > 0) && !(side.stun > 0), 'the front and the sides are safe');
+  const dn = T.newSim(1, CI('donkey'), 500, 500); T.stepPlayer(dn, { s: 1, x: 1, y: 0, a: 1 }, { map: T.MAP_BY_ID[T.MAPS[0].id], goos: [] }, []);
+  ok(dn.boostT > 0.3, 'the donkey lunges forward as he kicks');
+}
+{ // Pepper's cloud flips everyone else's controls, but not the skunk's own
+  const ctx3 = { map: T.MAP_BY_ID[T.MAPS[0].id], goos: [{ id: 1, x: 500, y: 500, r: 88, o: 77, ttl: 3, s: 2 }] };
+  const a = T.newSim(5, 0, 500, 500), b = T.newSim(77, CI('skunk'), 500, 500), c = T.newSim(6, 0, 900, 500);
+  for (let i = 0; i < 20; i++) for (const q of [a, b, c]) T.stepPlayer(q, { s: i + 1, x: 1, y: 0, a: 0 }, ctx3, []);
+  ok(a.vx < 0 || a.x < 500, 'pushing right inside the cloud moves you left');
+  ok(b.x > 500 && c.x > 900, 'the skunk and anyone outside move normally');
+}
 
 // avocado shoots at the aim vector, not the walking direction
 r = mk('classic', 3); run(r, 6, () => r.state === T.STATE.PLAY);

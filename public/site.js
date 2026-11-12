@@ -16,7 +16,7 @@
     get(k, d) { try { const v = localStorage.getItem('tagrush.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
-  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6', '#d8efb0'];   // one per character, same order as CHARS
+  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6', '#d8efb0', '#f0d2a2', '#d9c7b0', '#d5d8dc', '#e1d2f0'];   // one per character, same order as CHARS
   // colour row (one row, always): [default, 6 presets, custom]. Presets are COLORS[1..6]; anything else saved from older versions falls back to default.
   const PRESETS = 7;
   const rowColor = (k) => { k = C.cleanColor(k); return k < PRESETS || k >= C.CUSTOM_BASE ? k : 0; };
@@ -640,9 +640,15 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-10';
+  const NEWS_VERSION = 'update-11';
   const NEWS = [
-    { v: 'Update 10 · Map update', tag: 'Newest', items: [
+    { v: 'Update 11 · Pets, pits and titles', tag: 'Newest', items: [
+      ['4 new characters', 'Max the Dog (4 wins) digs hidden pit traps that hold the other side in place for 2 seconds. Marty the Mole (5 wins) burrows underground, untaggable, and pops up to daze everyone close. Dusty the Donkey (3 wins) mule-kicks everything behind him. Pepper the Skunk (4 wins) drops a stink cloud that flips everyone else\u2019s controls.'],
+      ['No more standing still', 'Stand still for 10 seconds in a round and you are removed from the server. Closing the tab or the laptop lid removes you right away too.'],
+      ['Fair infection', 'If the only zombie leaves, the round is scrapped and everyone votes again instead of the infection being handed to someone else.'],
+      ['Titles', 'Some players now wear a coloured title next to their name. They are handed out by hand, nobody has one by default.'],
+    ] },
+    { v: 'Update 10 · Map update', items: [
       ['9 arenas', 'Three brand new arenas, a remaster of the old five, and Outbreak for Infection. Every one has its own trick.'],
       ['Coral Reef', 'Four whirlpools swing you round the reef. Kelp forests hide you from anyone who is not close.'],
       ['Factory Floor', 'A clockwise conveyor ring around the edge and two feed belts into the big press. Run with the belts, or against them.'],
@@ -728,7 +734,7 @@
     list.replaceChildren();
     const top = (r.j && r.j.top) || [];
     if (!top.length) list.append(el('li', 'empty', 'Nobody has won a round yet. Be the first!'));
-    for (const t of top) { const li = el('li', App.account && App.account.username === t.username ? 'me' : ''); li.append(el('span', '', t.username), el('span', 'w', String(t.wins))); list.append(li); }
+    for (const t of top) { const li = el('li', App.account && App.account.username === t.username ? 'me' : ''); const nm = el('span', ''); if (t.title) { const pill = el('span', 'ttl', t.title.t); pill.style.background = C.titleColor(t.title.c); pill.style.color = C.titleInk(t.title.c); nm.append(pill); } nm.append(t.username); li.append(nm, el('span', 'w', String(t.wins))); list.append(li); }
     if (!reduce && top.length) gsap.from('#boardList li:nth-child(-n+12)', { y: 14, autoAlpha: 0, duration: 0.3, stagger: 0.03, ease: 'power2.out', clearProps: 'transform,opacity,visibility' });
   }
   $('footNews').addEventListener('click', openNews); $('footBoard').addEventListener('click', openBoard);

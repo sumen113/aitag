@@ -106,6 +106,14 @@
 
     // broadcast tab lists (don't clobber text being typed)
     if (document.activeElement !== $('adBanTxt') && document.activeElement !== $('adAnnTxt')) { if ($('adBanTxt').dataset.set !== '1') { $('adBanTxt').value = s.banner || ''; $('adBanTxt').dataset.set = '1'; } }
+    const tl = $('adTitles'); tl.replaceChildren();
+    if (!(s.titles || []).length) tl.append(el('span', 'ad-none', 'Nobody has a title yet.'));
+    for (const t of s.titles || []) {
+      const c = el('span', 'ad-chip'); c.append(pill(t.t, t.c), el('b', '', t.name));
+      const ed = el('button', 'ad-btn', 'Edit'); ed.type = 'button'; ed.onclick = () => { $('adTUser').value = t.name; $('adTText').value = t.t; $('adTColor').value = T.titleColor(t.c); prevTitle(); $('adTText').focus(); };
+      const x = el('button', 'ad-btn', 'Remove'); x.type = 'button'; x.onclick = async () => done(await api('title', { username: t.name, title: '' }), `Title removed from ${t.name}`);
+      c.append(ed, x); tl.append(c);
+    }
     const bans = $('adBans'); bans.replaceChildren();
     if (!s.bans.length) bans.append(el('span', 'ad-none', 'Nobody is banned.'));
     for (const b of s.bans) {
@@ -133,6 +141,24 @@
   $('adAnnounce').addEventListener('submit', async (e) => { e.preventDefault(); const r = await api('announce', { m: $('adAnnTxt').value }); if (r.status === 200) { $('adAnnTxt').value = ''; toast(`Sent to ${r.j.sent} connection${r.j.sent === 1 ? '' : 's'}.`); refresh(); } else toast(r.j.error, true); });
   $('adBanner').addEventListener('submit', async (e) => { e.preventDefault(); const r = await api('banner', { m: $('adBanTxt').value }); toast(r.status === 200 ? (r.j.banner ? 'Banner is live.' : 'Banner removed.') : r.j.error, r.status !== 200); refresh(); });
 
+  /* --------------------------------- titles --------------------------------- */
+  function pill(text, color) { const s = el('span', 'ttl', text); s.style.background = T.titleColor(color); s.style.color = T.titleInk(color); return s; }
+  const SWATCHES = ['#ff5d73', '#ff8a3d', '#ffd23f', '#3ddc97', '#4cc9f0', '#5b4fd6', '#ff8fc0', '#14122b', '#ffffff'];
+  function prevTitle() {
+    const p = $('adTPrev'), c = $('adTColor').value, txt = $('adTText').value.trim();
+    p.textContent = txt || 'Title'; p.style.background = T.titleColor(c); p.style.color = T.titleInk(c); $('adTPrevName').textContent = $('adTUser').value.trim() || 'Name';
+  }
+  for (const c of SWATCHES) { const b = el('button', 'ad-swatch'); b.type = 'button'; b.style.background = c; b.setAttribute('aria-label', 'Use ' + c); b.onclick = () => { $('adTColor').value = c; prevTitle(); }; $('adTSwatches').append(b); }
+  for (const id of ['adTUser', 'adTText', 'adTColor']) $(id).addEventListener('input', prevTitle);
+  prevTitle();
+  $('adTitleForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = $('adTUser').value.trim(), title = $('adTText').value.trim();
+    if (!username) return toast('Type the account username first.', true);
+    const r = await api('title', { username, title, color: $('adTColor').value });
+    done(r, title ? `${username} is now "${title}"` : `Title removed from ${username}`);
+  });
+
   /* -------------------------------- accounts -------------------------------- */
   $('adSearch').addEventListener('submit', (e) => { e.preventDefault(); searchUsers($('adQ').value); });
   async function searchUsers(q) {
@@ -159,6 +185,13 @@
     give.onclick = async () => done(await api('item', { username: u.username, item: sel.value, on: true }), `Item given to ${u.username}`);
     take.onclick = async () => done(await api('item', { username: u.username, item: sel.value, on: false }), `Item removed from ${u.username}`);
     r1.append(sel, give, take); c.append(r1);
+
+    const rt = el('div', 'ad-user-row'); rt.append(el('span', 'mono', 'Title'));
+    if (u.title) rt.append(pill(u.title.t, u.title.c));
+    const tt = el('input', 'ad-in'); tt.maxLength = 16; tt.placeholder = 'none'; tt.value = u.title ? u.title.t : ''; tt.setAttribute('aria-label', 'Title text');
+    const tc = el('input', 'ad-color'); tc.type = 'color'; tc.value = T.titleColor(u.title ? u.title.c : '#ff8a3d'); tc.setAttribute('aria-label', 'Title colour');
+    const ts = el('button', 'ad-btn', 'Set title'); ts.type = 'button'; ts.onclick = async () => done(await api('title', { username: u.username, title: tt.value, color: tc.value }), tt.value.trim() ? `Title set for ${u.username}` : `Title removed from ${u.username}`);
+    rt.append(tt, tc, ts); c.append(rt);
 
     const r2 = el('div', 'ad-user-row');
     const pw = el('button', 'ad-btn', 'Reset password'); pw.type = 'button';

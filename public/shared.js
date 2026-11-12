@@ -103,6 +103,14 @@
       desc: 'Flap a mighty gust that blows everyone nearby away, then glide off in a burst of speed.' },
     { id: 'avocado', fx: 'seed', name: 'Guac',  species: 'Avocado', natural: '#6aa84f', ability: 'Pit Shot', cd: 15, dur: 0, speed: 0.97, radius: 18, role: 'Sharpshooter', price: 6,
       desc: 'Spit a hard seed at your mouse (click or Space; on touch it goes where you steer). As IT it tags the first runner it hits; as a runner it stuns whoever is IT.' },
+    { id: 'dog',    fx: 'pit',    name: 'Max',    species: 'Dog',    natural: '#d9a066', ability: 'Dig Pit',    cd: 12, dur: 0,   speed: 1.01, radius: 18, role: 'Pit trapper', price: 4,
+      desc: 'Dig a pit right where you stand. Anyone on the other side who steps in is stuck for two seconds. Up to three pits at once, and you never fall in your own.' },
+    { id: 'mole',   fx: 'burrow', name: 'Marty',  species: 'Mole',   natural: '#85705f', ability: 'Burrow',     cd: 13, dur: 2.4, speed: 0.99, radius: 17, role: 'Digger', price: 5,
+      desc: 'Dig underground and tunnel as a moving mound: nobody can tag you and you cannot tag (or be slowed) while you are down. Press again to pop up and fling dirt that dazes everyone close.' },
+    { id: 'donkey', fx: 'kick',   name: 'Dusty',  species: 'Donkey', natural: '#a8a39b', ability: 'Mule Kick',  cd: 10, dur: 0,   speed: 0.98, radius: 20, role: 'Heavy hitter', price: 3,
+      desc: 'Lash out with both hind legs: everyone in a wide cone behind you is launched away and stunned while you lurch forward. Run from the tagger, then kick them off your tail.' },
+    { id: 'skunk',  fx: 'stink',  name: 'Pepper', species: 'Skunk',  natural: '#474560', ability: 'Stink Cloud', cd: 11, dur: 0,  speed: 1.00, radius: 17, role: 'Mind bender', price: 4,
+      desc: 'Drop a stink cloud that flips the controls of everybody else inside it: left is right, up is down. It lingers for three seconds.' },
   ];
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -144,6 +152,9 @@
   }
 
   /** True when a player holding `owned` (array of item ids; may be empty for guests) may use character `charId`. */
+  /* titles: a short label with a colour, handed out from the staff page. Drawn as a coloured pill with readable text on top. */
+  const titleColor = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? String(c).toLowerCase() : '#ffd23f');
+  const titleInk = (c) => { const n = parseInt(titleColor(c).slice(1), 16), l = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); return l > 150 ? '#14122b' : '#ffffff'; };
   function ownsChar(owned, charId) { return STARTERS.includes(charId) || (Array.isArray(owned) && owned.includes('char:' + charId)); }
 
   /* --------------------------- player names ----------------------------- */
@@ -504,9 +515,11 @@
       case 'ghost': case 'cat': case 'robot': p.abT = def.dur; break;
       case 'penguin': p.abT = def.dur; p.vx = dx * 420; p.vy = dy * 420; break;
       case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
+      case 'mole': p.abT = def.dur; break;           // underground: untaggable until the dirt flies (see stepPlayer / server)
+      case 'donkey': p.boostT = 0.45; break;         // the kick itself is resolved by the server; recoil lunges the donkey forward
       case 'bird': p.boostT = 0.8; break;           // the gale itself is resolved by the server; the bird glides off in a burst
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
-      default: break;                              // bear / octo / owl / raccoon / avocado: world effects (incl. the flying seed) resolved by the server
+      default: break;                              // bear / octo / owl / raccoon / avocado / dog / skunk: world effects (incl. the flying seed) resolved by the server
     }
     p.cd = def.cd;
     if (ev) ev.push(e);
@@ -524,6 +537,7 @@
    */
   function stepPlayer(p, inp, ctx, ev) {
     const map = ctx.map, def = CHARS[p.c], dt = DT, r = def.radius;
+    const wasDig = def.id === 'mole' && p.abT > 0;
     if (p.cd > 0) p.cd = Math.max(0, p.cd - dt);
     if (p.abT > 0) p.abT = Math.max(0, p.abT - dt);
     if (p.stun > 0) p.stun = Math.max(0, p.stun - dt);
@@ -534,7 +548,15 @@
     if (p.aux > 0) p.aux = Math.max(0, p.aux - dt);
     if (wasBeacon && p.aux <= 0) p.cd = def.cd;                  // beacon fizzled out unused
 
-    let mx = inp.x, my = inp.y, len = Math.sqrt(mx * mx + my * my);
+    // a skunk's stink cloud flips your controls (a mole underground is below it)
+    let flip = false;
+    if (!wasDig) for (let i = 0; i < ctx.goos.length; i++) {
+      const g = ctx.goos[i];
+      if (g.s !== 2 || g.o === p.id) continue;
+      const dx = p.x - g.x, dy = p.y - g.y;
+      if (dx * dx + dy * dy < g.r * g.r) { flip = true; break; }
+    }
+    let mx = flip ? -inp.x : inp.x, my = flip ? -inp.y : inp.y, len = Math.sqrt(mx * mx + my * my);
     if (len > 1) { mx /= len; my /= len; len = 1; }
     if (len > 0.15) { p.fx = mx / len; p.fy = my / len; }
     const stunned = p.stun > 0;
@@ -546,8 +568,12 @@
         const ax = len > 0.15 ? mx / len : p.fx, ay = len > 0.15 ? my / len : p.fy;
         p.adx = ax; p.ady = ay; p.abT = 0; p.aux = 0.2;
         if (ev) ev.push({ k: 'ab', n: 'pounce', id: p.id, x: p.x, y: p.y, dx: ax, dy: ay });
+      } else if (def.id === 'mole' && p.abT > 0 && def.dur - p.abT > 0.35) {              // pop up early
+        p.abT = 0;
+        if (ev) ev.push({ k: 'ab', n: 'surface', id: p.id, x: p.x, y: p.y, dx: 0, dy: 0 });
       } else if (p.cd <= 0) useAbility(p, def, ctx, ev, mx, my, len, inp);
     }
+    if (wasDig && p.abT <= 0 && ev && !(ev.length && ev[ev.length - 1].n === 'surface')) ev.push({ k: 'ab', n: 'surface', id: p.id, x: p.x, y: p.y, dx: 0, dy: 0 });      // the tunnel time ran out
 
     const id = def.id;
     const inDash = p.abT > 0 && id === 'fox';
@@ -555,17 +581,19 @@
     const inPhase = p.abT > 0 && id === 'ghost';
     const inPounce = id === 'cat' && p.aux > 0;
     const inSlide = id === 'penguin' && p.abT > 0;
+    const under = id === 'mole' && p.abT > 0;
     if (id === 'star' && p.abT > 0 && stunned) p.abT = 0;      // a stun uncurls Andy
     const inRoll = id === 'star' && p.abT > 0;
 
     let maxSp = BASE_SPEED * def.speed * (p.it ? (ctx.itBoost || IT_BOOST) : 1) * (p.sm || 1);
     if (id === 'cat' && p.abT > 0) maxSp *= 1.08;
+    else if (under) maxSp *= 1.12;
     else if (id === 'robot' && p.abT > 0) maxSp *= p.it ? 1.3 : 0.88;
     let accel = ACCEL, fric = FRIC, inGrip = false, inIce = false, driftX = 0, driftY = 0;
     const x = p.x, y = p.y;
     for (const z of map.zones) {
       if (z.k === 'tele' || z.k === 'hide' || !inZone(z, x, y)) continue;
-      if (z.k === 'mud') maxSp *= 0.55;
+      if (z.k === 'mud') { if (!under) maxSp *= 0.55; }
       else if (z.k === 'belt') { const s = z.s || 175; driftX += Math.cos(z.a) * s; driftY += Math.sin(z.a) * s; }                       // conveyor: everything on it is carried along
       else if (z.k === 'swirl') {                                                                                                  // whirlpool: carried round the centre, a little inward, faster near the middle
         const dx = x - z.x, dy = y - z.y, d = Math.sqrt(dx * dx + dy * dy) || 1, k = 0.45 + 0.55 * (1 - Math.min(1, d / z.r)), s = (z.s || 230) * k;
@@ -580,7 +608,7 @@
     const goos = ctx.goos;
     for (let i = 0; i < goos.length; i++) {
       const g = goos[i];
-      if (g.o === p.id) continue;
+      if (g.o === p.id || g.s === 2 || under) continue;
       const dx = x - g.x, dy = y - g.y;
       if (dx * dx + dy * dy < g.r * g.r) { maxSp *= 0.45; break; }
     }
@@ -631,7 +659,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, STARTER_ITEMS, ownsChar, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/leaderboard' && req.method === 'GET') {
     try {
       if (!store) throw new Error('no store');
-      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(150)).map((r) => ({ username: r.username, wins: r.wins - (admin ? admin.lbBase(r.username) : 0) })).filter((r) => r.wins > 0 && !(admin && admin.banReason(r.username))).sort((a, b) => b.wins - a.wins).slice(0, 100); board.at = Date.now(); }
+      if (!board.list || Date.now() - board.at > 20000) { board.list = (await store.topWins(150)).map((r) => ({ username: r.username, wins: r.wins - (admin ? admin.lbBase(r.username) : 0), title: admin ? admin.titleOf(r.username) : null })).filter((r) => r.wins > 0 && !(admin && admin.banReason(r.username))).sort((a, b) => b.wins - a.wins).slice(0, 100); board.at = Date.now(); }
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify({ top: board.list }));
     } catch (e) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end('{"top":[]}'); }
   }
@@ -235,6 +235,7 @@ wss.on('connection', (ws, req) => {
     }
     c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0, hat);
     c.player.staff = !!(user && admin && admin.isAdmin(user.username));
+    c.player.title = user && admin ? admin.titleOf(user.username) : null;
     c.player.muted = !!(admin && admin.isMuted(name, !!user));
     c.player.rtt = ws.rtt;
     ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
@@ -291,12 +292,12 @@ setInterval(() => {
 
 // latency probe every 2 s (also keeps idle connections alive behind Render's proxy); drop sockets that stopped answering
 // A socket that stops answering pings (laptop lid closed, tab killed, network gone) is marked "gone" after 1.5 s: untaggable and it
-// can't keep the tag/potato. After 6 s it is dropped for good. TCP alone can take much longer to notice.
+// can't keep the tag/potato. After 4 s it is removed from the match for good. TCP alone can take much longer to notice.
 setInterval(() => {
   const now = Date.now();
   for (const ws of wss.clients) {
     const age = now - ws.lastPong;
-    if (age > 6000) { ws.terminate(); continue; }
+    if (age > 4000) { ws.terminate(); continue; }
     const p = ws.c && ws.c.player;
     if (p && ws.c.room) ws.c.room.markGone(p, age > 1500);
     ws.pingAt = performance.now(); try { ws.ping(); } catch (e) { /* closing */ }

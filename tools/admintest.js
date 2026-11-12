@@ -34,7 +34,20 @@ function join(name, cookie, c = 0) {
   const vp = j.players.find((p) => p.name === 'Victim');
   // chat staff flag
   a.ws.send(JSON.stringify({ t: 'chat', m: 'hi all' })); await sleep(400);
-  const chat = b.msgs.flatMap((m) => m.e || []).find((e) => e.k === 'chat'); ok(chat && chat.s === 1 && chat.n === 'Boss', 'staff chat flagged');
+  const chat = b.msgs.flatMap((m) => m.e || []).find((e) => e.k === 'chat'); ok(chat && chat.s === undefined && chat.tt === undefined && chat.n === 'Boss', 'staff get no badge and no title by default');
+  // titles: nobody has one until given; colour required; shows live in roster + chat + leaderboard
+  r = await post('/api/admin/title', { username: 'Boss', title: 'Founder', color: 'red' }, boss, 'sesame'); ok(r.status === 400, 'a title needs a #rrggbb colour');
+  r = await post('/api/admin/title', { username: 'Nobody', title: 'X', color: '#ff0000' }, boss, 'sesame'); ok(r.status === 404, 'title for an unknown account is refused');
+  r = await post('/api/admin/title', { username: 'Boss', title: '  Founder of the very long title  ', color: '#FF8A3D' }, pleb, 'sesame'); ok(r.status === 403, 'a normal account cannot hand out titles');
+  r = await post('/api/admin/title', { username: 'Boss', title: '  Founder of the very long title  ', color: '#FF8A3D' }, boss, 'sesame'); j = await r.json();
+  ok(r.status === 200 && j.title && j.title.t === 'Founder of the v' && j.title.c === '#ff8a3d', 'title saved (trimmed to 16 chars, colour normalised): ' + JSON.stringify(j.title));
+  await sleep(250);
+  const rosterBoss = b.msgs.filter((m) => m.t === 'roster').pop();
+  ok(rosterBoss && rosterBoss.ps.find((p) => p.n === 'Boss' && p.tt && p.tc === '#ff8a3d') && !rosterBoss.ps.find((p) => p.n === 'Victim' && p.tt), 'live roster carries the title for Boss only');
+  a.ws.send(JSON.stringify({ t: 'chat', m: 'titled hi' })); await sleep(400);
+  const chat2 = b.msgs.flatMap((m) => m.e || []).filter((e) => e.k === 'chat' && e.m === 'titled hi')[0]; ok(chat2 && chat2.tt && chat2.tc === '#ff8a3d', 'chat messages carry the title');
+  j = await (await post('/api/admin/users', { q: 'boss' }, boss, 'sesame')).json(); ok(j.users[0].title && j.users[0].title.c === '#ff8a3d', 'account list shows the title');
+  j = await (await post('/api/admin/state', {}, boss, 'sesame')).json(); ok(j.titles.length === 1 && j.titles[0].name === 'Boss', 'state lists titles');
   // mute
   r = await post('/api/admin/mute', { room: vp.room, id: vp.id, on: true }, boss, 'sesame'); ok(r.status === 200, 'mute');
   const before = a.msgs.flatMap((m) => m.e || []).filter((e) => e.k === 'chat').length;
@@ -72,6 +85,11 @@ function join(name, cookie, c = 0) {
   for (let i = 0; i < 14; i++) { await reg('Lb' + i); await post('/api/admin/wins', { username: 'Lb' + i, delta: 1 + i }, boss, 'sesame'); }
   srv.resetBoard(); j = await (await fetch(BASE + '/api/leaderboard')).json(); ok(j.top.length === 16 && j.top[0].wins === 14 && j.top.every((t, i) => !i || j.top[i - 1].wins >= t.wins), 'leaderboard goes beyond 10 rows (got ' + j.top.length + ')');
   j = await (await post('/api/admin/state', {}, boss, 'sesame')).json(); ok(j.log.length > 8, 'audit log has entries');
+  await post('/api/admin/wins', { username: 'Boss', delta: 30 }, boss, 'sesame'); srv.resetBoard();
+  j = await (await fetch(BASE + '/api/leaderboard')).json(); ok(j.top.find((t) => t.username === 'Boss' && t.title && t.title.c === '#ff8a3d'), 'leaderboard rows carry titles');
+  const a2 = await join('x', boss); ok(a2.init.roster.find((p) => p.n === 'Boss' && p.tt), 'a title is kept for the next join');
+  r = await post('/api/admin/title', { username: 'Boss', title: '' }, boss, 'sesame'); ok(r.status === 200, 'title removed'); await sleep(250);
+  ok(!a2.msgs.filter((m) => m.t === 'roster').pop().ps.find((p) => p.n === 'Boss').tt, 'removed title disappears live');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');

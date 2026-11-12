@@ -27,7 +27,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   if (admins.size && !passcode) console.warn('ADMIN_USERS is set but ADMIN_PASSCODE is not: the admin panel stays locked until you set ADMIN_PASSCODE.');
   if (!admins.size) console.log('Admin panel: no admin usernames configured (set ADMIN_USERS or edit src/admin.js).');
 
-  let st = { bans: {}, mutes: {}, banner: '', lbBase: {} };           // persisted
+  let st = { bans: {}, mutes: {}, banner: '', lbBase: {}, titles: {} };           // persisted
   const guestMutes = new Set();                           // guests only, lost on restart
   const log = [];                                         // last admin actions (memory)
   const fails = new Map();                                // ip -> [timestamps] of wrong passcodes
@@ -42,6 +42,8 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   const banReason = (name) => { const b = st.bans[lower(name)]; return b ? b.reason || 'No reason given.' : null; };
   const isMuted = (name, isAccount) => (isAccount ? !!st.mutes[lower(name)] : guestMutes.has(lower(name)));
   const banner = () => st.banner || '';
+  /** A custom title (and its colour) given to an account from the staff page. Nobody has one by default, staff included. */
+  const titleOf = (name) => { const t = st.titles && st.titles[lower(name)]; return t ? { t: t.t, c: t.c } : null; };
   const lbBase = (name) => (st.lbBase && st.lbBase[lower(name)]) || 0;     // wins that no longer count toward the leaderboard
 
   /* ------------------------------- helpers ------------------------------- */
@@ -70,7 +72,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     return {
       username: u.username, wins: u.wins, spent: u.spent, balance: u.wins - u.spent, created: u.created,
       owned: u.owned.filter((x) => !T.STARTER_ITEMS.includes(x)), banned: banReason(u.username), muted: !!st.mutes[lower(u.username)],
-      online: activeUsers.has(u.id), admin: isAdmin(u.username),
+      online: activeUsers.has(u.id), admin: isAdmin(u.username), title: titleOf(u.username),
     };
   }
 
@@ -114,6 +116,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
           me, uptime: Math.round(process.uptime()), mem: Math.round(process.memoryUsage().rss / 1048576), db: store.kind, accounts: await store.countUsers(),
           rooms: o.rooms, players: o.players, humans: o.humans, banner: st.banner,
           bans: Object.entries(st.bans).map(([k, v]) => ({ name: v.name || k, reason: v.reason, by: v.by, at: v.at })),
+          titles: Object.entries(st.titles || {}).map(([k, v]) => ({ name: v.name || k, t: v.t, c: v.c })),
           mutes: Object.keys(st.mutes), guestMutes: [...guestMutes], log: log.slice(0, 40), admins: [...admins],
         }), true;
       }
@@ -184,6 +187,22 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         record(me, 'password-reset', u.username); return json(res, 200, { ok: true }), true;
       }
 
+      if (act === 'title') {                                 // give (or clear) a coloured title shown next to the player's name
+        const u = await target(); if (!u) return noUser(), true;
+        const text = clip(body.title, 16), col = String(body.color || '').trim();
+        st.titles = st.titles || {};
+        if (!text) { delete st.titles[lower(u.username)]; }
+        else {
+          if (!/^#[0-9a-fA-F]{6}$/.test(col)) return json(res, 400, { error: 'Pick a colour like #ff8a3d.' }), true;
+          st.titles[lower(u.username)] = { name: u.username, t: text, c: col.toLowerCase(), by: me, at: Date.now() };
+        }
+        await save();
+        const t = titleOf(u.username);
+        for (const r of rooms.values()) for (const p of r.players.values()) if (!p.bot && p.uid === u.id) { p.title = t; r.rosterDirty = true; }       // shows up in the live game straight away
+        record(me, text ? 'title' : 'title-clear', text ? `${u.username}: "${text}" ${col}` : u.username);
+        return json(res, 200, { ok: true, title: t }), true;
+      }
+
       if (act === 'announce') {
         const m = clip(body.m, 140); if (!m) return json(res, 400, { error: 'Write a message first.' }), true;
         let n = 0; for (const ws of wss.clients) if (ws.readyState === 1) { send(ws, { t: 'announce', m }); n++; }
@@ -202,7 +221,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, lbBase, admins };
+  return { handle, load, isAdmin, banReason, isMuted, banner, lbBase, titleOf, admins };
 }
 
 module.exports = { create, ADMIN_USERNAMES };
