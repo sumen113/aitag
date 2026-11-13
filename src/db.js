@@ -91,6 +91,30 @@ async function openPg(url, opts = {}) {
       } finally { c.release(); }
       return { ok: true, user: await this.userById(id) };
     },
+    /** Atomic: optionally charge wins, grant a skin, and save the player's chest ledger, in one transaction (or none of it). */
+    async applyChest(id, o) {
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        if (o.price) {
+          const r = await c.query('UPDATE users SET spent = spent + $2 WHERE id = $1 AND wins - spent >= $2', [id, o.price]);
+          if (!r.rowCount) { await c.query('ROLLBACK'); return { ok: false, err: 'Not enough wins yet.' }; }
+        }
+        if (o.item) {
+          const own = await c.query('SELECT 1 AS x FROM inventory WHERE user_id = $1 AND item_id = $2', [id, o.item]);
+          if (own.rows.length) { await c.query('ROLLBACK'); return { ok: false, err: 'You already own that.' }; }
+          await c.query('INSERT INTO inventory (user_id, item_id, acquired_at) VALUES ($1, $2, $3)', [id, o.item, Date.now()]);
+        }
+        const key = 'ledger:' + id, v = JSON.stringify(o.ledger);
+        const u = await c.query('UPDATE kv SET v = $2 WHERE k = $1', [key, v]);
+        if (!u.rowCount) await c.query('INSERT INTO kv (k, v) VALUES ($1, $2)', [key, v]);
+        await c.query('COMMIT');
+      } catch (e) {
+        try { await c.query('ROLLBACK'); } catch (x) { /* already closed */ }
+        throw e;
+      } finally { c.release(); }
+      return { ok: true, user: await this.userById(id) };
+    },
     /* ---- admin / extras ---- */
     async kvGet(k) { const r = (await pool.query('SELECT v FROM kv WHERE k = $1', [k])).rows[0]; if (!r) return null; try { return JSON.parse(r.v); } catch (e) { return null; } },
     async kvSet(k, val) {
@@ -165,6 +189,16 @@ async function openFile(file) {
       if (withStarters(u.owned).includes(item)) return { ok: false, err: 'You already own that.' };
       if (u.wins - u.spent < price) return { ok: false, err: 'Not enough wins yet.' };
       u.spent += price; u.owned.push(item); save();
+      return { ok: true, user: view(u) };
+    },
+    async applyChest(id, o) {
+      const u = db.users[id]; if (!u) return { ok: false, err: 'Account not found.' };
+      if (o.price && u.wins - u.spent < o.price) return { ok: false, err: 'Not enough wins yet.' };
+      if (o.item && withStarters(u.owned).includes(o.item)) return { ok: false, err: 'You already own that.' };
+      if (o.price) u.spent += o.price;
+      if (o.item) u.owned.push(o.item);
+      db.kv['ledger:' + id] = JSON.parse(JSON.stringify(o.ledger));
+      save();
       return { ok: true, user: view(u) };
     },
     async kvGet(k) { return db.kv[k] === undefined ? null : JSON.parse(JSON.stringify(db.kv[k])); },

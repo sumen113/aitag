@@ -28,6 +28,7 @@
       <nav class="nav-links" aria-label="Sections">
         <a href="#cast">characters</a><a href="#arenas">arenas</a><a href="#how">how to play</a>
         <button type="button" class="nav-shop" id="navShop">shop</button>
+        <button type="button" class="nav-shop" id="navChests">chests<i class="new-dot hidden" id="chestDot"></i></button>
         <button type="button" class="nav-shop opt" id="navBoard">top sweats</button>
         <button type="button" class="nav-shop opt" id="navNews">logs<i class="new-dot hidden" id="newsDot"></i></button>
         <a href="/hq" class="nav-admin hidden" id="navAdmin">tuff people</a>
@@ -106,6 +107,7 @@
               </div>
             </div>
             <div class="swatch-row"><span class="mono">Hat</span><div class="swatches hat-grid" id="hats" role="radiogroup" aria-label="Hat"></div></div>
+            <div class="swatch-row"><span class="mono">Skin</span><button type="button" class="skin-btn" id="skinBtn" aria-label="Choose a skin"><i class="skin-dot" id="skinDot"></i><span id="skinTxt">Default</span><em id="skinGo">locker</em></button></div>
           </div>
         </aside>
       </section>
@@ -187,6 +189,21 @@
       </form>
     </section>
 
+    <section class="modal card wide" id="chestModal" role="dialog" aria-modal="true" aria-labelledby="chestTitle" hidden>
+      <button type="button" class="modal-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <header class="shop-head">
+        <div><p class="mono kicker">Chests</p><h2 id="chestTitle">Pop some skins</h2></div>
+        <div class="chest-bank">
+          <div class="balance" aria-live="polite"><span class="mono">Wins</span><b id="chWins">0</b></div>
+          <div class="glit" aria-live="polite"><span class="mono">Glitter</span><b id="chGlit">0</b></div>
+        </div>
+      </header>
+      <div class="seg chest-tabs" id="chTabs" role="tablist" aria-label="Chest sections">
+        <button type="button" role="tab" data-t="chests" aria-selected="true" class="on">Chests</button>
+        <button type="button" role="tab" data-t="locker" aria-selected="false">Locker</button>
+      </div>
+      <div id="chPanel"></div>
+    </section>
     <section class="modal card wide" id="shopModal" role="dialog" aria-modal="true" aria-labelledby="shopTitle" hidden>
       <button type="button" class="modal-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <header class="shop-head">
@@ -372,6 +389,7 @@
   <script src="render.js"></script>
   <script src="audio.js"></script>
   <script src="site.js"></script>
+  <script src="chests.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

@@ -61,6 +61,20 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 
 Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
 
+## Chests and skins (v7.4)
+
+Wins buy **chests**; every chest holds one **skin**. Skins are only looks (a pattern or finish painted over a character's body colour, optionally with a trail while running); they never change how anyone plays. Everyone in a match sees your skin. Guests cannot own skins.
+
+- **Skins**: 12 themes x 18 characters = 216. Skin items are inventory rows like `skin:fox:lava`. Themes (rarity): Honey, Mint (common); Arctic, Jungle, Sunset (uncommon); Lava, Toxic (rare); Galaxy, Holo, Glitch (epic); Gold, Aurora (legendary). The look of each is data in `SKIN_THEMES` (`public/shared.js`) and painted in `public/chars.js` by hooking `fillStroke`, so a new theme needs no new art.
+- **Chests** (`CHEST_TIERS` in `shared.js`): Wooden 2 wins, Silver 5, Golden 12. Advertised odds are % for common/uncommon/rare/epic/legendary: wooden 70/24/5.5/0.5/0, silver 35/40/18/6/1, golden 0/20/48/25/7. Each chest also pays glitter (4/10/24).
+- **Daily chest**: free every 20 hours. The streak survives up to 44 hours between claims; days 1-2 are wooden, 3-6 silver, 7 golden, then it starts over.
+- **Pity**: every chest adds points (wooden 1, silver 2, golden 4) to two counters. When the next chest would reach 20 points without an epic-or-better (or 100 without a legendary) it is guaranteed to have one. This makes the real chance of an epic or better higher than the advertised odds, mostly for cheap chests.
+- **Duplicates and glitter**: a duplicate gets one free re-roll; if it is still a duplicate it turns into glitter (4/10/25/60/150 by rarity). Glitter crafts any chosen skin (15/40/100/250/600 by rarity) in the Locker.
+- **Aim**: pick a favourite character and its skins are 4x as likely in each rarity.
+- **Server rules** (`src/chests.js`): the roll uses `crypto.randomInt`; opening, daily, craft and focus run one at a time per player, and `db.applyChest` spends the wins, grants the skin and saves the ledger (`kv` key `ledger:<id>`: glitter, pity counters, streak, focus) in a single transaction, so double clicks cannot double-spend. Endpoints: `POST /api/chest/open|daily|craft|focus`; `/api/me` includes `user.chest`.
+- **Staff**: the Accounts tab can grant a skin item by id, and `POST /api/admin/glitter` adds or removes glitter.
+- Tests: `tools/chesttest.js` (odds, pity, duplicates, daily streak, crafting, parallel opens, on both storage backends).
+
 ## Leaving, standing still and lone zombies (v7.3)
 
 - **Standing still** (no ability use and less than 50 px travelled, so wiggling or pushing into a wall doesn't count) for **10 s during a round** removes you from the server with a message; a warning toast appears for the last 6 s and a 💤 marker from 4 s. Practice rooms allow 30 s. Waiting in the countdown/vote doesn't count. Tagging someone idle just tags them: tags are never bounced onward.

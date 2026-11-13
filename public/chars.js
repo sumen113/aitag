@@ -22,8 +22,57 @@ const Chars = (() => {
   const colorOf = (ci, ki) => C.colorFor(ki) || C.CHARS[ci].natural;
 
   /* ---------------------------- tiny path helpers --------------------------- */
+  /* ------------------------------ skins ------------------------------ */
+  // A skin swaps the body palette for a theme colour and paints a pattern / finish over every
+  // body-coloured shape (clipped to that shape), so it works on all characters without extra art.
+  // SK is set for the duration of one draw() call.
+  let SK = null;
+  const hash = (i) => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const BX0 = -34, BX1 = 34, BY0 = -56, BY1 = 6;       // the area a character body can cover (feet at 0,0)
+  const hsl = (h, s, l, a) => `hsla(${Math.round(h) % 360},${s}%,${l}%,${a == null ? 1 : a})`;
+  function skinFill(g, th, t) {
+    switch (th.fin) {
+      case 'grad': { const q = g.createLinearGradient(0, BY0, 0, BY1); th.grad.forEach((c, i) => q.addColorStop(i / (th.grad.length - 1), c)); return q; }
+      case 'holo': { const q = g.createLinearGradient(BX0, BY0, BX1, BY1); const h0 = t * 60; for (let i = 0; i <= 4; i++) q.addColorStop(i / 4, hsl(h0 + i * 70, 85, 76)); return q; }
+      case 'galaxy': { const q = g.createRadialGradient(-6, -26, 2, 0, -22, 38); q.addColorStop(0, '#6a3fd1'); q.addColorStop(0.55, '#2b2470'); q.addColorStop(1, '#120f3a'); return q; }
+      case 'gold': { const q = g.createLinearGradient(-20, BY0, 20, BY1); q.addColorStop(0, '#fff3a8'); q.addColorStop(0.35, '#ffcf3a'); q.addColorStop(0.7, '#e09a12'); q.addColorStop(1, '#ffd95c'); return q; }
+      case 'aurora': { const q = g.createLinearGradient(0, BY0, 0, BY1); const w = Math.sin(t * 1.4) * 0.12; q.addColorStop(0, '#a46bff'); q.addColorStop(Math.max(0.05, 0.4 + w), '#3be0b0'); q.addColorStop(Math.min(0.95, 0.75 + w), '#2b9fd8'); q.addColorStop(1, '#3be0b0'); return q; }
+      default: return th.base;
+    }
+  }
+  const sheen = (g, t, a, speed) => {       // a slanted bright band sweeping across
+    const x = ((t * (speed || 34)) % 110) - 55;
+    g.fillStyle = `rgba(255,255,255,${a})`;
+    const P = new Path2D(); P.moveTo(x, BY0); P.lineTo(x + 9, BY0); P.lineTo(x - 11, BY1); P.lineTo(x - 20, BY1); P.closePath(); g.fill(P);
+  };
+  function skinOver(g, th, t) {
+    g.save(); g.clip();
+    let P;
+    g.fillStyle = th.pc; g.strokeStyle = th.pc;
+    switch (th.pat) {
+      case 'stripes': g.globalAlpha = 0.5; P = new Path2D(); for (let y = BY0 + 3; y < BY1; y += 9) P.rect(BX0, y, BX1 - BX0, 3.6); g.fill(P); break;
+      case 'dots': g.globalAlpha = 0.55; P = new Path2D(); for (let r = 0, y = BY0; y < BY1; y += 7, r++) for (let x = BX0 + (r % 2) * 4.5; x < BX1; x += 9) { P.moveTo(x + 1.9, y); P.arc(x, y, 1.9, 0, 6.3); } g.fill(P); break;
+      case 'flecks': g.globalAlpha = 0.9; P = new Path2D(); for (let i = 0; i < 26; i++) { const x = BX0 + hash(i) * 68, y = BY0 + hash(i + 40) * 60, r = 1 + hash(i + 9) * 1.6; P.moveTo(x, y - r); P.lineTo(x + r, y); P.lineTo(x, y + r); P.lineTo(x - r, y); P.closePath(); } g.fill(P); break;
+      case 'camo': g.globalAlpha = 0.8; P = new Path2D(); for (let i = 0; i < 12; i++) { const x = BX0 + hash(i + 3) * 68, y = BY0 + hash(i + 77) * 60; P.moveTo(x + 7, y); P.ellipse(x, y, 7 + hash(i) * 5, 4 + hash(i + 5) * 4, hash(i + 11) * 3, 0, 6.3); } g.fill(P); break;
+      case 'cracks': { const k = 0.65 + 0.35 * Math.sin(t * 3); g.globalAlpha = k; g.lineWidth = 1.7; g.lineJoin = 'miter'; const P = new Path2D();
+        for (let i = 0; i < 6; i++) { let x = BX0 + hash(i + 20) * 60 + 4, y = BY0 + hash(i + 30) * 20; P.moveTo(x, y); for (let j = 0; j < 4; j++) { x += (hash(i * 9 + j) - 0.45) * 12; y += 7 + hash(i * 5 + j + 2) * 5; P.lineTo(x, y); } }
+        g.stroke(P); g.globalAlpha = k * 0.35; g.lineWidth = 3.6; g.stroke(P); break; }
+      case 'hazard': g.globalAlpha = 0.5; P = new Path2D(); for (let x = BX0 - 60; x < BX1; x += 14) { P.moveTo(x, BY1); P.lineTo(x + 6, BY1); P.lineTo(x + 66, BY0); P.lineTo(x + 60, BY0); } g.fill(P);
+        g.globalAlpha = 0.85; g.fillStyle = '#e8ffb0'; P = new Path2D(); for (let i = 0; i < 7; i++) { const x = BX0 + hash(i + 50) * 68, y = BY0 + 4 + ((hash(i + 60) * 60 + t * 6) % 60); P.moveTo(x + 2.2, y); P.arc(x, y, 2.2, 0, 6.3); } g.fill(P); break;
+      case 'stars': for (let i = 0; i < 22; i++) { const x = BX0 + hash(i + 1) * 68, y = BY0 + hash(i + 31) * 60, tw = 0.35 + 0.65 * Math.abs(Math.sin(t * 2.4 + i * 1.7)), r = 0.8 + hash(i + 7) * 1.6; g.globalAlpha = tw; g.fillRect(x - r, y - r * 0.35, r * 2, r * 0.7); g.fillRect(x - r * 0.35, y - r, r * 0.7, r * 2); } break;
+      case 'glitch': { const f = Math.floor(t * 8); for (let i = 0; i < 5; i++) { const y = BY0 + hash(f * 5 + i) * 58, h = 1.5 + hash(f * 3 + i + 9) * 4, x = (hash(f + i * 7) - 0.5) * 30; g.globalAlpha = 0.6; g.fillStyle = i % 2 ? '#19e3c6' : '#ff2bd6'; g.fillRect(BX0 + x, y, 50 + hash(i + f) * 30, h); } break; }
+      case 'shimmer': break;
+      case 'waves': g.globalAlpha = 0.45; g.lineWidth = 2.2; for (let k = 0; k < 4; k++) { const P = new Path2D(); for (let x = BX0; x <= BX1; x += 4) { const y = BY0 + 12 + k * 13 + Math.sin(x * 0.18 + t * 1.8 + k) * 3.2; x === BX0 ? P.moveTo(x, y) : P.lineTo(x, y); } g.stroke(P); } break;
+    }
+    g.globalAlpha = 1;
+    if (th.fin === 'holo') sheen(g, t, 0.35, 46);
+    else if (th.fin === 'gold') { sheen(g, t, 0.5, 38); const k = Math.max(0, Math.sin(t * 2.2)); if (k > 0.05) { g.fillStyle = `rgba(255,255,255,${k})`; const r = 3.4 * k; g.fillRect(-9 - r, -34 - r * 0.3, r * 2, r * 0.6); g.fillRect(-9 - r * 0.3, -34 - r, r * 0.6, r * 2); } }
+    else if (th.fin === 'galaxy' || th.fin === 'aurora') sheen(g, t, 0.1, 22);
+    g.restore();
+  }
   function fillStroke(g, fill, lw) {
-    g.fillStyle = fill; g.fill();
+    if (SK && fill === SK.th.base) { g.fillStyle = skinFill(g, SK.th, SK.t); g.fill(); skinOver(g, SK.th, SK.t); }
+    else { g.fillStyle = fill; g.fill(); }
     g.lineWidth = lw || 2.4; g.strokeStyle = OUT; g.stroke();
   }
   function ell(g, x, y, rx, ry, fill, lw, rot) {
@@ -485,7 +534,10 @@ const Chars = (() => {
    *    spd (0..1) air (0..1) alpha blink(0..1) lean(rad) hat(0..8) pose{up,rot,sq} (see pose())
    */
   function draw(g, ci, o) {
-    const def = C.CHARS[ci], c = palette(o.color || def.natural), id = def.id, gt = GAIT[id] || GAIT.fox;
+    const def = C.CHARS[ci], id = def.id, gt = GAIT[id] || GAIT.fox;
+    const th = o.skin ? C.SKIN_THEME_BY_ID[o.skin] : null;
+    const c = palette(th ? th.base : (o.color || def.natural));
+    SK = th ? { th, t: o.t || 0 } : null;
     const s = o.s || 1, face = o.face || 1, t = o.t || 0, spd = o.spd || 0, pz = o.pose;
     const up = pz ? pz.up : 0, air = (o.air || 0) + up / 46;
     const o2 = { t, spd, blink: o.blink || 0, lx: (o.lx || 0) * face, ly: o.ly || 0, gf: gt.f, hat: o.hat | 0 };
@@ -509,6 +561,7 @@ const Chars = (() => {
     g.scale(1 + st + cr * 0.5, (1 - st) * (1 - cr));
     g.lineJoin = 'round'; g.lineCap = 'round';
     DRAW[id](g, c, o2);
+    SK = null;
     if (o2.hat) drawHat(g, id, o2.hat, o2);
     g.restore();
   }
@@ -570,15 +623,15 @@ const Chars = (() => {
 
   const avCache = new Map();
   /** A portrait that always fits its canvas, centred, never clipped (hat optional). */
-  function avatar(ci, ki, size, hat) {
-    size = size || 64; hat = hat | 0;
-    const key = ci + ':' + ki + ':' + size + ':' + hat;
+  function avatar(ci, ki, size, hat, skin) {
+    size = size || 64; hat = hat | 0; skin = skin || '';
+    const key = ci + ':' + ki + ':' + size + ':' + hat + ':' + skin;
     let u = avCache.get(key);
     if (u) return u;
     const f = fit(ci, hat), s = Math.min(size / 62, (size * 0.92) / f.w, (size * 0.92) / f.h);
     const cv = document.createElement('canvas'); cv.width = cv.height = size;
     const g = cv.getContext('2d');
-    draw(g, ci, { x: size / 2 - f.cx * s, y: size / 2 - f.cy * s, s, color: C.colorFor(ki), face: 1, t: 0.3, shadow: false, hat });
+    draw(g, ci, { x: size / 2 - f.cx * s, y: size / 2 - f.cy * s, s, color: C.colorFor(ki), face: 1, t: 0.3, shadow: false, hat, skin });
     u = cv.toDataURL();
     if (avCache.size > 600) avCache.clear();     // custom colours can generate lots of keys
     avCache.set(key, u);

@@ -121,6 +121,63 @@
   const SHOP = CHARS.filter((c) => !c.starter).map((c) => ({ id: 'char:' + c.id, type: 'character', ref: c.id, name: c.species, price: c.price, blurb: c.desc }));
   const SHOP_BY_ID = {}; SHOP.forEach((i) => (SHOP_BY_ID[i.id] = i));
   const STARTER_ITEMS = STARTERS.map((id) => 'char:' + id);
+
+  /* ------------------------- skins, chests and glitter ------------------------ */
+  // Every character can wear every theme: skin item ids look like 'skin:fox:lava'. Skins are only
+  // looks (they never change how a character plays). Chests are bought with wins and always hold one
+  // skin; the odds, prices, pity limits and glitter values below are the knobs to tweak.
+  const RARITIES = [
+    { id: 'common',    name: 'Common',    col: '#9fb0d8' },
+    { id: 'uncommon',  name: 'Uncommon',  col: '#5fd38a' },
+    { id: 'rare',      name: 'Rare',      col: '#4aa8ff' },
+    { id: 'epic',      name: 'Epic',      col: '#b46bff' },
+    { id: 'legendary', name: 'Legendary', col: '#ffb23d' },
+  ];
+  // pat: stripes dots flecks camo cracks hazard stars glitch shimmer waves | fin: none grad holo galaxy gold aurora
+  const SKIN_THEMES = [
+    { id: 'honey',  name: 'Honey',  rarity: 0, base: '#f0b429', pat: 'stripes', pc: '#7a4a00', fin: 'none',   trail: { k: 'dot',    c: ['#ffd25a', '#f0b429'] } },
+    { id: 'mint',   name: 'Mint',   rarity: 0, base: '#62d8b0', pat: 'dots',    pc: '#e9fff7', fin: 'none',   trail: { k: 'dot',    c: ['#b8ffe6', '#62d8b0'] } },
+    { id: 'arctic', name: 'Arctic', rarity: 1, base: '#b6e2ff', pat: 'flecks',  pc: '#ffffff', fin: 'none',   trail: { k: 'snow',   c: ['#ffffff', '#cfeeff'] } },
+    { id: 'jungle', name: 'Jungle', rarity: 1, base: '#3f9a4e', pat: 'camo',    pc: '#1f5c2c', fin: 'none',   trail: { k: 'leaf',   c: ['#7ad06b', '#2f7d3c'] } },
+    { id: 'sunset', name: 'Sunset', rarity: 1, base: '#ff8a5c', pat: 'none',    pc: '#ffd27a', fin: 'grad',   grad: ['#ffd27a', '#ff7a59', '#b0408f'], trail: { k: 'dot', c: ['#ffb36b', '#ff6f91'] } },
+    { id: 'lava',   name: 'Lava',   rarity: 2, base: '#3a1d1d', pat: 'cracks',  pc: '#ff7a1a', fin: 'none',   trail: { k: 'ember',  c: ['#ffcf4a', '#ff5a1a'] } },
+    { id: 'toxic',  name: 'Toxic',  rarity: 2, base: '#8bdc2a', pat: 'hazard',  pc: '#2b4a06', fin: 'none',   trail: { k: 'bubble', c: ['#c8ff6a', '#6bbd1a'] } },
+    { id: 'galaxy', name: 'Galaxy', rarity: 3, base: '#2b2470', pat: 'stars',   pc: '#ffffff', fin: 'galaxy', trail: { k: 'star',   c: ['#ffffff', '#b79bff'] } },
+    { id: 'holo',   name: 'Holo',   rarity: 3, base: '#c9b8ff', pat: 'shimmer', pc: '#ffffff', fin: 'holo',   trail: { k: 'spark',  c: ['#ff9bd8', '#9bf0ff'] } },
+    { id: 'glitch', name: 'Glitch', rarity: 3, base: '#1a1d2e', pat: 'glitch',  pc: '#19e3c6', fin: 'none',   trail: { k: 'pixel',  c: ['#19e3c6', '#ff2bd6'] } },
+    { id: 'gold',   name: 'Gold',   rarity: 4, base: '#ffcf3a', pat: 'shimmer', pc: '#fff6c2', fin: 'gold',   trail: { k: 'coin',   c: ['#fff1a0', '#ffc933'] } },
+    { id: 'aurora', name: 'Aurora', rarity: 4, base: '#3be0b0', pat: 'waves',   pc: '#d8ffe9', fin: 'aurora', trail: { k: 'ribbon', c: ['#5dffb8', '#a46bff'] } },
+  ];
+  const SKIN_THEME_BY_ID = {}; SKIN_THEMES.forEach((t) => (SKIN_THEME_BY_ID[t.id] = t));
+  const skinId = (charId, themeId) => 'skin:' + charId + ':' + themeId;
+  const SKINS = [], SKIN_BY_ID = {};
+  for (const c of CHARS) for (const t of SKIN_THEMES) {
+    const sk = { id: skinId(c.id, t.id), char: c.id, theme: t.id, rarity: t.rarity, name: t.name + ' ' + c.species };
+    SKINS.push(sk); SKIN_BY_ID[sk.id] = sk;
+  }
+  /** 'skin:fox:lava' -> the skin record, or null. */
+  const parseSkin = (item) => (typeof item === 'string' && Object.prototype.hasOwnProperty.call(SKIN_BY_ID, item) ? SKIN_BY_ID[item] : null);
+  /** A theme id that really exists, or '' (no skin). */
+  const cleanSkin = (theme) => (typeof theme === 'string' && Object.prototype.hasOwnProperty.call(SKIN_THEME_BY_ID, theme) ? theme : '');
+  const ownsSkin = (owned, charId, themeId) => !!themeId && (owned || []).includes(skinId(charId, themeId));
+  const skinName = (charId, themeId) => { const s = SKIN_BY_ID[skinId(charId, themeId)]; return s ? s.name : ''; };
+
+  /** Chest tiers. odds = % chance for [common, uncommon, rare, epic, legendary]; glitter = bonus dust on top of the skin. */
+  const CHEST_TIERS = {
+    wood:   { id: 'wood',   name: 'Wooden Chest', price: 2,  odds: [70, 24, 5.5, 0.5, 0], glitter: 4,  pts: 1,  blurb: 'Mostly common stuff, but anything up to epic can drop.' },
+    silver: { id: 'silver', name: 'Silver Chest', price: 5,  odds: [35, 40, 18, 6, 1],    glitter: 10, pts: 2, blurb: 'Uncommon or better is the norm. A shot at legendary.' },
+    gold:   { id: 'gold',   name: 'Golden Chest', price: 12, odds: [0, 20, 48, 25, 7],    glitter: 24, pts: 4, blurb: 'Never common. Rare and up, with the best legendary odds.' },
+  };
+  const CHEST_ORDER = ['wood', 'silver', 'gold'];
+  /** Pity: every chest adds its 'pts' to two counters; when the next chest would reach the limit it is guaranteed an epic-or-better
+   *  (or a legendary). The counters reset when you pull one. Points make cheap wooden chests count for less than golden ones. */
+  const PITY = { epic: 20, legendary: 100 };
+  /** Glitter you get when a chest drops a skin you already own, per rarity; and the price to craft a chosen skin. */
+  const GLITTER_DUP = [4, 10, 25, 60, 150];
+  const GLITTER_CRAFT = [15, 40, 100, 250, 600];
+  /** Free daily chest: hours between claims, hours of grace before the streak resets, and the tier for each streak day (1..7). */
+  const DAILY = { cooldownH: 20, graceH: 44, tiers: ['wood', 'wood', 'silver', 'silver', 'silver', 'silver', 'gold'] };
+  const dailyTier = (streak) => DAILY.tiers[Math.max(0, Math.min(DAILY.tiers.length, streak | 0) - 1)] || 'wood';
   /* ------------------------------ servers ------------------------------ */
   const SERVER_LIMITS = { MIN_TIME: 60, MAX_TIME: 600, DEF_TIME: 90, MIN_PLAYERS: 2, MAX_PLAYERS: 15, NAME_MIN: 3, NAME_MAX: 22, PASS_MIN: 3, PASS_MAX: 24 };
   const REGULAR_NAME = 'Regular server';
@@ -659,7 +716,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

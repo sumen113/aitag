@@ -83,11 +83,22 @@ const Sfx = (() => {
     stink() { noise(0.5, 0.22, 500, 0, 120); tone(130, 0.5, 'sawtooth', 0.08, 90); tone(98, 0.45, 'sine', 0.1, 70, 0.08); },
     splash() { noise(0.28, 0.26, 700, 0, 250); tone(340, 0.18, 'sine', 0.16, 120); },
     buy() { [660, 880, 1175].forEach((f, i) => tone(f, 0.14, 'triangle', 0.16, null, i * 0.07)); tone(1568, 0.3, 'triangle', 0.14, null, 0.22); },
+    chestThud() { tone(90, 0.3, 'sine', 0.4, 40); noise(0.18, 0.3, 300, 0, 100); },
+    chestShake(n) { const k = 1 + (n | 0) * 0.18; noise(0.12, 0.22, 600 * k, 0, 300); tone(150 * k, 0.1, 'square', 0.1, 90); tone(300 * k, 0.07, 'triangle', 0.08, null, 0.05); },
+    chestOpen() { noise(0.5, 0.35, 800, 0, 5000); tone(220, 0.5, 'sawtooth', 0.14, 880); tone(440, 0.4, 'triangle', 0.12, 1320, 0.05); },
+    reveal0() { [523, 659].forEach((f, i) => tone(f, 0.18, 'triangle', 0.18, null, i * 0.08)); },
+    reveal1() { [523, 659, 784].forEach((f, i) => tone(f, 0.2, 'triangle', 0.2, null, i * 0.08)); },
+    reveal2() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'triangle', 0.2, null, i * 0.08)); tone(1568, 0.4, 'sine', 0.1, null, 0.34); },
+    reveal3() { [392, 523, 659, 784, 1046].forEach((f, i) => tone(f, 0.24, 'square', 0.12, null, i * 0.08)); [1046, 1318, 1568].forEach((f) => tone(f, 0.8, 'triangle', 0.14, null, 0.42)); noise(0.7, 0.2, 3000, 0.3, 6000); },
+    reveal4() { [262, 330, 392, 523, 659, 784, 1046, 1318].forEach((f, i) => tone(f, 0.28, 'square', 0.12, null, i * 0.07)); [1046, 1318, 1568, 2093].forEach((f) => tone(f, 1.2, 'triangle', 0.16, null, 0.62)); noise(1, 0.25, 2500, 0.5, 7000); tone(70, 0.8, 'sine', 0.4, 35, 0.55); },
+    glitter() { tone(2093, 0.08, 'sine', 0.08); tone(2637, 0.1, 'sine', 0.07, null, 0.05); },
+    equip() { tone(600, 0.08, 'triangle', 0.14); tone(900, 0.12, 'triangle', 0.14, null, 0.07); tone(1200, 0.18, 'sine', 0.1, null, 0.14); },
+    craft() { tone(300, 0.15, 'square', 0.12, 150); noise(0.15, 0.25, 2000, 0.1, 800); [880, 1175, 1568].forEach((f, i) => tone(f, 0.18, 'triangle', 0.16, null, 0.25 + i * 0.07)); },
     deny() { tone(200, 0.16, 'square', 0.12, 130); },
   };
 
   return {
-    play(n) { try { const f = S[n]; if (f) f(); } catch (e) { /* audio is best-effort */ } },
+    play(n, a) { try { const f = S[n]; if (f) f(a); } catch (e) { /* audio is best-effort */ } },
     unlock() { ctx(); },
     get muted() { return muted; },
     setMuted(v) { muted = !!v; try { localStorage.setItem('tagrush.mute', JSON.stringify(muted)); } catch (e) { /* noop */ } },

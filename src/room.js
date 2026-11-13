@@ -70,7 +70,7 @@ class Room {
   makePlayer(name, c, col, bot) {
     const p = T.newSim(nextPlayerId++, c, 0, 0);
     Object.assign(p, {
-      name, col, bot, hat: bot && Math.random() < 0.5 ? 1 + ((Math.random() * (T.HATS.length - 1)) | 0) : 0, ws: null, score: 0, tags: 0, queue: [], ack: 0, lastSeq: 0, lastInputAt: Date.now(), lastActiveAt: Date.now(),
+      name, col, bot, hat: bot && Math.random() < 0.5 ? 1 + ((Math.random() * (T.HATS.length - 1)) | 0) : 0, skin: bot && Math.random() < 0.3 ? T.SKIN_THEMES[(Math.random() * 7) | 0].id : '', ws: null, score: 0, tags: 0, queue: [], ack: 0, lastSeq: 0, lastInputAt: Date.now(), lastActiveAt: Date.now(),
       lastChat: 0, chatLog: [], lastMsg: '', rtt: 0, uid: 0, title: null, bowled: null, gone: 0,
       hx: new Float32Array(HIST), hy: new Float32Array(HIST),
       input: { x: 0, y: 0, a: 0 }, sm: bot ? this.botSpeed : 1,
@@ -87,9 +87,9 @@ class Room {
     p.x = best[0]; p.y = best[1]; this.resetHist(p);
   }
 
-  addHuman(ws, name, c, col, uid, hat) {
+  addHuman(ws, name, c, col, uid, hat, skin) {
     const p = this.makePlayer(name, c, col, false);
-    p.ws = ws; p.uid = uid || 0; p.hat = hat | 0;
+    p.ws = ws; p.uid = uid || 0; p.hat = hat | 0; p.skin = skin || '';
     this.spawnFor(p);
     this.holdForNextRound(p);
     this.players.set(p.id, p);
@@ -642,7 +642,7 @@ class Room {
   }
 
   /* ------------------------------ networking ---------------------------- */
-  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0, w: p.wait ? 1 : 0, ...(p.title ? { tt: p.title.t, tc: p.title.c } : {}) })); }
+  roster() { return [...this.players.values()].map((p) => ({ id: p.id, n: p.name, c: p.c, k: p.col, h: p.hat || 0, b: p.bot ? 1 : 0, a: p.uid ? 1 : 0, w: p.wait ? 1 : 0, ...(p.skin ? { sk: p.skin } : {}), ...(p.title ? { tt: p.title.t, tc: p.title.c } : {}) })); }
 
   send(p, obj) { if (p.ws && p.ws.readyState === 1) p.ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); }
 

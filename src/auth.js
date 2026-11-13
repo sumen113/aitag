@@ -4,6 +4,7 @@
    POST must be same-origin JSON, so other websites can't make a visitor's browser act on their account. */
 const crypto = require('crypto');
 const T = require('../public/shared.js');
+const Chests = require('./chests.js');
 
 const COOKIE = 'tr_sess';
 const SESSION_MS = 30 * 24 * 3600 * 1000;
@@ -56,11 +57,15 @@ function publicUser(u) {
 
 function create(store, opts = {}) {
   const pu = (u) => { const o = publicUser(u); if (o && opts.isAdmin) o.admin = !!opts.isAdmin(u.username); return o; };
+  const chests = Chests.create(store, { now: opts.now });
+  /** The account as the browser sees it, with the chest ledger (glitter, pity, daily) attached. */
+  const puFull = async (u) => { const o = pu(u); if (o) o.chest = await chests.view(u.id); return o; };
   const lim = {
     register: new Limiter(opts.registerPerHour || 6, 3600e3),
     loginIp: new Limiter(opts.loginPerIp || 25, 600e3),
     loginUser: new Limiter(opts.loginPerUser || 8, 600e3),
     buy: new Limiter(30, 60e3),
+    chest: new Limiter(40, 60e3),
   };
   const sweeper = setInterval(() => { for (const l of Object.values(lim)) l.sweep(); store.dropExpired().catch(() => {}); }, 600e3);
   sweeper.unref();
@@ -99,7 +104,7 @@ function create(store, opts = {}) {
     try {
       if (req.method === 'GET' && url === '/api/me') {
         const u = await userFromCookie(req.headers.cookie);
-        return json(res, 200, { accounts: true, user: pu(u), shop: T.SHOP }), true;
+        return json(res, 200, { accounts: true, user: await puFull(u), shop: T.SHOP }), true;
       }
       if (req.method !== 'POST') return json(res, 404, { error: 'Not found' }), true;
       if (!sameOrigin(req) || !/^application\/json\b/i.test(req.headers['content-type'] || '')) return json(res, 403, { error: 'Forbidden' }), true;
@@ -114,7 +119,7 @@ function create(store, opts = {}) {
         const user = await store.createUser(v.name, await hashPassword(String(body.password)));
         if (!user) return json(res, 409, { error: 'That username is taken.' }), true;
         const h = await startSession(req, res, user);
-        return json(res, 200, { ok: true, user: pu(user) }, h), true;
+        return json(res, 200, { ok: true, user: await puFull(user) }, h), true;
       }
 
       if (url === '/api/login') {
@@ -126,7 +131,7 @@ function create(store, opts = {}) {
         const why = opts.isBanned && opts.isBanned(user.username);
         if (why) return json(res, 403, { error: `This account is suspended: ${why}` }), true;
         const h = await startSession(req, res, user);
-        return json(res, 200, { ok: true, user: pu(user) }, h), true;
+        return json(res, 200, { ok: true, user: await puFull(user) }, h), true;
       }
 
       if (url === '/api/logout') {
@@ -142,8 +147,24 @@ function create(store, opts = {}) {
         const item = T.SHOP_BY_ID[String(body.item)];
         if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
         const r = await store.buy(user.id, item.id, item.price);
-        if (!r.ok) return json(res, 400, { error: r.err, user: pu(await store.userById(user.id)) }), true;
-        return json(res, 200, { ok: true, user: pu(r.user), bought: item.id }), true;
+        if (!r.ok) return json(res, 400, { error: r.err, user: await puFull(await store.userById(user.id)) }), true;
+        return json(res, 200, { ok: true, user: await puFull(r.user), bought: item.id }), true;
+      }
+
+      if (url.startsWith('/api/chest/')) {
+        const user = await userFromCookie(req.headers.cookie);
+        if (!user) return json(res, 401, { error: 'Log in to open chests.' }), true;
+        if (!lim.chest.hit('u' + user.id)) return json(res, 429, { error: 'Slow down a little.' }), true;
+        const act = url.slice('/api/chest/'.length);
+        let r;
+        if (act === 'open') r = await chests.open(user, String(body.tier));
+        else if (act === 'daily') r = await chests.daily(user);
+        else if (act === 'craft') r = await chests.craft(user, String(body.skin));
+        else if (act === 'focus') r = await chests.focus(user, String(body.char || ''));
+        else return json(res, 404, { error: 'Not found' }), true;
+        const fresh = await puFull(await store.userById(user.id));
+        if (!r.ok) return json(res, 400, { error: r.err, user: fresh }), true;
+        return json(res, 200, Object.assign({}, r, { user: fresh })), true;
       }
       return json(res, 404, { error: 'Not found' }), true;
     } catch (e) {
@@ -152,7 +173,7 @@ function create(store, opts = {}) {
     }
   }
 
-  return { handle, userFromCookie, publicUser: pu };
+  return { handle, userFromCookie, publicUser: pu, chests };
 }
 
 module.exports = { create, hashPassword, verifyPassword, publicUser };

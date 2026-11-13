@@ -35,13 +35,13 @@
   /** Open a socket and join. Resolves {ok:true} once the server says init, or {ok:false, err}. */
   Game.join = (o) => new Promise((resolve) => {
     closeWs();
-    G.sel = { name: o.name, c: o.c, k: o.k, h: o.h | 0 }; G.solo = o.mode === 'bots'; G.diff = o.diff; G.kicked = null;
+    G.sel = { name: o.name, c: o.c, k: o.k, h: o.h | 0, sk: o.sk || '' }; G.solo = o.mode === 'bots'; G.diff = o.diff; G.kicked = null;
     let ws, settled = false;
     const done = (r) => { if (settled) return; settled = true; clearTimeout(to); G.joinResolve = null; resolve(r); };
     try { ws = new WebSocket(wsUrl()); } catch (e) { return resolve({ ok: false, err: 'Could not connect to the server.' }); }
     const to = setTimeout(() => { if (!settled) { if (G.ws === ws) G.ws = null; try { ws.close(); } catch (e) { /* noop */ } done({ ok: false, err: 'The server took too long to answer. Please try again.' }); } }, 50000);
     G.ws = ws; G.joinResolve = done;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, ks: o.ks, h: o.h | 0, server: o.server, pass: o.pass, create: o.create }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', mode: o.mode, diff: o.diff, name: o.name, c: o.c, k: o.k, ks: o.ks, h: o.h | 0, sk: o.sk || '', server: o.server, pass: o.pass, create: o.create }));
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (G.ws === ws) onMessage(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -89,7 +89,7 @@
     for (const p of list) {
       seen.add(p.id);
       const r = G.roster.get(p.id);
-      if (r) { delete r.tt; delete r.tc; Object.assign(r, p); } else G.roster.set(p.id, Object.assign({ sc: 0, tg: 0, fl: 0 }, p));
+      if (r) { delete r.tt; delete r.tc; delete r.sk; Object.assign(r, p); } else G.roster.set(p.id, Object.assign({ sc: 0, tg: 0, fl: 0 }, p));
     }
     for (const id of [...G.roster.keys()]) if (!seen.has(id)) { G.roster.delete(id); G.vis.delete(id); }
     const humans = [...G.roster.values()].filter((r) => !r.b).length;
@@ -536,6 +536,21 @@
   }
   const isCloaked = (e) => (e.abT > 0 && CHARS[e.c].id === 'cat' && !e.isMe) || (!e.isMe && !e.decoy && inHide(e.x, e.y) && G.me && Math.hypot(e.x - G.me.x, e.y - G.me.y) > HIDE_SEE);
 
+  /** The little particles a skin leaves behind while you run. */
+  function skinTrail(tr, x, y, vx, vy) {
+    const pc = tr.c[(Math.random() * tr.c.length) | 0], R = Math.random;
+    switch (tr.k) {
+      case 'snow': Particles.puff(x, y, pc, 4 + R() * 3, 0.7); break;
+      case 'leaf': Particles.star(x, y, pc, 5, 0.7, (R() - 0.5) * 50, -10 - R() * 25); break;
+      case 'ember': Particles.burst(x, y, pc, 1, 70, 3 + R() * 2, 0.5); Particles.star(x, y, '#ffe9a8', 3, 0.35, (R() - 0.5) * 40, -50 - R() * 50); break;
+      case 'bubble': Particles.ring(x, y, 2, 8 + R() * 5, pc, 0.55, 2); break;
+      case 'pixel': Particles.burst(x, y, pc, 1, 40, 4, 0.4); break;
+      case 'ribbon': { const m = Math.hypot(vx, vy) || 1; Particles.streak(x, y, -vx / m, -vy / m, pc, 38 + R() * 20, 0.4); break; }
+      case 'star': case 'spark': case 'coin': Particles.star(x, y, pc, 5 + R() * 3, 0.6, (R() - 0.5) * 70, -20 - R() * 40); break;
+      default: Particles.burst(x, y, pc, 1, 55, 3 + R() * 2, 0.45);
+    }
+  }
+
   function drawEnt(g, e, t, dt, labels) {
     const def = CHARS[e.c], id = def.id, r = def.radius, s = r / 18, v = visOf(e.key);
     const sp = Math.hypot(e.vx, e.vy), spd = clamp(sp / 250, 0, 1);
@@ -558,7 +573,9 @@
     if (e.out) alpha *= 0.4;
     if (e.imm && !e.it && !e.decoy) alpha *= 0.55 + 0.45 * Math.abs(Math.sin(t * 13));
     const x = e.x, y = e.y, fyPos = y + r;
-    const color = G.mode === 'infection' && e.it && !e.decoy ? '#7ddc4f' : C.colorFor(e.k);      // zombies turn green
+    const zed = G.mode === 'infection' && e.it && !e.decoy;
+    const color = zed ? '#7ddc4f' : C.colorFor(e.k);      // zombies turn green
+    const skin = zed ? '' : e.sk || '';                   // ...and lose their skin, so everyone can tell who is infected
 
     // ground markers
     if (e.it && !e.decoy && !e.out) {
@@ -573,8 +590,10 @@
     }
     // afterimages & trails
     if (slide) { v.trail -= dt; if (v.trail < 0) { v.trail = 0.05; Particles.puff(x - e.vx * 0.03, fyPos - 2, '#ffffff', 6 + Math.random() * 4, 0.4); } }
-    if (dash || surge || slide || (e.boost && spd > 0.5)) for (let i = 3; i >= 1; i--) Chars.draw(g, e.c, { x: x - e.vx * 0.012 * i, y: fyPos - e.vy * 0.012 * i, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd: 1, alpha: 0.16, shadow: false });
+    if (dash || surge || slide || (e.boost && spd > 0.5)) for (let i = 3; i >= 1; i--) Chars.draw(g, e.c, { skin, x: x - e.vx * 0.012 * i, y: fyPos - e.vy * 0.012 * i, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd: 1, alpha: 0.16, shadow: false });
     if (phase) { v.trail -= dt; if (v.trail < 0) { v.trail = 0.07; Particles.star(x, y, '#d9ccff', 8, 0.5, (Math.random() - 0.5) * 60, -40); } }
+    const skt = skin && C.SKIN_THEME_BY_ID[skin];
+    if (skt && spd > 0.3 && !cloak && !phase && !e.out && !e.decoy) { v.skT = (v.skT || 0) - dt; if (v.skT <= 0) { v.skT = 0.05 + Math.random() * 0.03; skinTrail(skt.trail, x - e.vx * 0.035, fyPos - r * (0.3 + Math.random() * 0.9), e.vx, e.vy); } }
     v.dust -= dt;
     if (spd > 0.55 && v.dust <= 0 && !air && !phase && !cloak) { v.dust = 0.1; Particles.puff(x - e.vx * 0.04, fyPos - 2, DUST[G.map.theme], 5 + Math.random() * 3, 0.35); }
 
@@ -586,7 +605,7 @@
     const flopT = slide ? 1.2 : 0; v.flop += (flopT - v.flop) * Math.min(1, dt * 14);
     const dizzy = e.stun ? Math.sin(t * 14) * 0.14 : 0;
     const drawPose = { up: pz.up, sq: pz.sq, rot: pz.rot + v.spin + v.flop + dizzy };
-    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18), hat: e.h | 0, pose: drawPose });
+    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18), hat: e.h | 0, skin, pose: drawPose });
 
     if (shield) {
       const rad = r * 1.9, cy = fyPos - r * 1.15, flick = e.abT < 0.6 ? 0.45 + 0.55 * Math.abs(Math.sin(t * 28)) : 1;
@@ -728,19 +747,19 @@
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
       if (inHide(s.x, s.y) && Math.hypot(s.x - mx, s.y - my) > HIDE_SEE) continue;      // in a bush and not close: out of sight
-      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
+      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
     for (const d of G.decoys) {
       const o = G.roster.get(d.o);
-      ents.push({ key: 'd' + d.id, id: d.o, decoy: true, c: d.c, k: d.k, name: o ? o.n : '', x: d.x + d.vx * since, y: d.y + d.vy * since, vx: d.vx, vy: d.vy, fx: d.vx / 215, fy: d.vy / 215, it: false, stun: false, imm: false, abT: 0, boost: false });
+      ents.push({ key: 'd' + d.id, id: d.o, decoy: true, c: d.c, k: d.k, sk: o && o.sk, name: o ? o.n : '', x: d.x + d.vx * since, y: d.y + d.vy * since, vx: d.vx, vy: d.vy, fx: d.vx / 215, fy: d.vy / 215, it: false, stun: false, imm: false, abT: 0, boost: false });
     }
     const order = ents.slice().sort((p, q) => p.y - q.y), labels = [];
     for (const e of order) {
@@ -875,7 +894,7 @@
 
   /* scoreboard: rows are persistent elements, re-ordered with GSAP Flip */
   function makeRow(r) {
-    const d = el('div', 'brow'); const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, r.k, 48, r.h);
+    const d = el('div', 'brow'); const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, r.k, 48, r.h, r.sk);
     const nm = el('span', 'nm'); if (r.tt) nm.append(titlePill(r.tt, r.tc)); nm.append(r.n); nm.dataset.tt = r.tt || '';
     d.append(el('span', 'rk'), img, nm);
     if (r.a) d.append(el('span', 'ck', '✓'));
@@ -1006,11 +1025,11 @@
     const pod = $('podium'); pod.innerHTML = '';
     [1, 0, 2].forEach((i) => {
       const x = res[i]; if (!x) return;
-      const d = el('div', 'pod p' + Math.min(3, x.rank)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h);
+      const d = el('div', 'pod p' + Math.min(3, x.rank)); d.dataset.rank = i; const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 96, x.r.h, x.r.sk);
       d.append(img, (() => { const pn = el('div', 'pn'); if (x.r.tt) pn.append(titlePill(x.r.tt, x.r.tc)); pn.append(x.r.n); return pn; })(), el('div', 'ps', `${x.s} pts · ${x.t} tags`), el('div', 'bar', String(x.rank))); pod.appendChild(d);
     });
     const list = $('resList'); list.innerHTML = '';
-    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h); d.append(el('span', 'rk', String(x.rank)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
+    res.slice(3, 6).forEach((x, i) => { const d = el('div', 'brow' + (x.r.id === G.id ? ' me' : '')); const img = new Image(); img.alt = ''; img.src = Chars.avatar(x.r.c, x.r.k, 48, x.r.h, x.r.sk); d.append(el('span', 'rk', String(x.rank)), img, el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); });
     const myRank = res.findIndex((x) => x.r.id === G.id);
     if (myRank > 5) { const x = res[myRank], d = el('div', 'brow me'); d.append(el('span', 'rk', String(x.rank)), el('span', '', ''), el('span', 'nm', x.r.n), el('span', 'sc', x.s + ' pts')); list.appendChild(d); }
     const box = $('results'); box.classList.remove('hidden');

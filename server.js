@@ -202,6 +202,7 @@ wss.on('connection', (ws, req) => {
     const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), col = T.cleanColor(m.k), hat = T.cleanHat(m.h);
     const ks = T.cleanColorList(m.ks, T.CHARS.length); ks[ci] = col;        // each character keeps its own colour
     const owns = T.ownsChar(user ? user.owned : [], T.CHARS[ci].id);
+    const skin = user && T.ownsSkin(user.owned, T.CHARS[ci].id, T.cleanSkin(m.sk)) ? T.cleanSkin(m.sk) : '';   // only skins this account really owns
     if (!owns && mode !== 'bots') return fail(user ? 'You have not unlocked that character yet. Visit the shop.' : 'Guests can only play the starter characters. Log in to use more.');
     if (ws.readyState !== 1) return;
     let room;
@@ -231,9 +232,13 @@ wss.on('connection', (ws, req) => {
       const old = activeUsers.get(user.id);                    // same account in two tabs: the newest wins
       if (old && old.ws !== ws) { try { old.ws.send(JSON.stringify({ t: 'kick', m: 'You signed in somewhere else.' })); old.ws.close(); } catch (e) { /* gone */ } }
       activeUsers.set(user.id, { ws });
-      if (owns) store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col, h: hat, ks }).catch(() => {});
+      if (owns) {
+        const sks = Object.assign({}, user.settings && user.settings.sk);      // the skin each character was last wearing
+        if (skin) sks[T.CHARS[ci].id] = skin; else delete sks[T.CHARS[ci].id];
+        store.saveSettings(user.id, { c: T.CHARS[ci].id, k: col, h: hat, ks, sk: sks }).catch(() => {});
+      }
     }
-    c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0, hat);
+    c.user = user; c.room = room; c.player = room.addHuman(ws, name, ci, col, user ? user.id : 0, hat, skin);
     c.player.staff = !!(user && admin && admin.isAdmin(user.username));
     c.player.title = user && admin ? admin.titleOf(user.username) : null;
     c.player.muted = !!(admin && admin.isMuted(name, !!user));

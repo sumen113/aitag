@@ -174,9 +174,16 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
 
       if (act === 'item') {
         const u = await target(); if (!u) return noUser(), true;
-        const item = T.SHOP_BY_ID[String(body.item)]; if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
+        const item = T.SHOP_BY_ID[String(body.item)] || T.parseSkin(String(body.item)); if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
         const n = body.on === false ? await store.revokeItem(u.id, item.id) : await store.grantItem(u.id, item.id);
         record(me, body.on === false ? 'revoke' : 'grant', `${item.id} ${body.on === false ? 'from' : 'to'} ${u.username}`); return json(res, 200, { ok: true, user: await userRow(n) }), true;
+      }
+
+      if (act === 'glitter') {                               // add or remove crafting glitter
+        const u = await target(); if (!u) return noUser(), true;
+        const d = Math.max(-100000, Math.min(100000, body.delta | 0)); if (!d) return json(res, 400, { error: 'Give a non-zero amount.' }), true;
+        const n = await auth.chests.addGlitter(u.id, d);
+        record(me, 'glitter', `${u.username} ${d > 0 ? '+' : ''}${d} -> ${n}`); return json(res, 200, { ok: true, glitter: n }), true;
       }
 
       if (act === 'password') {

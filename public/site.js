@@ -33,6 +33,11 @@
     get k() { return this.ks[this.c]; },        // colour of the selected character
     set k(v) { this.ks[this.c] = v; },
     h: C.cleanHat(store.get('h', 0)),
+    // the skin each character was last wearing, by character id: { fox: 'lava' }
+    sks: (() => { const o = store.get('sks', {}); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; })(),
+    /** skin of the selected character: only counts if this account really owns it */
+    get sk() { const id = CHARS[this.c].id, t = C.cleanSkin(this.sks[id]); return t && App.account && C.ownsSkin(App.account.owned, id, t) ? t : ''; },
+    skinOf(i) { const id = CHARS[i].id, t = C.cleanSkin(this.sks[id]); return t && App.account && C.ownsSkin(App.account.owned, id, t) ? t : ''; },
     diff: ['easy', 'normal', 'hard'].includes(store.get('diff', 'normal')) ? store.get('diff', 'normal') : 'normal',
   };
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -97,7 +102,7 @@
     Sfx.unlock(); Sfx.play('ready');
     await curtainIn();
     const slow = setTimeout(() => App.curtainMsg('Waking the server up… free hosting can take up to a minute.'), 3500);
-    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k, ks: sel.ks, h: sel.h }, extra));
+    const res = await Game.join(Object.assign({ mode, diff: sel.diff, name, c: sel.c, k: sel.k, ks: sel.ks, h: sel.h, sk: sel.sk }, extra));
     clearTimeout(slow); App.curtainMsg('');
     if (!res.ok) { await curtainOut(); busy = false; $('btnPlay').disabled = $('btnBots').disabled = false; if (mode === 'online') { if (extra.server && extra.pass !== undefined && /password/i.test(res.err) && lockedSv) { openModal('serverModal'); askPass(lockedSv, res.err); } else openServers(res.err); } else showErr(res.err); return; }
     enterGame();
@@ -252,7 +257,7 @@
   }
   function paintStage(animate, quiet) {
     const def = CHARS[sel.c];
-    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.ks[i], 96, sel.h); });
+    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.ks[i], 96, sel.h, sel.skinOf(i)); });
     paintLockSticker();
     const isCustom = sel.k >= C.CUSTOM_BASE;
     if (isCustom) { const n = sel.k - C.CUSTOM_BASE; lastTone = Math.floor(n / 360); if (document.activeElement !== hueEl) hueEl.value = n % 360; }
@@ -260,6 +265,7 @@
     const cs = sw.querySelector('.custom'); cs.classList.toggle('on', isCustom); cs.setAttribute('aria-checked', String(isCustom)); cs.style.background = isCustom ? C.colorFor(sel.k) : '';
     tonesEl.querySelectorAll('.tone').forEach((b, i) => { const t = C.CUSTOM_TONES[i]; b.style.background = C.hslHex(+hueEl.value, t[0], t[1]); b.setAttribute('aria-checked', String(isCustom && lastTone === i)); });
     hatsEl.querySelectorAll('.hat-sw').forEach((b, h) => b.setAttribute('aria-checked', String(h === sel.h)));
+    { const t = sel.sk, th = t && C.SKIN_THEME_BY_ID[t]; $('skinTxt').textContent = th ? C.skinName(def.id, t) : 'Default'; $('skinDot').style.background = th ? th.base : ''; $('skinDot').style.setProperty('--r', th ? C.RARITIES[th.rarity].col : 'transparent'); $('skinGo').textContent = App.account ? 'locker' : 'log in'; }
     $('stage').style.setProperty('--stage', STAGE[sel.c]);
     $('stRole').textContent = def.role;
     $('stAb').textContent = def.ability; $('stCd').textContent = def.cd + 's recharge';
@@ -287,6 +293,15 @@
     sel.c = i; store.set('c', i); Sfx.play('click'); paintStage(true); Chars.pose(pvVis, 'hello', 1);
   }
   App.pick = pick;
+  /** put a skin on a character (theme '' = default look); used by the locker and the reveal screen */
+  function equipSkin(ci, theme) {
+    const id = CHARS[ci].id;
+    if (theme) sel.sks[id] = theme; else delete sel.sks[id];
+    store.set('sks', sel.sks);
+    if (owns(ci) && sel.c !== ci) pick(ci, true); else paintStage(false, true);
+    bounce();
+  }
+  Object.assign(App, { api, openModal, closeModal, el, store, equipSkin, owns, repaint: () => paintAccount(), openAuth: (m) => openAuth(m) });
 
   const mouse = { x: 0.5, y: 0.5 };
   window.addEventListener('pointermove', (e) => { mouse.x = e.clientX / innerWidth; mouse.y = e.clientY / innerHeight; }, { passive: true });
@@ -304,7 +319,7 @@
     const lx = clamp((mouse.x - cx) * 4, -1, 1), ly = clamp((mouse.y - cy) * 4, -1, 1);
     // fit: wide things (bat wings, fox tail) and tall things (hats) shrink the whole character just enough to stay inside the canvas
     const f = Chars.fit(sel.c, sel.h), sc = Math.min(6.6, 530 / f.w, 410 / -f.y0), px = 280 - f.cx * sc;
-    Chars.draw(pv, sel.c, { x: px, y: 478, s: sc, color: C.colorFor(sel.k), face: 1, lx: lx || 0.001, ly, t, spd: 0, blink: b, air: hop.air, stretch: hop.sq, hat: sel.h, pose: pvVis.pose });
+    Chars.draw(pv, sel.c, { x: px, y: 478, s: sc, color: C.colorFor(sel.k), face: 1, lx: lx || 0.001, ly, t, spd: 0, blink: b, air: hop.air, stretch: hop.sq, hat: sel.h, skin: sel.sk, pose: pvVis.pose });
   }
 
   /* ============================== content blocks =========================== */
@@ -482,6 +497,7 @@
       if (Array.isArray(u.settings.ks)) { sel.ks = C.cleanColorList(u.settings.ks, CHARS.length).map(rowColor); store.set('ks', sel.ks); }
       else if (Number.isInteger(u.settings.k)) { sel.k = rowColor(u.settings.k); store.set('ks', sel.ks); }
       if (Number.isInteger(u.settings.h)) { sel.h = C.cleanHat(u.settings.h); store.set('h', sel.h); }
+      if (u.settings.sk && typeof u.settings.sk === 'object') { for (const k of Object.keys(u.settings.sk)) sel.sks[k] = u.settings.sk[k]; store.set('sks', sel.sks); }
     }
     if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
     paintAccount();
@@ -508,11 +524,14 @@
     paintStage(false); paintCast();
     if (shopOpen) paintShop();
     if (acctOpen) paintAcctModal();
+    if (App.chests) App.chests.refresh();
   }
   App.onAward = (m) => { if (App.account) { App.account.wins = m.wins; App.account.balance = m.balance; App.account.spent = m.wins - m.balance; } };
   $('acctOut').addEventListener('click', logout);
   $('noteSignup').addEventListener('click', () => openAuth('signup'));
   $('navShop').addEventListener('click', () => openShop());
+  $('navChests').addEventListener('click', () => App.chests && App.chests.open());
+  $('skinBtn').addEventListener('click', () => { Sfx.play('click'); App.chests && App.chests.open('locker', sel.c); });
   async function logout() {
     await api('/api/logout', {});
     closeModal(); setAccount(null); siteToast('Logged out. See you next round!');
@@ -640,9 +659,17 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-11';
+  const NEWS_VERSION = 'update-12';
   const NEWS = [
-    { v: 'Update 11 · Pets, pits and titles', tag: 'Newest', items: [
+    { v: 'Update 12 · Chests and skins', tag: 'Newest', items: [
+      ['Chests', 'Spend wins on a Wooden (2), Silver (5) or Golden (12) chest. Each one holds a skin. The better the chest, the better the odds of rare, epic and legendary skins.'],
+      ['216 skins', 'Every character has 12 skins in 5 rarities: patterns, glowing lava cracks, galaxy stars, glitch, holographic and gold. Some leave a trail behind you while you run. Everyone in the match sees your skin.'],
+      ['Free daily chest', 'Claim a chest for free every day. Keep a streak going and it gets better. Day 7 is a Golden Chest.'],
+      ['Glitter and crafting', 'Every chest gives glitter, and a duplicate skin turns into extra glitter. Spend it in the locker to craft the exact skin you want.'],
+      ['Pity timers', 'Bad luck never lasts: fill the epic bar and your next chest is guaranteed an epic or better. The legendary bar works the same way.'],
+      ['Aim your chests', 'Pick a favourite character and their skins drop 4 times as often.'],
+    ] },
+    { v: 'Update 11 · Pets, pits and titles', items: [
       ['4 new characters', 'Max the Dog (4 wins) digs hidden pit traps that hold the other side in place for 2 seconds. Marty the Mole (5 wins) burrows underground, untaggable, and pops up to daze everyone close. Dusty the Donkey (3 wins) mule-kicks everything behind him. Pepper the Skunk (4 wins) drops a stink cloud that flips everyone else\u2019s controls.'],
       ['No more standing still', 'Stand still for 10 seconds in a round and you are removed from the server. Closing the tab or the laptop lid removes you right away too.'],
       ['Fair infection', 'If the only zombie leaves, the round is scrapped and everyone votes again instead of the infection being handed to someone else.'],
