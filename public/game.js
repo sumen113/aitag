@@ -724,6 +724,29 @@
     g.beginPath(); g.moveTo(16, 0); g.lineTo(-10, -13); g.lineTo(-4, 0); g.lineTo(-10, 13); g.closePath(); g.fillStyle = col; g.strokeStyle = '#14122b'; g.lineWidth = 3; g.stroke(); g.fill(); g.restore();
   }
 
+  /* Anyone standing under an on-screen panel (scoreboard, chat, timer, minimap, buttons...) used to be impossible to see,
+     so people hid behind the interface. Now a panel fades out while a player is behind it, so they stay visible and taggable. */
+  const HUD_FADE = '.hud-tools, #timerBox, #role, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #joy';
+  let hudEls = null, hudRects = [], hudAt = 0, hudRectsAt = 0;
+  function seeThrough(ents, dt) {
+    hudAt -= dt; if (hudAt > 0) return; hudAt = 0.08;
+    if (!hudEls) hudEls = [...document.querySelectorAll(HUD_FADE)];
+    const z = G.zoom, hide = G.uiOff;
+    for (const el of hudEls) {
+      if (hide) { el.classList.remove('hud-fade'); continue; }
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || !el.offsetParent) { el.classList.remove('hud-fade'); continue; }
+      let under = false;
+      for (const e of ents) {
+        if (isCloaked(e)) continue;
+        const sx = (e.x - G.cam.x) * z + G.W / 2, sy = (e.y - G.cam.y) * z + G.H / 2;
+        if (sx + 28 * z > r.left && sx - 28 * z < r.right && sy + 14 * z > r.top && sy - 56 * z < r.bottom) { under = true; break; }
+      }
+      if (el === document.activeElement || el.contains(document.activeElement)) under = false;      // never fade the chat box while typing
+      el.classList.toggle('hud-fade', under);
+    }
+  }
+
   function render(dt, t) {
     const g = G.g, map = G.map, me = G.me, W = G.W, H = G.H, dpr = G.dpr;
     const a = clamp(G.acc / DT, 0, 1);
@@ -766,6 +789,7 @@
       if (e.x < v.x0 - 60 || e.x > v.x1 + 60 || e.y < v.y0 - 80 || e.y > v.y1 + 60) continue;
       drawEnt(g, e, t, dt, labels);
     }
+    seeThrough(ents, dt);
     MapRender.drawCanopy(g, map, v, t, { x: mx, y: my });
     if (CHARS[me.c].id === 'bat' && me.aux > 0 && G.state !== STATE.RESULTS) drawBeacon(g, me, t);
     drawSeeds(g, t);

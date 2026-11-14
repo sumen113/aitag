@@ -27,16 +27,18 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   if (admins.size && !passcode) console.warn('ADMIN_USERS is set but ADMIN_PASSCODE is not: the admin panel stays locked until you set ADMIN_PASSCODE.');
   if (!admins.size) console.log('Admin panel: no admin usernames configured (set ADMIN_USERS or edit src/admin.js).');
 
-  let st = { bans: {}, mutes: {}, banner: '', lbBase: {}, titles: {} };           // persisted
+  let st = { bans: {}, mutes: {}, banner: '', lbBase: {}, titles: {}, bonus: null, log: [] };           // persisted
   const guestMutes = new Set();                           // guests only, lost on restart
-  const log = [];                                         // last admin actions (memory)
   const fails = new Map();                                // ip -> [timestamps] of wrong passcodes
 
   async function load() {
     try { const v = await store.kvGet(KEY); if (v && typeof v === 'object') st = Object.assign(st, v); } catch (e) { console.error('admin state load failed:', e.message); }
   }
   const save = () => store.kvSet(KEY, st).catch((e) => console.error('admin state save failed:', e.message));
-  const record = (by, action, detail) => { log.unshift({ t: Date.now(), by, a: action, d: detail }); if (log.length > 100) log.pop(); console.log(`[admin] ${by}: ${action} ${detail}`); };
+  /** Staff log: kept in the saved state (last 200), so it survives restarts and redeploys. */
+  const record = (by, action, detail) => { st.log = st.log || []; st.log.unshift({ t: Date.now(), by, a: action, d: detail }); if (st.log.length > 200) st.log.length = 200; save(); console.log(`[admin] ${by}: ${action} ${detail}`); };
+  /** Win bonus event: { m: multiplier, until: ms } or null. Expired events count as none. */
+  const bonus = () => { const b = st.bonus; return b && b.m > 1 && b.until > Date.now() ? { m: b.m, until: b.until } : null; };
 
   const isAdmin = (name) => admins.has(lower(name));
   const banReason = (name) => { const b = st.bans[lower(name)]; return b ? b.reason || 'No reason given.' : null; };
@@ -68,10 +70,13 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     if (a) { send(a.ws, { t: 'kick', m: message }); try { a.ws.close(); } catch (e) { /* gone */ } }
   }
 
-  async function userRow(u) {
+  async function userRow(u, auth) {
+    const skins = u.owned.filter((x) => x.startsWith('skin:')), c = auth ? await auth.chests.view(u.id) : null;
     return {
       username: u.username, wins: u.wins, spent: u.spent, balance: u.wins - u.spent, created: u.created,
-      owned: u.owned.filter((x) => !T.STARTER_ITEMS.includes(x)), banned: banReason(u.username), muted: !!st.mutes[lower(u.username)],
+      owned: u.owned.filter((x) => !T.STARTER_ITEMS.includes(x) && !x.startsWith('skin:')), skins,
+      chest: c && { glitter: c.glitter, opened: c.opened, counts: c.counts, sinceE: c.sinceE, sinceL: c.sinceL, gifts: c.gifts, streak: c.streak, focus: c.focus },
+      banned: banReason(u.username), muted: !!st.mutes[lower(u.username)],
       online: activeUsers.has(u.id), admin: isAdmin(u.username), title: titleOf(u.username),
     };
   }
@@ -117,13 +122,13 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
           rooms: o.rooms, players: o.players, humans: o.humans, banner: st.banner,
           bans: Object.entries(st.bans).map(([k, v]) => ({ name: v.name || k, reason: v.reason, by: v.by, at: v.at })),
           titles: Object.entries(st.titles || {}).map(([k, v]) => ({ name: v.name || k, t: v.t, c: v.c })),
-          mutes: Object.keys(st.mutes), guestMutes: [...guestMutes], log: log.slice(0, 40), admins: [...admins],
+          mutes: Object.keys(st.mutes), guestMutes: [...guestMutes], log: (st.log || []).slice(0, 80), admins: [...admins], bonus: bonus(),
         }), true;
       }
 
       if (act === 'users') {
         const list = await store.listUsers(clip(body.q, 20), 25);
-        return json(res, 200, { users: await Promise.all(list.map(userRow)) }), true;
+        return json(res, 200, { users: await Promise.all(list.map((u) => userRow(u, auth))) }), true;
       }
 
       if (act === 'kick') {
@@ -163,7 +168,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const d = Math.trunc(Number(body.delta));
         if (!Number.isFinite(d) || d === 0 || Math.abs(d) > 1000) return json(res, 400, { error: 'Enter a whole number between -1000 and 1000.' }), true;
         const n = await store.adjustWins(u.id, d);
-        record(me, 'wins', `${u.username} ${d > 0 ? '+' : ''}${d} -> ${n.wins}`); return json(res, 200, { ok: true, user: await userRow(n) }), true;
+        record(me, 'wins', `${u.username} ${d > 0 ? '+' : ''}${d} -> ${n.wins}`); return json(res, 200, { ok: true, user: await userRow(n, auth) }), true;
       }
 
       if (act === 'lbreset') {                               // zero someone's leaderboard score; characters and balance stay
@@ -176,7 +181,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const u = await target(); if (!u) return noUser(), true;
         const item = T.SHOP_BY_ID[String(body.item)] || T.parseSkin(String(body.item)); if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
         const n = body.on === false ? await store.revokeItem(u.id, item.id) : await store.grantItem(u.id, item.id);
-        record(me, body.on === false ? 'revoke' : 'grant', `${item.id} ${body.on === false ? 'from' : 'to'} ${u.username}`); return json(res, 200, { ok: true, user: await userRow(n) }), true;
+        record(me, body.on === false ? 'revoke' : 'grant', `${item.id} ${body.on === false ? 'from' : 'to'} ${u.username}`); return json(res, 200, { ok: true, user: await userRow(n, auth) }), true;
       }
 
       if (act === 'glitter') {                               // add or remove crafting glitter
@@ -184,6 +189,57 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const d = Math.max(-100000, Math.min(100000, body.delta | 0)); if (!d) return json(res, 400, { error: 'Give a non-zero amount.' }), true;
         const n = await auth.chests.addGlitter(u.id, d);
         record(me, 'glitter', `${u.username} ${d > 0 ? '+' : ''}${d} -> ${n}`); return json(res, 200, { ok: true, glitter: n }), true;
+      }
+
+      if (act === 'skin') {                                  // give or take skins: one, a whole character, a whole theme, or all of them
+        const u = await target(); if (!u) return noUser(), true;
+        const ch = String(body.char || ''), th = String(body.theme || '');
+        if (ch && !T.CHARS.some((c) => c.id === ch)) return json(res, 400, { error: 'Unknown character.' }), true;
+        if (th && !T.cleanSkin(th)) return json(res, 400, { error: 'Unknown theme.' }), true;
+        const list = T.SKINS.filter((s) => (!ch || s.char === ch) && (!th || s.theme === th));
+        const on = body.on !== false, have = new Set(u.owned);
+        let n = 0;
+        for (const s of list) { if (on !== have.has(s.id)) { if (on) await store.grantItem(u.id, s.id); else await store.revokeItem(u.id, s.id); n++; } }
+        const what = list.length === 1 ? list[0].name : `${list.length} skins (${ch || 'all characters'} / ${th || 'all themes'})`;
+        record(me, on ? 'grant-skins' : 'revoke-skins', `${what}: ${n} changed for ${u.username}`);
+        return json(res, 200, { ok: true, changed: n, user: await userRow(await store.userById(u.id), auth) }), true;
+      }
+
+      if (act === 'gift') {                                  // chests the player can open for free from their chest screen
+        const u = await target(); if (!u) return noUser(), true;
+        const tier = String(body.tier); if (!T.CHEST_TIERS[tier]) return json(res, 400, { error: 'Unknown chest.' }), true;
+        const n = Math.max(-99, Math.min(99, body.n | 0)); if (!n) return json(res, 400, { error: 'Give a non-zero number.' }), true;
+        const g = await auth.chests.addGift(u.id, tier, n);
+        record(me, 'gift-chest', `${n > 0 ? '+' : ''}${n} ${tier} for ${u.username} (now ${g[tier]})`); return json(res, 200, { ok: true, gifts: g }), true;
+      }
+
+      if (act === 'giftall') {                               // wins and/or a free chest for everyone with an account online right now
+        const wins = Math.max(0, Math.min(50, body.wins | 0)), tier = String(body.tier || ''), n = tier ? Math.max(1, Math.min(10, body.n | 0)) : 0;
+        if (tier && !T.CHEST_TIERS[tier]) return json(res, 400, { error: 'Unknown chest.' }), true;
+        if (!wins && !n) return json(res, 400, { error: 'Pick some wins or a chest to give.' }), true;
+        let count = 0;
+        for (const [id, a] of [...activeUsers.entries()]) {
+          if (wins) { const u = await store.adjustWins(id, wins); if (u) send(a.ws, { t: 'award', wins: u.wins, balance: u.wins - u.spent }); }
+          if (n) await auth.chests.addGift(id, tier, n);
+          send(a.ws, { t: 'announce', m: 'Staff sent you ' + [wins ? `${wins} win${wins > 1 ? 's' : ''}` : '', n ? `${n} ${T.CHEST_TIERS[tier].name}${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(' and ') + '!', p: 1 });
+          count++;
+        }
+        record(me, 'gift-all', `${wins ? wins + ' wins ' : ''}${n ? n + ' ' + tier + ' chest ' : ''}to ${count} online players`);
+        return json(res, 200, { ok: true, count }), true;
+      }
+
+      if (act === 'bonus') {                                 // win multiplier event (e.g. double wins for 3 hours)
+        const m = Math.max(1, Math.min(5, body.m | 0)), hours = Math.max(0, Math.min(72, Number(body.hours) || 0));
+        if (m <= 1 || !hours) { st.bonus = null; await save(); record(me, 'bonus-end', ''); return json(res, 200, { ok: true, bonus: null }), true; }
+        st.bonus = { m, until: Date.now() + Math.round(hours * 3600e3), by: me };
+        await save(); record(me, 'bonus', `x${m} wins for ${hours}h`);
+        return json(res, 200, { ok: true, bonus: bonus() }), true;
+      }
+
+      if (act === 'logout') {                                // sign someone out everywhere and drop them from any game
+        const u = await target(); if (!u) return noUser(), true;
+        await store.dropUserSessions(u.id); kickAccount(u.id, 'Staff signed you out. Log in again.');
+        record(me, 'sign-out', u.username); return json(res, 200, { ok: true }), true;
       }
 
       if (act === 'password') {
@@ -228,7 +284,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, lbBase, titleOf, admins };
+  return { handle, load, isAdmin, banReason, isMuted, banner, bonus, lbBase, titleOf, admins };
 }
 
 module.exports = { create, ADMIN_USERNAMES };

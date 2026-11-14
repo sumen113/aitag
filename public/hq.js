@@ -59,16 +59,19 @@
   });
 
   /* --------------------------------- tabs --------------------------------- */
-  $('adTabs').addEventListener('click', (e) => {
-    const b = e.target.closest('button'); if (!b) return; tab = b.dataset.tab;
-    $('adTabs').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-    document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== tab));
-    if (tab === 'accounts' && !$('adUsers').children.length) searchUsers();
-  });
+  function openTab(name) {
+    tab = name;
+    $('adTabs').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
+    document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== name));
+    if (name === 'accounts' && !$('adUsers').children.length) searchUsers();
+  }
+  $('adTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) openTab(b.dataset.tab); });
 
   /* ---------------------------- live / broadcast ---------------------------- */
   function paint(s) {
     const tiles = [['Players', s.humans], ['Rooms', s.rooms.length], ['Accounts', s.accounts], ['Uptime', fmtUp(s.uptime)], ['Memory', s.mem + ' MB'], ['Storage', s.db === 'postgres' ? 'Postgres' : 'Dev file']];
+    if (s.bonus) tiles.push(['Win bonus', `x${s.bonus.m} · ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left`]);
+    $('adBonusNow').textContent = s.bonus ? `Running now: x${s.bonus.m} wins, ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left.` : 'No bonus is running.';
     $('adTiles').replaceChildren(...tiles.map(([k, v]) => { const d = el('div', 'ad-tile'); d.append(el('span', 'mono', k), el('b', '', String(v))); return d; }));
 
     const pb = $('adPlayers').tBodies[0]; pb.replaceChildren();
@@ -177,6 +180,12 @@
     owned.append(el('span', '', u.owned.length ? u.owned.map((x) => x.replace('char:', '')).join(', ') : 'only the starters'));
     c.append(owned);
 
+    const sk = el('div', 'ad-user-row'); sk.append(el('span', 'mono', 'Skins'));
+    const ch = u.chest;
+    sk.append(el('span', '', `${u.skins.length}/${T.SKINS.length}` + (ch ? ` · ✦${ch.glitter} glitter · ${ch.opened} chest${ch.opened === 1 ? '' : 's'} opened · gifts ${ch.gifts.wood}W ${ch.gifts.silver}S ${ch.gifts.gold}G` : '')));
+    const mg = el('button', 'ad-btn', 'Manage skins'); mg.type = 'button'; mg.onclick = () => { $('adSkUser').value = u.username; openTab('skins'); lookup(u.username); };
+    sk.append(mg); c.append(sk);
+
     const r1 = el('div', 'ad-user-row'), amt = el('input', 'ad-in'); amt.type = 'number'; amt.value = '5'; amt.min = '-1000'; amt.max = '1000'; amt.setAttribute('aria-label', 'Wins to add');
     const add = el('button', 'ad-btn', 'Give wins'); add.type = 'button'; add.onclick = async () => done(await api('wins', { username: u.username, delta: Number(amt.value) }), `Wins updated for ${u.username}`);
     r1.append(amt, add, el('span', 'mono', '(negative takes away)'));
@@ -200,6 +209,9 @@
     const lb = el('button', 'ad-btn', 'Reset leaderboard score'); lb.type = 'button';
     lb.onclick = async () => { if (confirm(`Set ${u.username}'s leaderboard score to 0? Their characters and spendable wins are not touched.`)) done(await api('lbreset', { username: u.username }), `${u.username} reset on the leaderboard`); };
     r2.append(lb);
+    const so = el('button', 'ad-btn', 'Sign out everywhere'); so.type = 'button';
+    so.onclick = async () => { if (confirm(`Sign ${u.username} out of every device and remove them from any game?`)) done(await api('logout', { username: u.username }), `${u.username} signed out`); };
+    r2.append(so);
     if (u.muted) { const um = el('button', 'ad-btn', 'Unmute'); um.type = 'button'; um.onclick = async () => done(await api('unmute', { username: u.username }), `${u.username} unmuted`); r2.append(um); }
     if (!u.admin) {
       if (u.banned) { const ub = el('button', 'ad-btn', 'Unban'); ub.type = 'button'; ub.onclick = async () => done(await api('ban', { username: u.username, on: false }), `${u.username} unbanned`); r2.append(ub); }
@@ -208,6 +220,95 @@
     c.append(r2);
     return c;
   }
+
+  /* ------------------------------ skins & chests ------------------------------ */
+  const THEMES = T.SKIN_THEMES.slice().sort((a, b) => a.rarity - b.rarity);
+  const rarName = (r) => T.RARITIES[r].name;
+  const fill = (sel, items) => items.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.append(o); });
+  fill($('adSkChar'), [['', 'All characters'], ...T.CHARS.map((c) => [c.id, `${c.name} the ${c.species}`])]);
+  fill($('adSkTheme'), [['', 'All themes'], ...THEMES.map((t) => [t.id, `${t.name} (${rarName(t.rarity)})`])]);
+  const tiers = T.CHEST_ORDER.map((id) => [id, T.CHEST_TIERS[id].name]);
+  fill($('adGfTier'), tiers); fill($('adAllTier'), [['', 'No chest'], ...tiers]);
+  fill($('adBonusM'), [2, 3, 4, 5].map((m) => [String(m), `x${m} wins`]));
+  const sk = { user: null };
+  const curName = () => (sk.user ? sk.user.username : $('adSkUser').value.trim());
+
+  function prevSkin() {
+    const ch = $('adSkChar').value, th = $('adSkTheme').value, img = $('adSkImg'), txt = $('adSkTxt');
+    const n = T.SKINS.filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
+    if (ch && th) { img.hidden = false; img.src = Chars.avatar(T.CHARS.findIndex((c) => c.id === ch), 0, 96, 0, th); txt.textContent = T.skinName(ch, th); }
+    else { img.hidden = !ch && !th; if (ch) img.src = Chars.avatar(T.CHARS.findIndex((c) => c.id === ch), 0, 96, 0, ''); else if (th) img.src = Chars.avatar(0, 0, 96, 0, th); txt.textContent = `${n} skins`; }
+  }
+  $('adSkChar').addEventListener('change', prevSkin); $('adSkTheme').addEventListener('change', prevSkin); prevSkin();
+
+  async function lookup(name) {
+    name = String(name || '').trim(); if (!name) return;
+    const r = await api('users', { q: name });
+    const u = r.status === 200 && r.j.users.find((x) => x.username.toLowerCase() === name.toLowerCase());
+    if (!u) { sk.user = null; paintSkins(); toast(r.status === 200 ? 'No account with that exact username.' : r.j.error || 'Look up failed.', true); return; }
+    sk.user = u; paintSkins();
+  }
+  function paintSkins() {
+    const u = sk.user, g = $('adSkGrid'); g.replaceChildren();
+    if (!u) { $('adSkWho').textContent = 'Look up a player to see their collection and give or take skins. Tap any square in the grid to toggle that skin.'; return; }
+    const have = new Set(u.skins), c = u.chest;
+    $('adSkWho').textContent = `${u.username}: ${have.size}/${T.SKINS.length} skins` + (c ? ` · ✦${c.glitter} glitter · ${c.opened} chests opened · pity ${c.sinceE}/${T.PITY.epic} epic, ${c.sinceL}/${T.PITY.legendary} legendary · gifted ${c.gifts.wood} wooden, ${c.gifts.silver} silver, ${c.gifts.gold} golden` : '');
+    const head = el('div', 'ad-skrow head'); head.append(el('span'));
+    for (const t of THEMES) { const h = el('span', 'ad-skh', t.name); h.style.setProperty('--rc', T.RARITIES[t.rarity].col); head.append(h); }
+    g.append(head);
+    T.CHARS.forEach((ch, i) => {
+      const row = el('div', 'ad-skrow'), lab = el('button', 'ad-skc'); lab.type = 'button'; lab.title = `Give or take all ${ch.species} skins`;
+      const im = new Image(); im.alt = ''; im.width = im.height = 34; im.src = Chars.avatar(i, 0, 48, 0, ''); lab.append(im, el('span', '', ch.species));
+      const n = THEMES.filter((t) => have.has(T.skinId(ch.id, t.id))).length;
+      lab.onclick = async () => { const on = n < THEMES.length; if (confirm(`${on ? 'Give' : 'Take away'} every ${ch.species} skin ${on ? 'to' : 'from'} ${u.username}?`)) setSkins({ char: ch.id, theme: '', on }); };
+      row.append(lab);
+      for (const t of THEMES) {
+        const own = have.has(T.skinId(ch.id, t.id)), b = el('button', 'ad-skcell' + (own ? ' own' : '')); b.type = 'button';
+        b.style.setProperty('--tc', t.base); b.style.setProperty('--rc', T.RARITIES[t.rarity].col);
+        b.title = `${T.skinName(ch.id, t.id)} · ${rarName(t.rarity)} · ${own ? 'owned (tap to take away)' : 'not owned (tap to give)'}`; b.setAttribute('aria-pressed', String(own));
+        b.onclick = () => setSkins({ char: ch.id, theme: t.id, on: !own });
+        row.append(b);
+      }
+      g.append(row);
+    });
+  }
+  async function setSkins(o) {
+    const name = curName(); if (!name) return toast('Type the account username first.', true);
+    const r = await api('skin', Object.assign({ username: name }, o));
+    if (r.status === 200) { sk.user = r.j.user; paintSkins(); toast(`${r.j.changed} skin${r.j.changed === 1 ? '' : 's'} ${o.on ? 'given to' : 'taken from'} ${name}.`); refresh(); }
+    else toast(r.j.error || 'That did not work.', true);
+  }
+  $('adSkLookup').addEventListener('submit', (e) => { e.preventDefault(); lookup($('adSkUser').value); });
+  const bulk = (on) => {
+    const ch = $('adSkChar').value, th = $('adSkTheme').value, n = T.SKINS.filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
+    if (n > 12 && !confirm(`${on ? 'Give' : 'Take away'} ${n} skins ${on ? 'to' : 'from'} ${curName() || 'this player'}?`)) return;
+    setSkins({ char: ch, theme: th, on });
+  };
+  $('adSkForm').addEventListener('submit', (e) => { e.preventDefault(); bulk(true); });
+  $('adSkTake').addEventListener('click', () => bulk(false));
+  $('adGlForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const name = curName(); if (!name) return toast('Type the account username first.', true);
+    const r = await api('glitter', { username: name, delta: Number($('adGlN').value) });
+    toast(r.status === 200 ? `${name} now has ${r.j.glitter} glitter.` : r.j.error || 'That did not work.', r.status !== 200); if (r.status === 200) lookup(name);
+  });
+  $('adGfForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const name = curName(); if (!name) return toast('Type the account username first.', true);
+    const r = await api('gift', { username: name, tier: $('adGfTier').value, n: Number($('adGfN').value) });
+    toast(r.status === 200 ? `${name} now has ${r.j.gifts[$('adGfTier').value]} gifted ${T.CHEST_TIERS[$('adGfTier').value].name}(s).` : r.j.error || 'That did not work.', r.status !== 200); if (r.status === 200) lookup(name);
+  });
+
+  /* ---------------------------------- events ---------------------------------- */
+  $('adBonusForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const r = await api('bonus', { m: Number($('adBonusM').value), hours: Number($('adBonusH').value) });
+    done(r, `x${$('adBonusM').value} wins for ${$('adBonusH').value}h. Go!`);
+  });
+  $('adBonusEnd').addEventListener('click', async () => done(await api('bonus', { m: 1, hours: 0 }), 'Bonus ended.'));
+  $('adAllForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); const wins = Number($('adAllWins').value), tier = $('adAllTier').value;
+    if (!confirm('Send this to everyone who is online with an account right now?')) return;
+    const r = await api('giftall', { wins, tier, n: Number($('adAllN').value) });
+    done(r, `Sent to ${r.j.count} online player${r.j.count === 1 ? '' : 's'}.`);
+  });
 
   refresh();
 })();

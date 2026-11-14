@@ -84,6 +84,8 @@
       if (!u) btn.textContent = 'Log in'; else if (u.balance < t.price) { btn.textContent = `${need(t.price)} more`; btn.classList.add('no'); } else btn.textContent = 'Open';
       btn.addEventListener('click', () => { if (!u) return A.openAuth('login'); if (u.balance < t.price) { Sfx.play('deny'); shake(card); return; } doOpen(id); });
       const foot = el('div', 'shop-buy'); foot.append(price, btn);
+      const gifts = c ? c.gifts[id] : 0;
+      if (gifts > 0) { const gb = el('button', 'buy-btn gift'); gb.type = 'button'; gb.textContent = `Open gift ×${gifts}`; gb.addEventListener('click', () => doOpen(id, true)); card.classList.add('has-gift'); foot.append(gb); }
       card.append(art, el('h3', '', t.name), el('p', 'ch-sub', t.blurb), oddsLine(t), el('p', 'ch-bonus', `+${t.glitter} glitter every time`), foot);
       grid.appendChild(card);
     }
@@ -143,7 +145,7 @@
 
   function paintAll() {
     paintBank();
-    const dot = $('chestDot'); if (dot) dot.classList.toggle('hidden', !(chest() && chest().dailyReady && !A.inGame));
+    const dot = $('chestDot'); if (dot) dot.classList.toggle('hidden', !(chest() && (chest().dailyReady || chest().gifts.wood + chest().gifts.silver + chest().gifts.gold > 0) && !A.inGame));
     if (!modalOpen()) return;
     const panel = $('chPanel');
     $('chTabs').querySelectorAll('button').forEach((b) => { const on = b.dataset.t === st.tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
@@ -165,14 +167,14 @@
   async function refreshMe() { const r = await A.api('/api/me'); if (r.ok && r.j.user) { A.account = r.j.user; A.repaint(); } }
 
   /* ================================== actions ================================== */
-  async function doOpen(tierId) {
+  async function doOpen(tierId, gift) {
     if (st.busy) return; st.busy = true;
-    const r = await A.api(tierId === 'daily' ? '/api/chest/daily' : '/api/chest/open', tierId === 'daily' ? {} : { tier: tierId });
+    const r = await A.api(tierId === 'daily' ? '/api/chest/daily' : '/api/chest/open', tierId === 'daily' ? {} : { tier: tierId, gift: !!gift });
     st.busy = false;
     if (r.j.user) A.account = r.j.user;
     if (!r.ok) { A.toast(r.j.error || 'Could not open that.'); Sfx.play('deny'); A.repaint(); return; }
     const tier = r.j.result.tier;
-    reveal(r.j, { again: tierId === 'daily' ? null : tierId, tier, daily: tierId === 'daily' });
+    reveal(r.j, { again: tierId === 'daily' ? null : tierId, tier, daily: tierId === 'daily', gift: !!gift });
   }
   async function doCraft(skinId, node) {
     if (st.busy) return; st.busy = true;
@@ -207,7 +209,8 @@
     const mk = (cls, txt, fn) => { const b = el('button', cls, txt); b.type = 'button'; b.addEventListener('click', fn); return b; };
     const wearing = () => A.sel.skinOf(ci) === th.id;
     const eq = mk('buy-btn eq', 'Wear it', () => { A.equipSkin(ci, th.id); Sfx.play('equip'); eq.textContent = 'Wearing ✓'; eq.classList.add('owned'); });
-    const again = o.again && acct() && acct().balance >= C.CHEST_TIERS[o.again].price ? mk('buy-btn again', `Open another · ★${C.CHEST_TIERS[o.again].price}`, () => { close(true); doOpen(o.again); }) : null;
+    const giftsLeft = o.gift && chest() ? chest().gifts[o.again] : 0;
+    const again = o.gift ? (giftsLeft > 0 ? mk('buy-btn again', `Open another gift · ${giftsLeft} left`, () => { close(true); doOpen(o.again, true); }) : null) : o.again && acct() && acct().balance >= C.CHEST_TIERS[o.again].price ? mk('buy-btn again', `Open another · ★${C.CHEST_TIERS[o.again].price}`, () => { close(true); doOpen(o.again); }) : null;
     const done = mk('btn-nav done', 'Done', () => close());
     btns.append(...[!r.dup || crafted ? eq : null, again, done].filter(Boolean));
     stage.append(glow, chestNode, card);

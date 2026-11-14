@@ -6,10 +6,12 @@
 const crypto = require('crypto');
 const T = require('../public/shared.js');
 
-const emptyLedger = () => ({ glitter: 0, sinceE: 0, sinceL: 0, streak: 0, lastDaily: 0, focus: '', opened: 0, counts: [0, 0, 0, 0, 0] });
+const emptyLedger = () => ({ glitter: 0, sinceE: 0, sinceL: 0, streak: 0, lastDaily: 0, focus: '', opened: 0, counts: [0, 0, 0, 0, 0], gifts: { wood: 0, silver: 0, gold: 0 } });
 const normLedger = (l) => {
   const o = Object.assign(emptyLedger(), l && typeof l === 'object' ? l : {});
   if (!Array.isArray(o.counts) || o.counts.length !== 5) o.counts = [0, 0, 0, 0, 0];
+  const g = o.gifts && typeof o.gifts === 'object' ? o.gifts : {};
+  o.gifts = { wood: Math.max(0, g.wood | 0), silver: Math.max(0, g.silver | 0), gold: Math.max(0, g.gold | 0) };      // chests staff gave this player
   return o;
 };
 
@@ -78,7 +80,7 @@ function create(store, opts = {}) {
     const next = ((kept ? l.streak : 0) % T.DAILY.tiers.length) + 1;
     return {
       glitter: l.glitter, sinceE: l.sinceE, sinceL: l.sinceL, pityE: T.PITY.epic, pityL: T.PITY.legendary, focus: l.focus,
-      opened: l.opened, counts: l.counts, streak: kept ? l.streak : 0,
+      opened: l.opened, counts: l.counts, gifts: l.gifts, streak: kept ? l.streak : 0,
       dailyReady: ready, nextDaily: ready ? 0 : l.lastDaily + T.DAILY.cooldownH * 3600e3, dailyTier: T.dailyTier(next), dailyDay: next,
     };
   }
@@ -97,14 +99,19 @@ function create(store, opts = {}) {
 
   return {
     view: ledgerView,
-    /** Buy and open a chest with wins. */
-    open: (user, tierId) => exclusive(user.id, async () => {
+    /** Buy and open a chest with wins (or open one staff gave you, when gift is true). */
+    open: (user, tierId, gift) => exclusive(user.id, async () => {
       const tier = Object.prototype.hasOwnProperty.call(T.CHEST_TIERS, tierId) ? T.CHEST_TIERS[tierId] : null;
       if (!tier) return { ok: false, err: 'Unknown chest.' };
       const u = await store.userById(user.id);
       if (!u) return { ok: false, err: 'Account not found.' };
-      if (u.wins - u.spent < tier.price) return { ok: false, err: 'Not enough wins yet.' };
       const l = await load(u.id);
+      if (gift) {
+        if (l.gifts[tier.id] < 1) return { ok: false, err: 'You have no gifted chest of that kind.' };
+        const gifts = Object.assign({}, l.gifts, { [tier.id]: l.gifts[tier.id] - 1 });
+        return finish(u, tier, 0, l, roll(tier, l, u.owned), { gifts });
+      }
+      if (u.wins - u.spent < tier.price) return { ok: false, err: 'Not enough wins yet.' };
       return finish(u, tier, tier.price, l, roll(tier, l, u.owned));
     }),
     /** Claim the free daily chest (its tier grows with your streak). */
@@ -137,6 +144,12 @@ function create(store, opts = {}) {
       const l = await load(user.id); l.focus = charId;
       await store.kvSet('ledger:' + user.id, l);
       return { ok: true, chest: view(l) };
+    }),
+    /** Staff: give (or take back) chests the player can open for free. Returns the new counts. */
+    addGift: (id, tierId, n) => exclusive(id, async () => {
+      const l = await load(id); l.gifts[tierId] = Math.max(0, Math.min(999, l.gifts[tierId] + (n | 0)));
+      await store.kvSet('ledger:' + id, l);
+      return l.gifts;
     }),
     /** Staff: give glitter (or take it back with a negative number). */
     addGlitter: (id, n) => exclusive(id, async () => {

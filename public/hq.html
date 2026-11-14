@@ -36,6 +36,8 @@
         <button type="button" data-tab="live" aria-selected="true">Live</button>
         <button type="button" data-tab="accounts" aria-selected="false">Accounts</button>
         <button type="button" data-tab="titles" aria-selected="false">Titles</button>
+        <button type="button" data-tab="skins" aria-selected="false">Skins &amp; chests</button>
+        <button type="button" data-tab="events" aria-selected="false">Events</button>
         <button type="button" data-tab="broadcast" aria-selected="false">Broadcast &amp; bans</button>
         <button type="button" data-tab="log" aria-selected="false">Log</button>
       </nav>
@@ -73,6 +75,50 @@
         <h2>Players with titles</h2><div id="adTitles" class="ad-chips"></div>
       </section>
 
+      <!-- SKINS & CHESTS -->
+      <section data-pane="skins" class="hidden">
+        <form id="adSkLookup" class="ad-search"><input id="adSkUser" class="inp" placeholder="Account username" autocomplete="off" maxlength="20"><button class="btn btn-ghost" type="submit"><span class="btn-label">Look up</span></button></form>
+        <p id="adSkWho" class="ad-none">Look up a player to see their collection and give or take skins. Tap any square in the grid to toggle that skin.</p>
+        <div class="ad-two">
+          <form id="adSkForm" class="card ad-box">
+            <h2>Give or take skins</h2>
+            <p>Pick a character and a theme for one skin, leave one on "all" for a whole set, or both on "all" for every skin.</p>
+            <div class="ad-sk2"><select id="adSkChar" aria-label="Character"></select><select id="adSkTheme" aria-label="Theme"></select></div>
+            <div class="ad-skprev"><img id="adSkImg" alt="" width="72" height="72"><span id="adSkTxt" class="mono"></span></div>
+            <div class="ad-actions l"><button class="btn btn-primary" type="submit" id="adSkGive"><span class="btn-label">Give</span></button><button class="btn btn-ghost" type="button" id="adSkTake"><span class="btn-label">Take away</span></button></div>
+          </form>
+          <div class="card ad-box">
+            <h2>Glitter and chests</h2>
+            <p>Glitter crafts skins in the locker. Gifted chests show up on the player's chest screen and open for free.</p>
+            <form id="adGlForm" class="ad-sk2"><input id="adGlN" class="inp" type="number" value="100" min="-100000" max="100000" aria-label="Glitter"><button class="btn btn-ghost" type="submit"><span class="btn-label">Give glitter</span></button></form>
+            <form id="adGfForm" class="ad-sk2"><select id="adGfTier" aria-label="Chest"></select><input id="adGfN" class="inp" type="number" value="1" min="-99" max="99" aria-label="How many"><button class="btn btn-ghost" type="submit"><span class="btn-label">Gift chests</span></button></form>
+            <p class="ad-note">Negative numbers take them back.</p>
+          </div>
+        </div>
+        <h2>Collection</h2>
+        <div id="adSkGrid" class="ad-skgrid"></div>
+      </section>
+
+      <!-- EVENTS -->
+      <section data-pane="events" class="hidden">
+        <div class="ad-two">
+          <form id="adBonusForm" class="card ad-box">
+            <h2>Win bonus event</h2>
+            <p id="adBonusNow">No bonus is running.</p>
+            <div class="ad-sk2"><select id="adBonusM" aria-label="Multiplier"></select><input id="adBonusH" class="inp" type="number" value="3" min="1" max="72" aria-label="Hours"><span class="mono">hours</span></div>
+            <p class="ad-note">Every win counts as that many wins (and shows on the leaderboard), for the hours you choose. The home page shows a strip while it runs.</p>
+            <div class="ad-actions l"><button class="btn btn-primary" type="submit"><span class="btn-label">Start event</span></button><button class="btn btn-ghost" type="button" id="adBonusEnd"><span class="btn-label">End it</span></button></div>
+          </form>
+          <form id="adAllForm" class="card ad-box">
+            <h2>Gift everyone online</h2>
+            <p>Goes to every account that is in a game right now (guests excluded).</p>
+            <div class="ad-sk2"><input id="adAllWins" class="inp" type="number" value="1" min="0" max="50" aria-label="Wins"><span class="mono">wins each</span></div>
+            <div class="ad-sk2"><select id="adAllTier" aria-label="Chest"></select><input id="adAllN" class="inp" type="number" value="1" min="1" max="10" aria-label="Chests each"></div>
+            <button class="btn btn-primary" type="submit"><span class="btn-label">Send gift</span></button>
+          </form>
+        </div>
+      </section>
+
       <!-- BROADCAST -->
       <section data-pane="broadcast" class="hidden">
         <div class="ad-two">
@@ -91,6 +137,7 @@
     </div>
   </main>
   <script src="shared.js"></script>
+  <script src="chars.js"></script>
   <script src="hq.js"></script>
 </body>
 </html>

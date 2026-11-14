@@ -56,3 +56,24 @@
 .ad-swatch:hover { transform: translateY(-2px); }
 .ad-tprev { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--card); border: 2px dashed var(--ink); border-radius: 12px; font-size: 15px; }
 .ad-tprev .ttl { margin: 0; }
+
+/* skins & chests, events */
+.ad-sk2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ad-sk2 select, .ad-sk2 .inp { flex: 1; min-width: 120px; border: 2px solid var(--ink); border-radius: 12px; padding: 8px 10px; font: 700 14px var(--body); background: var(--paper); }
+.ad-sk2 .inp[type=number] { flex: 0 0 110px; min-width: 0; }
+.ad-sk2 .btn { padding: 8px 16px; font-size: 15px; }
+.ad-actions.l { justify-content: flex-start; gap: 10px; }
+.ad-skprev { display: flex; align-items: center; gap: 12px; min-height: 76px; }
+.ad-skprev img { border: 2px solid var(--ink); border-radius: 14px; background: var(--paper); }
+.ad-skprev img[hidden] { display: none; }
+.ad-skgrid { overflow-x: auto; border: var(--bw) solid var(--ink); border-radius: 16px; background: var(--card); padding: 8px; }
+.ad-skgrid:empty { display: none; }
+.ad-skrow { display: grid; grid-template-columns: 124px repeat(12, minmax(34px, 1fr)); gap: 4px; align-items: center; min-width: 640px; padding: 2px 0; }
+.ad-skrow.head { position: sticky; top: 0; }
+.ad-skh { font: 700 9px var(--mono); text-transform: uppercase; text-align: center; color: var(--ink); border-bottom: 3px solid var(--rc); padding-bottom: 2px; overflow: hidden; text-overflow: ellipsis; }
+.ad-skc { display: flex; align-items: center; gap: 6px; border: 0; background: none; font: 700 13px var(--body); text-align: left; padding: 0; }
+.ad-skc:hover span { text-decoration: underline; }
+.ad-skcell { height: 30px; border-radius: 9px; border: 2px dashed color-mix(in srgb, var(--rc) 55%, transparent); background: transparent; padding: 0; position: relative; transition: transform .12s; }
+.ad-skcell:hover { transform: scale(1.12); border-style: solid; }
+.ad-skcell.own { background: var(--tc); border: 2.5px solid var(--ink); box-shadow: 0 0 0 2px var(--rc); }
+.ad-skcell.own::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; font: 800 13px var(--display); color: #fff; text-shadow: 0 0 2px #000, 0 0 3px #000; }

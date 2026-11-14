@@ -157,7 +157,7 @@ function create(store, opts = {}) {
         if (!lim.chest.hit('u' + user.id)) return json(res, 429, { error: 'Slow down a little.' }), true;
         const act = url.slice('/api/chest/'.length);
         let r;
-        if (act === 'open') r = await chests.open(user, String(body.tier));
+        if (act === 'open') r = await chests.open(user, String(body.tier), !!body.gift);
         else if (act === 'daily') r = await chests.daily(user);
         else if (act === 'craft') r = await chests.craft(user, String(body.skin));
         else if (act === 'focus') r = await chests.focus(user, String(body.char || ''));

@@ -90,6 +90,36 @@ function join(name, cookie, c = 0) {
   const a2 = await join('x', boss); ok(a2.init.roster.find((p) => p.n === 'Boss' && p.tt), 'a title is kept for the next join');
   r = await post('/api/admin/title', { username: 'Boss', title: '' }, boss, 'sesame'); ok(r.status === 200, 'title removed'); await sleep(250);
   ok(!a2.msgs.filter((m) => m.t === 'roster').pop().ps.find((p) => p.n === 'Boss').tt, 'removed title disappears live');
+  // skins, glitter, gifted chests, bonus event, gift-all, sign-out
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: 'lava', on: true }, pleb, 'sesame'); ok(r.status === 403, 'a normal account cannot give skins');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: 'lava', on: true }, boss, 'sesame'); j = await r.json();
+  ok(r.status === 200 && j.changed === 1 && j.user.skins.includes('skin:fox:lava'), 'give one skin');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: 'lava', on: true }, boss, 'sesame'); j = await r.json(); ok(j.changed === 0, 'giving it again changes nothing');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: '', on: true }, boss, 'sesame'); j = await r.json(); ok(j.user.skins.length === 12 && j.changed === 11, 'give a whole character set (11 new)');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: '', theme: 'gold', on: true }, boss, 'sesame'); j = await r.json(); ok(j.user.skins.length === 12 + 17 && j.user.skins.filter((x) => x.endsWith(':gold')).length === 18, 'give one theme on every character');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: '', theme: '', on: true }, boss, 'sesame'); j = await r.json(); ok(j.user.skins.length === 216, 'give every skin');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: '', on: false }, boss, 'sesame'); j = await r.json(); ok(j.user.skins.length === 204, 'take a whole character set away');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'nope', theme: '', on: true }, boss, 'sesame'); ok(r.status === 400, 'unknown character refused');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'fox', theme: '__proto__', on: true }, boss, 'sesame'); ok(r.status === 400, 'unknown theme refused');
+  r = await post('/api/admin/skin', { username: 'Ghosty', char: 'fox', theme: 'lava', on: true }, boss, 'sesame'); ok(r.status === 404, 'skins for an unknown account refused');
+  j = await (await post('/api/admin/users', { q: 'pleb' }, boss, 'sesame')).json(); ok(j.users[0].skins.length === 204 && !j.users[0].owned.some((x) => x.startsWith('skin:')) && j.users[0].chest, 'player card lists skins separately and the chest ledger');
+  r = await post('/api/admin/glitter', { username: 'Pleb', delta: 120 }, boss, 'sesame'); j = await r.json(); ok(j.glitter === 120, 'give glitter');
+  r = await post('/api/admin/gift', { username: 'Pleb', tier: 'gold', n: 2 }, boss, 'sesame'); j = await r.json(); ok(j.gifts.gold === 2, 'gift two golden chests');
+  r = await post('/api/admin/gift', { username: 'Pleb', tier: 'diamond', n: 1 }, boss, 'sesame'); ok(r.status === 400, 'unknown chest tier refused');
+  let me4 = await (await fetch(BASE + '/api/me', { headers: { cookie: pleb } })).json(); ok(me4.user.chest.gifts.gold === 2 && me4.user.chest.glitter === 120, 'the player sees the gifts and glitter');
+  r = await post('/api/chest/open', { tier: 'gold', gift: true }, pleb); j = await r.json(); ok(r.status === 200 && j.result.tier === 'gold' && j.user.chest.gifts.gold === 1 && j.user.balance === me4.user.balance, 'opening a gifted chest costs no wins and uses one gift');
+  r = await post('/api/chest/open', { tier: 'wood', gift: true }, pleb); ok(r.status === 400, 'cannot open a gift you do not have');
+  r = await post('/api/admin/bonus', { m: 3, hours: 2 }, boss, 'sesame'); j = await r.json(); ok(j.bonus && j.bonus.m === 3, 'start a win bonus');
+  j = await (await fetch(BASE + '/api/stats')).json(); ok(j.bonus && j.bonus.m === 3, 'the status shows the bonus to everyone');
+  r = await post('/api/admin/bonus', { m: 9, hours: 500 }, boss, 'sesame'); j = await r.json(); ok(j.bonus.m === 5 && j.bonus.until - Date.now() <= 72 * 3600e3 + 1000, 'bonus limits are clamped');
+  r = await post('/api/admin/bonus', { m: 1, hours: 0 }, boss, 'sesame'); j = await r.json(); ok(j.bonus === null, 'end the bonus');
+  const pj = await join('x', pleb); await sleep(200);
+  r = await post('/api/admin/giftall', { wins: 2, tier: 'silver', n: 1 }, boss, 'sesame'); j = await r.json(); await sleep(300);
+  ok(j.count >= 1 && pj.msgs.some((m) => m.t === 'award') && pj.msgs.some((m) => m.t === 'announce'), 'gift everyone online reaches players in game');
+  me4 = await (await fetch(BASE + '/api/me', { headers: { cookie: pleb } })).json(); ok(me4.user.chest.gifts.silver === 1, 'the online player got the silver chest');
+  r = await post('/api/admin/giftall', { wins: 0 }, boss, 'sesame'); ok(r.status === 400, 'gift-all needs something to give');
+  r = await post('/api/admin/logout', { username: 'Pleb' }, boss, 'sesame'); await sleep(300); ok(r.status === 200 && pj.closed, 'sign out kicks the player and ends the session');
+  me4 = await (await fetch(BASE + '/api/me', { headers: { cookie: pleb } })).json(); ok(!me4.user, 'the old session is dead after sign out');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');

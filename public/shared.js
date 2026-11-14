@@ -96,7 +96,7 @@
     { id: 'raccoon', fx: 'swap', name: 'Bandit', species: 'Raccoon', natural: '#9a9fb4', ability: 'Swap', cd: 12, dur: 0, speed: 1.00, radius: 18, role: 'Swindler', price: 3,
       desc: 'Trade places with the nearest player in range. They are left dizzy for a moment.' },
     { id: 'bat',   fx: 'echo',   name: 'Echo',  species: 'Bat',     natural: '#8a64d6', ability: 'Echo Beacon', cd: 10, dur: 0, speed: 1.02, radius: 16, role: 'Time traveller', price: 3,
-      desc: 'Drop a beacon, then press again within 4 seconds to snap back to it. Leave a trail, vanish, reappear.' },
+      desc: 'Drop a beacon, then press again within 4 seconds to snap back to it. Your speed carries through the snap-back, so keep running. Leave a trail, vanish, reappear.' },
     { id: 'star',  fx: 'spin',   name: 'Andy',  species: 'Starfish', natural: '#ef6a4c', ability: 'Ricochet', cd: 17, dur: 1.2, speed: 0.99, radius: 19, role: 'Pinball', price: 3,
       desc: 'Curl into a spinning star and ricochet off every wall. Steer gently while you roll.' },
     { id: 'bird',  fx: 'gust',   name: 'Pip',   species: 'Bird',    natural: '#ffd23f', ability: 'Gale', cd: 9, dur: 0, speed: 1.04, radius: 17, role: 'Wind caller', price: 2,
@@ -620,7 +620,7 @@
     if (inp.a && !stunned && !p.out) {                         // spectators (waiting or eliminated) can't use abilities
       if (def.id === 'bat' && p.aux > 0 && p.cd <= 0) {          // second press: snap back to the beacon
         if (ev) ev.push({ k: 'ab', n: 'recall', id: p.id, x: p.x, y: p.y, x1: p.bx, y1: p.by });
-        p.x = p.bx; p.y = p.by; p.vx = 0; p.vy = 0; p.aux = 0; p.cd = def.cd;
+        p.x = p.bx; p.y = p.by; p.aux = 0; p.cd = def.cd; p.boostT = Math.max(p.boostT, 0.3);   // momentum carries through the snap-back (no stop), with a short burst so it isn't clamped
       } else if (def.id === 'cat' && p.abT > 0 && def.dur - p.abT > 0.25 && p.aux <= 0) {   // pounce out of the cloak
         const ax = len > 0.15 ? mx / len : p.fx, ay = len > 0.15 ? my / len : p.fy;
         p.adx = ax; p.ady = ay; p.abT = 0; p.aux = 0.2;

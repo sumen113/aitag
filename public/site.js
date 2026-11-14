@@ -380,7 +380,8 @@
     try {
       const r = await fetch('/api/stats', { cache: 'no-store' }), s = await r.json();
       $('onlineNav').textContent = s.players ? `${s.players} playing now` : 'Be the first in';
-      const bn = $('siteBanner'), txt = s.banner || '';
+      const bn = $('siteBanner'); let txt = s.banner || '';
+      if (s.bonus && s.bonus.until > Date.now()) { const h = Math.floor((s.bonus.until - Date.now()) / 3600e3), m = Math.ceil(((s.bonus.until - Date.now()) % 3600e3) / 60e3); txt = (txt ? txt + ' · ' : '') + `x${s.bonus.m} wins right now (${h ? h + 'h ' : ''}${m}m left)`; }
       if ($('siteBannerTxt').textContent !== txt) $('siteBannerTxt').textContent = txt;
       bn.classList.toggle('hidden', !txt);
     } catch (e) { $('onlineNav').textContent = 'Online'; }
@@ -668,6 +669,8 @@
       ['Glitter and crafting', 'Every chest gives glitter, and a duplicate skin turns into extra glitter. Spend it in the locker to craft the exact skin you want.'],
       ['Pity timers', 'Bad luck never lasts: fill the epic bar and your next chest is guaranteed an epic or better. The legendary bar works the same way.'],
       ['Aim your chests', 'Pick a favourite character and their skins drop 4 times as often.'],
+      ['Bat keeps its speed', 'Snapping back to the Echo Beacon no longer stops you dead: your momentum carries through, with a small burst of speed.'],
+      ['No hiding under the interface', 'When a player is standing behind the scoreboard, chat, timer, minimap or buttons, that panel fades out so you can see (and tag) them.'],
     ] },
     { v: 'Update 11 · Pets, pits and titles', items: [
       ['4 new characters', 'Max the Dog (4 wins) digs hidden pit traps that hold the other side in place for 2 seconds. Marty the Mole (5 wins) burrows underground, untaggable, and pops up to daze everyone close. Dusty the Donkey (3 wins) mule-kicks everything behind him. Pepper the Skunk (4 wins) drops a stink cloud that flips everyone else\u2019s controls.'],

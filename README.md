@@ -73,6 +73,8 @@ Wins buy **chests**; every chest holds one **skin**. Skins are only looks (a pat
 - **Aim**: pick a favourite character and its skins are 4x as likely in each rarity.
 - **Server rules** (`src/chests.js`): the roll uses `crypto.randomInt`; opening, daily, craft and focus run one at a time per player, and `db.applyChest` spends the wins, grants the skin and saves the ledger (`kv` key `ledger:<id>`: glitter, pity counters, streak, focus) in a single transaction, so double clicks cannot double-spend. Endpoints: `POST /api/chest/open|daily|craft|focus`; `/api/me` includes `user.chest`.
 - **Staff**: the Accounts tab can grant a skin item by id, and `POST /api/admin/glitter` adds or removes glitter.
+- **Staff page additions** (`/hq`): the *Skins & chests* tab (look up a player, tap a square in the character x theme grid to give or take one skin, or give/take a whole character, a whole theme or everything; glitter; gifted chests that the player opens for free from their chest screen), the *Events* tab (win bonus x2-x5 for up to 72 hours with a strip on the home page, and gifts of wins/chests to everyone online), "Sign out everywhere" and a skins/chest summary on each player card. The staff log is now saved (last 200 actions) and survives restarts.
+- **See-through interface**: while any player is standing behind a HUD panel, that panel fades (`seeThrough` in `public/game.js`), so nobody can hide under the scoreboard, chat, timer, minimap or buttons.
 - Tests: `tools/chesttest.js` (odds, pity, duplicates, daily streak, crafting, parallel opens, on both storage backends).
 
 ## Leaving, standing still and lone zombies (v7.3)
