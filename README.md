@@ -79,7 +79,7 @@ Wins buy **chests**; every chest holds one **skin**. Skins are only looks (a pat
 
 ## Leaving, standing still and lone zombies (v7.3)
 
-- **Standing still never removes you** (changed in v7.4.2). As long as your connection is alive you stay in, however long you stand still. A player who hasn't moved 50 px for 4 s during a round is only marked 💤 afk: afk players don't earn win credit or survival score, so standing still can't be used to farm wins. Tagging someone who stands still just tags them: tags are never bounced onward. What does remove you is a lost connection: closing the tab or the laptop lid (see below).
+- **Standing still never removes you** (changed in v7.4.2). As long as your connection is alive you stay in, however long you stand still. A player who hasn't moved 50 px for 30 s during a round is only marked 💤 afk: afk players don't earn win credit or survival score, so standing still can't be used to farm wins. Tagging someone who stands still just tags them: tags are never bounced onward. What does remove you is a lost connection: closing the tab or the laptop lid (see below).
 - **Closing the tab / laptop lid**: the server pings every second, marks a silent socket `gone` after 1.5 s (invisible, untaggable) and removes the player after 4 s (a clean tab close is instant).
 - **The only zombie leaves** (Infection): the round is scrapped and the vote / countdown restarts. Infection is never handed to a new player. Classic and Hot Potato still pass the tag on.
 

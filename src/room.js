@@ -10,6 +10,7 @@ const ghosted = (q) => q.abT > 0 && (q.c === IDX.frog || q.c === IDX.mole);     
 const PIT_R = 34, PIT_TTL = 16, PIT_STUN = 1.8, PIT_SAFE = 1.4;                  // dog pits: radius, lifetime, how long a fallen player is stuck, grace after climbing out
 const BOT_COUNT = 4;                   // practice rooms: you + 4 bots
 const SNAP_HZ = Math.max(10, Math.min(60, +process.env.SNAP_HZ || 30));
+const AFK_AFTER = 30000;   // ms of standing still before you count as afk (no win credit / survival score)
 const IDLE_MOVE = 50;      // px you have to travel in a second to not count as standing still (standing still never removes you; only a lost connection does)
 const SNAP_EVERY = Math.max(1, Math.round(T.TICK / SNAP_HZ));   // 60 Hz sim -> 30 Hz snapshots by default
 const MIN_WIN_PLAYERS = +process.env.MIN_WIN_PLAYERS || 3;      // humans needed in a public lobby for a win to count (anti-farming)
@@ -619,14 +620,14 @@ class Room {
     }
 
     // ---- standing still (once per second). Nobody is ever removed for standing still: as long as the connection is alive you stay in.
-    // Only the "afk" flag is set after a few seconds of not moving; afk players don't earn win credit or survival score (anti-farming).
+    // Only the "afk" flag is set after 30 seconds of not moving; afk players don't earn win credit or survival score (anti-farming).
     if (this.tickN % 60 === 0) {
       const now = Date.now();
       for (const p of this.players.values()) {
         if (p.bot) continue;
         if (this.state !== STATE.PLAY || p.out) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }
         if (p.ax0 === undefined || Math.hypot(p.x - p.ax0, p.y - p.ay0) > IDLE_MOVE || p.stun > 0.5) { p.ax0 = p.x; p.ay0 = p.y; p.lastActiveAt = now; }
-        p.afk = now - p.lastActiveAt > 4000;
+        p.afk = now - p.lastActiveAt > AFK_AFTER;
       }
     }
 
