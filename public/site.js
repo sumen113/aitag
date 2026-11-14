@@ -669,12 +669,12 @@
       ['Glitter and crafting', 'Every chest gives glitter, and a duplicate skin turns into extra glitter. Spend it in the locker to craft the exact skin you want.'],
       ['Pity timers', 'Bad luck never lasts: fill the epic bar and your next chest is guaranteed an epic or better. The legendary bar works the same way.'],
       ['Aim your chests', 'Pick a favourite character and their skins drop 4 times as often.'],
+      ['Standing still is fine again', 'You are no longer removed for standing still. As long as your tab is open and connected you stay in the game. Closing the tab or the laptop lid still removes you right away.'],
       ['Bat keeps its speed', 'Snapping back to the Echo Beacon no longer stops you dead: your momentum carries through, with a small burst of speed.'],
       ['No hiding under the interface', 'When a player is standing behind the scoreboard, chat, timer, minimap or buttons, that panel fades out so you can see (and tag) them.'],
     ] },
     { v: 'Update 11 · Pets, pits and titles', items: [
       ['4 new characters', 'Max the Dog (4 wins) digs hidden pit traps that hold the other side in place for 2 seconds. Marty the Mole (5 wins) burrows underground, untaggable, and pops up to daze everyone close. Dusty the Donkey (3 wins) mule-kicks everything behind him. Pepper the Skunk (4 wins) drops a stink cloud that flips everyone else\u2019s controls.'],
-      ['No more standing still', 'Stand still for 10 seconds in a round and you are removed from the server. Closing the tab or the laptop lid removes you right away too.'],
       ['Fair infection', 'If the only zombie leaves, the round is scrapped and everyone votes again instead of the infection being handed to someone else.'],
       ['Titles', 'Some players now wear a coloured title next to their name. They are handed out by hand, nobody has one by default.'],
     ] },

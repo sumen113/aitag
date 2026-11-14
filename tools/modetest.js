@@ -90,20 +90,17 @@ const tc = r.tagCount; run(r, 0.5);
 ok(r.tagCount === tc || !it0.it, 'a gone player can not be tagged');
 r.markGone(it0, false); ok(!it0.gone, 'comes back when the connection answers again');
 
-// standing still for 10 s sends you out; moving keeps you in; wiggling on the spot or pushing into a wall doesn't count
+// standing still never removes you (only a lost connection does); it just marks you afk, and moving clears that
 r = mk('classic', 4); r.idleTest = true; run(r, 6, () => r.state === T.STATE.PLAY);
 {
-  const hs = [...r.players.values()].sort((a, b) => a.it - b.it), camper = hs[0], wiggler = hs[1], mover = hs[2], got = [];
+  const hs = [...r.players.values()].sort((a, b) => a.it - b.it), camper = hs[0], mover = hs[2], got = [];
   camper.ws.send = (m) => got.push(m); camper.ws.close = () => { got.push('closed'); };
-  const bx = wiggler.x;
-  for (let i = 0; i < 60 * 16; i++) { step(r); mover.x = 400 + (i % 300) * 2; wiggler.x = bx + (i % 2) * 10; if (!r.players.has(camper.id) && !r.players.has(wiggler.id)) break; }
-  ok(!r.players.has(camper.id) && got.some((m) => String(m).includes('"kick"')) && got.includes('closed'), 'a player standing still for 10 s is removed and told why');
-  ok(!r.players.has(wiggler.id), 'wiggling on the spot does not count as moving');
-  ok(r.players.has(mover.id), 'a player who keeps moving stays in');
+  const bx = mover.x;
+  for (let i = 0; i < 60 * 40; i++) { step(r); if (r.state !== T.STATE.PLAY) break; mover.x = bx + (i % 300); }
+  ok(r.players.has(camper.id) && !got.includes('closed') && !got.some((m) => String(m).includes('"kick"')), 'a player standing still for the whole round is NOT removed');
+  ok(!got.some((m) => String(m).includes('"idle"')), 'no "move or be removed" warning any more');
+  ok(r.players.has(mover.id), 'a moving player stays in too');
 }
-// ...a warning comes first and the clock only runs during a round
-r = mk('classic', 3); r.idleTest = true; run(r, 3); ok(r.state === T.STATE.COUNT, 'countdown is running');
-{ run(r, 6, () => r.state === T.STATE.PLAY); const w = [], q = [...r.players.values()].find((x) => !x.it); q.ws.send = (m) => w.push(m); run(r, 7); ok(w.some((m) => String(m).includes('"idle"')), 'the player is warned before being removed'); ok(r.players.has(q.id) || w.some((m) => String(m).includes('"kick"')), 'the clock only runs during a round'); }
 // an idle player who gets tagged doesn't make the tag jump
 r = mk('classic', 4); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 5);
 { const it = r.itPlayers()[0], v = [...r.players.values()].find((p) => !p.it); it.imm = 0; v.imm = 0; r.tag(it, v); run(r, 1); ok(r.itPlayers().length === 1 && v.it === 1, 'tagging someone who stands still hands them the tag for real'); }

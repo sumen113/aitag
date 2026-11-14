@@ -10,7 +10,7 @@ const ghosted = (q) => q.abT > 0 && (q.c === IDX.frog || q.c === IDX.mole);     
 const PIT_R = 34, PIT_TTL = 16, PIT_STUN = 1.8, PIT_SAFE = 1.4;                  // dog pits: radius, lifetime, how long a fallen player is stuck, grace after climbing out
 const BOT_COUNT = 4;                   // practice rooms: you + 4 bots
 const SNAP_HZ = Math.max(10, Math.min(60, +process.env.SNAP_HZ || 30));
-const IDLE_KICK = 10000, IDLE_MOVE = 50;      // ms of standing still before you're removed; px you have to travel to count as moving
+const IDLE_MOVE = 50;      // px you have to travel in a second to not count as standing still (standing still never removes you; only a lost connection does)
 const SNAP_EVERY = Math.max(1, Math.round(T.TICK / SNAP_HZ));   // 60 Hz sim -> 30 Hz snapshots by default
 const MIN_WIN_PLAYERS = +process.env.MIN_WIN_PLAYERS || 3;      // humans needed in a public lobby for a win to count (anti-farming)
 const CUSTOM_MIN_WIN_PLAYERS = Math.max(MIN_WIN_PLAYERS, +process.env.CUSTOM_MIN_WIN_PLAYERS || 3);   // custom servers need a few more humans (private rooms are easy to farm)
@@ -618,20 +618,15 @@ class Room {
       }
     }
 
-    // ---- idle handling (once per second). Only counts while a round is being played: waiting in an empty lobby is fine.
-    // Standing still (or wiggling on the spot / pushing into a wall) for IDLE_KICK seconds sends you out of the server.
+    // ---- standing still (once per second). Nobody is ever removed for standing still: as long as the connection is alive you stay in.
+    // Only the "afk" flag is set after a few seconds of not moving; afk players don't earn win credit or survival score (anti-farming).
     if (this.tickN % 60 === 0) {
-      const now = Date.now(), limit = this.solo ? 30000 : IDLE_KICK;
-      for (const p of [...this.players.values()]) {
+      const now = Date.now();
+      for (const p of this.players.values()) {
         if (p.bot) continue;
-        if (this.state !== STATE.PLAY || p.out || !this.players.has(p.id)) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }
+        if (this.state !== STATE.PLAY || p.out) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }
         if (p.ax0 === undefined || Math.hypot(p.x - p.ax0, p.y - p.ay0) > IDLE_MOVE || p.stun > 0.5) { p.ax0 = p.x; p.ay0 = p.y; p.lastActiveAt = now; }
-        const idle = now - p.lastActiveAt;
-        p.afk = idle > 4000;
-        if (idle >= limit) {
-          this.send(p, { t: 'kick', m: 'You were removed for standing still.' });
-          const ws = p.ws; this.removePlayer(p); p.ws = null; if (ws) try { ws.close(); } catch (e) { /* noop */ }
-        } else if (idle > 4000 && limit - idle <= 6000) this.send(p, { t: 'idle', s: Math.ceil((limit - idle) / 1000) });
+        p.afk = now - p.lastActiveAt > 4000;
       }
     }
 

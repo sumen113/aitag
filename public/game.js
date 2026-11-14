@@ -61,7 +61,6 @@
       case 'pg': { const rtt = performance.now() - m.ts; G.ping = G.ping ? G.ping * 0.7 + rtt * 0.3 : rtt; $('ping').textContent = Math.round(G.ping); break; }
       case 'err': { const f = G.joinResolve, ws = G.ws; G.ws = null; try { ws && ws.close(); } catch (e) { /* noop */ } if (f) f({ ok: false, err: m.m }); else overlay(m.m); break; }
       case 'kick': G.kicked = m.m; break;
-      case 'idle': toast(`Move or you'll be removed in ${m.s}s`); break;
       case 'award': onAward(m); break;
       case 'announce': onAnnounce(m); break;
       default: break;
