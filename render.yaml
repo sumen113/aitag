@@ -2,7 +2,7 @@
 # Accounts need a free Postgres (Neon or Supabase, see README); its URL goes in DATABASE_URL in the Render dashboard.
 services:
   - type: web
-    name: daymaps
+    name: daymapss
     runtime: node
     plan: free
     region: singapore
