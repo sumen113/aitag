@@ -73,7 +73,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   async function userRow(u, auth) {
     const skins = u.owned.filter((x) => x.startsWith('skin:')), c = auth ? await auth.chests.view(u.id) : null;
     return {
-      username: u.username, wins: u.wins, spent: u.spent, balance: u.wins - u.spent, created: u.created,
+      username: u.username, email: u.email || '', wins: u.wins, spent: u.spent, balance: u.wins - u.spent, created: u.created,
       owned: u.owned.filter((x) => !T.STARTER_ITEMS.includes(x) && !x.startsWith('skin:')), skins,
       chest: c && { glitter: c.glitter, opened: c.opened, counts: c.counts, sinceE: c.sinceE, sinceL: c.sinceL, gifts: c.gifts, streak: c.streak, focus: c.focus },
       banned: banReason(u.username), muted: !!st.mutes[lower(u.username)],
@@ -129,6 +129,19 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
       if (act === 'users') {
         const list = await store.listUsers(clip(body.q, 20), 25);
         return json(res, 200, { users: await Promise.all(list.map((u) => userRow(u, auth))) }), true;
+      }
+
+      if (act === 'emails') {                                // every account's email, for copying all at once (staff only)
+        const all = await store.listEmails(), have = all.filter((r) => r.email);
+        record(me, 'emails-listed', `${have.length}/${all.length}`);
+        return json(res, 200, { total: all.length, have: have.length, missing: all.filter((r) => !r.email).map((r) => r.username), emails: have.map((r) => ({ username: r.username, email: r.email })) }), true;
+      }
+
+      if (act === 'email') {                                 // fix or set one account's email
+        const u = await target(); if (!u) return noUser(), true;
+        const ev = T.validateEmail(body.email); if (!ev.ok) return json(res, 400, { error: ev.err }), true;
+        const n = await store.setEmail(u.id, ev.email);
+        record(me, 'email-set', u.username); return json(res, 200, { ok: true, user: await userRow(n, auth) }), true;
       }
 
       if (act === 'kick') {

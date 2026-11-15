@@ -8,7 +8,7 @@ account API **and** the WebSocket game server, so it is a single service to host
   and a new one opens when all are full. No codes, no lobby browser.
 - **Practice vs bots**: its own button (Easy / Normal / Hard). Bots only appear here. You may try *any* character in practice.
 - **Guests** type a name and play the three starter characters (Fox, Ghost, Bear). Wins are not saved.
-- **Accounts** (username + password, no email) save your name, wins and owned characters. Your username is your in-game name
+- **Accounts** (username + password + email) save your name, wins and owned characters. Your username is your in-game name
   and a ✓ is shown next to it in chat and on the scoreboard. A registered name cannot be used by guests.
 - **Shop**: 1 win = 1 ★. Winning a round in an **online** lobby with **3+ humans** (as a logged-in, non-AFK player with a real score)
   earns a ★. Spend ★ on new characters. The shop is data-driven (`SHOP` in `public/shared.js`) so new item types can be added later.
@@ -72,6 +72,7 @@ Wins buy **chests**; every chest holds one **skin**. Skins are only looks (a pat
 - **Duplicates and glitter**: a duplicate gets one free re-roll; if it is still a duplicate it turns into glitter (4/10/25/60/150 by rarity). Glitter crafts any chosen skin (15/40/100/250/600 by rarity) in the Locker.
 - **Aim**: pick a favourite character and its skins are 4x as likely in each rarity.
 - **Server rules** (`src/chests.js`): the roll uses `crypto.randomInt`; opening, daily, craft and focus run one at a time per player, and `db.applyChest` spends the wins, grants the skin and saves the ledger (`kv` key `ledger:<id>`: glitter, pity counters, streak, focus) in a single transaction, so double clicks cannot double-spend. Endpoints: `POST /api/chest/open|daily|craft|focus`; `/api/me` includes `user.chest`.
+- **Emails**: sign-up requires one (format-checked, lowercased, not verified). Accounts made before this get a prompt they cannot dismiss at their next login (`needsEmail` in `/api/me`; `POST /api/email`). Emails are never in any public API. The staff Accounts tab has **Copy all emails** (comma separated / one per line / `name <email>`), lists who is still missing one, and can edit one account's email (`POST /api/admin/emails`, `/api/admin/email`). Postgres gets the `email` column automatically on startup.
 - **Staff**: the Accounts tab can grant a skin item by id, and `POST /api/admin/glitter` adds or removes glitter.
 - **Staff page additions** (`/hq`): the *Skins & chests* tab (look up a player, tap a square in the character x theme grid to give or take one skin, or give/take a whole character, a whole theme or everything; glitter; gifted chests that the player opens for free from their chest screen), the *Events* tab (win bonus x2-x5 for up to 72 hours with a strip on the home page, and gifts of wins/chests to everyone online), "Sign out everywhere" and a skins/chest summary on each player card. The staff log is now saved (last 200 actions) and survives restarts.
 - **See-through interface**: while any player is standing behind a HUD panel, that panel fades (`seeThrough` in `public/game.js`), so nobody can hide under the scoreboard, chat, timer, minimap or buttons.
@@ -111,7 +112,7 @@ For you and one other person. Two things decide who gets in, both set as environ
 Then log in with an admin username and open `/hq` (many school web filters block anything called "admin", so the panel and its API live under `/hq` and `/api/hq/*`; `/admin` and `/api/admin/*` keep working; an **Admin** link also appears in the menu and your account window).
 What it does:
 - **Live**: who is online (guest / account / ping / room), rooms and their state; **Kick**, **Mute** (chat) or **Ban** a player.
-- **Accounts**: search players; give or take **wins**, give or remove a **character**, **reset a password** (the fix for "I forgot mine", since there is no email reset),
+- **Accounts**: search players; give or take **wins**, give or remove a **character**, **reset a password** (the fix for "I forgot mine", since there is no email reset; emails are only stored, nothing is ever sent),
   ban or unban. Takes effect next time they join; a banned account is signed out immediately and cannot log in.
 - **Broadcast & bans**: **announce** a message that pops up in every open game, set a **banner** on the home page ("Maintenance at 5pm"), see and undo bans and mutes.
 - **Log**: the last 100 admin actions (also printed in the server log).
@@ -152,7 +153,7 @@ To use a real local Postgres: `DATABASE_URL=postgres://localhost/tagrush PGSSLMO
 
 Passwords are hashed with scrypt; sessions are random 256-bit tokens stored hashed (HttpOnly, SameSite=Lax, Secure on https cookie, 30 days).
 Sign-up/login/buy are rate limited, POSTs must be same-origin JSON, the WebSocket checks `Origin`, a Content-Security-Policy is sent, and a purchase
-is one database transaction (charge + grant) so wins can never be double-spent. There is no password reset (no email), so a forgotten password means a new account.
+is one database transaction (charge + grant) so wins can never be double-spent. There is no automatic password reset (emails are stored but never used to send anything), so a forgotten password means a new account.
 
 ## Characters
 

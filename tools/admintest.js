@@ -8,7 +8,7 @@ const WebSocket = require('ws');
 const BASE = 'http://127.0.0.1:3120', sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ok  ' : '  FAIL ') + m); if (!c) fails++; };
 const post = (url, body, cookie, code) => fetch(BASE + url, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, cookie ? { cookie } : {}, code ? { 'x-admin-code': code } : {}), body: JSON.stringify(body || {}) });
-async function reg(name) { const r = await fetch(BASE + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'correct-horse-9' }) }); return r.headers.get('set-cookie').split(';')[0]; }
+async function reg(name) { const r = await fetch(BASE + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'correct-horse-9', email: name.toLowerCase() + '@example.com' }) }); return r.headers.get('set-cookie').split(';')[0]; }
 function join(name, cookie, c = 0) {
   return new Promise((res) => { const ws = new WebSocket('ws://127.0.0.1:3120/ws', cookie ? { headers: { cookie } } : undefined); const o = { ws, msgs: [], ev: [] };
     ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name, mode: 'online', c, k: 0 })));
@@ -120,6 +120,14 @@ function join(name, cookie, c = 0) {
   r = await post('/api/admin/giftall', { wins: 0 }, boss, 'sesame'); ok(r.status === 400, 'gift-all needs something to give');
   r = await post('/api/admin/logout', { username: 'Pleb' }, boss, 'sesame'); await sleep(300); ok(r.status === 200 && pj.closed, 'sign out kicks the player and ends the session');
   me4 = await (await fetch(BASE + '/api/me', { headers: { cookie: pleb } })).json(); ok(!me4.user, 'the old session is dead after sign out');
+  // emails
+  r = await post('/api/admin/emails', {}, boss, 'sesame'); j = await r.json();
+  ok(r.status === 200 && j.have >= 2 && j.emails.some((x) => x.email === 'pleb@example.com') && j.total >= j.have, 'staff can list every email');
+  const plain = await reg('Plain'); r = await post('/api/admin/emails', {}, plain, 'sesame'); ok(r.status === 403, 'players cannot list emails');
+  r = await post('/api/admin/email', { username: 'Pleb', email: 'nope' }, boss, 'sesame'); ok(r.status === 400, 'staff email edit validates');
+  r = await post('/api/admin/email', { username: 'Pleb', email: ' New@Example.com ' }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && j.user.email === 'new@example.com', 'staff can set an email (trimmed, lowercased)');
+  r = await post('/api/admin/users', { q: 'Pleb' }, boss, 'sesame'); j = await r.json(); ok(j.users[0].email === 'new@example.com', 'staff see the email on the account card');
+  j = await (await fetch(BASE + '/api/stats')).json(); ok(!JSON.stringify(j).includes('@example.com'), 'public stats never contain emails');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');

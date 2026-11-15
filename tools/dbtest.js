@@ -9,6 +9,10 @@ async function suite(name, store) {
   console.log(name);
   const u = await store.createUser('Alex', 'h1');
   ok(u && u.username === 'Alex' && u.wins === 0 && u.owned.includes('char:fox'), 'create user gets the starter characters');
+  ok(u.email === '', 'accounts made without an email have an empty one');
+  const em = await store.setEmail(u.id, 'alex@example.com'); ok(em.email === 'alex@example.com' && (await store.userByName('alex')).email === 'alex@example.com', 'setEmail saves and reads back');
+  const wm = await store.createUser('Mailer', 'h', 'mailer@example.com'); ok(wm.email === 'mailer@example.com', 'createUser stores the email');
+  const le = await store.listEmails(); ok(le.length >= 2 && le.find((x) => x.username === 'Mailer').email === 'mailer@example.com' && le.every((x) => 'email' in x), 'listEmails returns every account');
   ok((await store.createUser('ALEX', 'h2')) === null, 'duplicate username (any case) rejected');
   ok(await store.nameTaken('aLeX'), 'nameTaken is case-insensitive');
   ok((await store.userByName('alex')).id === u.id, 'lookup by name, any case');
@@ -36,9 +40,9 @@ async function suite(name, store) {
   await store.kvSet('admin-state', { bans: { bob: { reason: 'x' } }, banner: 'hi' }); await store.kvSet('admin-state', { bans: {}, banner: 'bye' });
   ok((await store.kvGet('admin-state')).banner === 'bye', 'kv: set twice overwrites, round-trips JSON');
   const b = await store.createUser('Bobby', 'h'); const c2 = await store.createUser('Bonnie', 'h');
-  ok((await store.countUsers()) === 3, 'countUsers');
+  ok((await store.countUsers()) === 4, 'countUsers');
   ok((await store.listUsers('bo')).map((x) => x.username).join() === 'Bonnie,Bobby', 'listUsers by prefix, newest first');
-  ok((await store.listUsers('')).length === 3, 'listUsers with empty query lists everyone');
+  ok((await store.listUsers('')).length === 4, 'listUsers with empty query lists everyone');
   let x = await store.adjustWins(b.id, 5); ok(x.wins === 5, 'adjustWins +5');
   await store.adjustWins(b.id, 2); await store.buy(b.id, 'char:frog', 3);
   x = await store.adjustWins(b.id, -100); ok(x.wins === 3 && x.wins - x.spent === 0, 'adjustWins never goes below what was spent');

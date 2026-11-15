@@ -59,13 +59,14 @@ function create(store, opts = {}) {
   const pu = (u) => { const o = publicUser(u); if (o && opts.isAdmin) o.admin = !!opts.isAdmin(u.username); return o; };
   const chests = Chests.create(store, { now: opts.now });
   /** The account as the browser sees it, with the chest ledger (glitter, pity, daily) attached. */
-  const puFull = async (u) => { const o = pu(u); if (o) o.chest = await chests.view(u.id); return o; };
+  const puFull = async (u) => { const o = pu(u); if (o) { o.chest = await chests.view(u.id); o.email = u.email || ''; o.needsEmail = !u.email; } return o; };
   const lim = {
     register: new Limiter(opts.registerPerHour || 6, 3600e3),
     loginIp: new Limiter(opts.loginPerIp || 25, 600e3),
     loginUser: new Limiter(opts.loginPerUser || 8, 600e3),
     buy: new Limiter(30, 60e3),
     chest: new Limiter(40, 60e3),
+    email: new Limiter(10, 600e3),
   };
   const sweeper = setInterval(() => { for (const l of Object.values(lim)) l.sweep(); store.dropExpired().catch(() => {}); }, 600e3);
   sweeper.unref();
@@ -116,7 +117,8 @@ function create(store, opts = {}) {
         if (!lim.register.hit(ip)) return json(res, 429, { error: 'Too many sign-ups from here. Try again later.' }), true;
         const v = T.validateUsername(body.username); if (!v.ok) return json(res, 400, { error: v.err }), true;
         const pv = T.validatePassword(body.password); if (!pv.ok) return json(res, 400, { error: pv.err }), true;
-        const user = await store.createUser(v.name, await hashPassword(String(body.password)));
+        const ev = T.validateEmail(body.email); if (!ev.ok) return json(res, 400, { error: ev.err }), true;
+        const user = await store.createUser(v.name, await hashPassword(String(body.password)), ev.email);
         if (!user) return json(res, 409, { error: 'That username is taken.' }), true;
         const h = await startSession(req, res, user);
         return json(res, 200, { ok: true, user: await puFull(user) }, h), true;
@@ -138,6 +140,15 @@ function create(store, opts = {}) {
         const tok = parseCookies(req.headers.cookie)[COOKIE];
         if (tok) await store.dropSession(sha(tok));
         return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0` }), true;
+      }
+
+      if (url === '/api/email') {
+        const user = await userFromCookie(req.headers.cookie);
+        if (!user) return json(res, 401, { error: 'Log in first.' }), true;
+        if (!lim.email.hit('u' + user.id)) return json(res, 429, { error: 'Slow down a little.' }), true;
+        const ev = T.validateEmail(body.email); if (!ev.ok) return json(res, 400, { error: ev.err }), true;
+        const fresh = await store.setEmail(user.id, ev.email);
+        return json(res, 200, { ok: true, user: await puFull(fresh) }), true;
       }
 
       if (url === '/api/shop/buy') {

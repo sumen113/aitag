@@ -54,6 +54,15 @@
 
       <!-- ACCOUNTS -->
       <section data-pane="accounts" class="hidden">
+        <div class="ad-emails card">
+          <div class="ad-emails-head"><b>Emails</b><span class="mono" id="adEmCount">not loaded</span></div>
+          <div class="ad-emails-btns">
+            <button type="button" class="btn btn-primary" id="adEmCopy"><span class="btn-label">Copy all emails</span></button>
+            <select id="adEmFmt" aria-label="Copy format"><option value="comma">Comma separated</option><option value="line">One per line</option><option value="named">Name &lt;email&gt;, one per line</option></select>
+          </div>
+          <textarea id="adEmBox" class="ad-emails-box" rows="4" readonly aria-label="All emails" placeholder="Press Copy all emails. The list shows here too."></textarea>
+          <p class="mono" id="adEmMissing"></p>
+        </div>
         <form id="adSearch" class="ad-search"><input id="adQ" class="inp" placeholder="Search usernames (starts with…) or leave empty for newest" autocomplete="off" maxlength="20"><button class="btn btn-ghost" type="submit"><span class="btn-label">Search</span></button></form>
         <div id="adUsers" class="ad-users"></div>
       </section>

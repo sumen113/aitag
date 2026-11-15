@@ -163,6 +163,22 @@
   });
 
   /* -------------------------------- accounts -------------------------------- */
+  /* every account's email, copied in one go */
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* blocked: fall back to selecting the box */ }
+    const b = $('adEmBox'); b.focus(); b.select();
+    try { return document.execCommand('copy'); } catch (e) { return false; }
+  }
+  $('adEmCopy').addEventListener('click', async () => {
+    const r = await api('emails'); if (r.status !== 200) { toast(r.j.error || 'Could not load emails.', true); return; }
+    const f = $('adEmFmt').value, list = r.j.emails;
+    const text = f === 'line' ? list.map((x) => x.email).join('\n') : f === 'named' ? list.map((x) => `${x.username} <${x.email}>`).join('\n') : list.map((x) => x.email).join(', ');
+    $('adEmBox').value = text;
+    $('adEmCount').textContent = `${r.j.have} of ${r.j.total} accounts have one`;
+    $('adEmMissing').textContent = r.j.missing.length ? `No email yet (asked at their next login): ${r.j.missing.slice(0, 40).join(', ')}${r.j.missing.length > 40 ? ` and ${r.j.missing.length - 40} more` : ''}` : 'Every account has an email.';
+    if (!list.length) { toast('No emails saved yet.', true); return; }
+    toast((await copyText(text)) ? `Copied ${list.length} email${list.length === 1 ? '' : 's'}.` : 'Could not copy automatically. The list is selected in the box, press Ctrl+C.', false);
+  });
   $('adSearch').addEventListener('submit', (e) => { e.preventDefault(); searchUsers($('adQ').value); });
   async function searchUsers(q) {
     const r = await api('users', { q: q || '' }); const box = $('adUsers'); box.replaceChildren();
@@ -176,6 +192,10 @@
     if (u.online) head.append(el('span', 'ad-pill acct', 'online')); if (u.admin) head.append(el('span', 'ad-pill staff', 'staff'));
     if (u.banned) head.append(el('span', 'ad-pill bad', 'banned: ' + u.banned)); if (u.muted) head.append(el('span', 'ad-pill bad', 'muted'));
     c.append(head);
+    const em = el('div', 'ad-user-row'); em.append(el('span', 'mono', 'Email'));
+    const ei = el('input', 'ad-in'); ei.type = 'email'; ei.value = u.email || ''; ei.placeholder = 'none yet'; ei.maxLength = 120; ei.setAttribute('aria-label', 'Email');
+    const es = el('button', 'ad-btn', 'Save email'); es.type = 'button'; es.onclick = async () => done(await api('email', { username: u.username, email: ei.value }), `Email saved for ${u.username}`);
+    em.append(ei, es); c.append(em);
     const owned = el('div', 'ad-user-row'); owned.append(el('span', 'mono', 'Owns'));
     owned.append(el('span', '', u.owned.length ? u.owned.map((x) => x.replace('char:', '')).join(', ') : 'only the starters'));
     c.append(owned);

@@ -35,7 +35,7 @@ function client(join, opts = {}) {
 
 /** Register an account over HTTP and (optionally) give it wins + items straight in the store. Returns a cookie header. */
 async function account(name, { wins = 0, items = [] } = {}) {
-  const r = await fetch(BASE + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'correct-horse-9' }) });
+  const r = await fetch(BASE + '/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: name, password: 'correct-horse-9', email: name.toLowerCase() + '@example.com' }) });
   if (r.status !== 200) throw new Error('register ' + name + ' -> ' + r.status + ' ' + (await r.text()));
   const cookie = r.headers.get('set-cookie').split(';')[0];
   const store = srv.getStore(), u = await store.userByName(name);

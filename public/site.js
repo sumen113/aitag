@@ -502,6 +502,7 @@
     }
     if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
     paintAccount();
+    if (u && u.needsEmail) setTimeout(() => { if (emailLocked() && modalId !== 'emailModal') openEmail(false); }, 350);
   }
   function paintAccount() {
     const u = App.account, on = App.accountsEnabled;
@@ -554,8 +555,9 @@
     Sfx.play('click');
     setTimeout(() => (focusEl || m.querySelector('input, button:not(.modal-x)') || m).focus({ preventScroll: true }), 60);
   }
-  function closeModal() {
+  function closeModal(force) {
     if (!modalId) return;
+    if (modalId === 'emailModal' && emailLocked() && force !== true) return;   // can't skip the email step
     const m = $(modalId); modalId = null; shopOpen = acctOpen = false; document.body.style.overflow = '';
     const done = () => { m.hidden = true; if (!modalId) root.classList.add('hidden'); };
     if (reduce) done(); else { gsap.to(m, { y: 24, scale: 0.96, opacity: 0, duration: 0.2, onComplete: () => { done(); gsap.set(m, { clearProps: 'all' }); } }); gsap.to(back, { opacity: 0, duration: 0.2 }); }
@@ -565,14 +567,16 @@
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modalId) closeModal(); });
 
   /* ---- log in / sign up ---- */
-  const aForm = $('authForm'), aUser = $('authUser'), aPass = $('authPass'), aErr = $('authErr'), aGo = $('authGo');
+  const aEmail = $('authEmail'), aForm = $('authForm'), aUser = $('authUser'), aPass = $('authPass'), aErr = $('authErr'), aGo = $('authGo');
   let mode = 'login', authBusy = false;
   function setAuthMode(m) {
     mode = m; const up = m === 'signup';
     $('authTitle').textContent = up ? 'Join Tag Rush' : 'Welcome back';
     aGo.querySelector('.btn-label').textContent = up ? 'Create account' : 'Log in';
     aPass.autocomplete = up ? 'new-password' : 'current-password';
-    $('authFine').textContent = up ? 'Your username is your name in the game (3–14 letters or numbers). No email needed, so keep your password safe: there is no reset.' : 'Your username is your name in the game. Wins and unlocked characters are saved to it.';
+    $('authEmailRow').classList.toggle('hidden', !up);
+    aEmail.autocomplete = up ? 'email' : 'off';
+    $('authFine').textContent = up ? 'Your username is your name in the game (3–14 letters or numbers). Your email is only seen by the people who run the game, never by other players. Keep your password safe: there is no automatic reset.' : 'Your username is your name in the game. Wins and unlocked characters are saved to it.';
     $('authTabs').querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.t === m)));
     aErr.textContent = '';
   }
@@ -582,11 +586,11 @@
     e.preventDefault(); if (authBusy) return;
     const username = aUser.value.trim(), password = aPass.value;
     let err = '';
-    if (mode === 'signup') { const v = C.validateUsername(username); if (!v.ok) err = v.err; else { const pv = C.validatePassword(password); if (!pv.ok) err = pv.err; } }
+    if (mode === 'signup') { const v = C.validateUsername(username); if (!v.ok) err = v.err; else { const pv = C.validatePassword(password); if (!pv.ok) err = pv.err; else { const ev = C.validateEmail(aEmail.value); if (!ev.ok) err = ev.err; } } }
     else if (!username || !password) err = 'Enter your username and password.';
     if (err) { aErr.textContent = err; if (!reduce) gsap.fromTo(aGo, { x: -8 }, { x: 0, duration: 0.45, ease: 'elastic.out(1.2,.3)', clearProps: 'transform' }); Sfx.play('deny'); return; }
     authBusy = true; aGo.disabled = true; aErr.textContent = '';
-    const r = await api(mode === 'signup' ? '/api/register' : '/api/login', { username, password });
+    const r = await api(mode === 'signup' ? '/api/register' : '/api/login', mode === 'signup' ? { username, password, email: aEmail.value.trim() } : { username, password });
     authBusy = false; aGo.disabled = false;
     if (!r.ok || !r.j.user) { aErr.textContent = r.j.error || 'Something went wrong.'; Sfx.play('deny'); return; }
     aPass.value = ''; closeModal(); setAccount(r.j.user, true);
@@ -598,7 +602,34 @@
     const u = App.account; if (!u) return;
     $('acctTitle').textContent = u.username; $('stWins').textContent = u.wins; $('stBal').textContent = u.balance;
     $('stOwned').textContent = `${CHARS.filter((_, i) => owns(i)).length}/${CHARS.length}`;
+    $('acctMail').textContent = u.email ? `Email: ${u.email}` : 'No email on this account yet.';
   }
+
+  /* ---- email: required on every account. Missing on login -> a prompt you can't dismiss (only log out). ---- */
+  const eForm = $('emailForm'), eIn = $('emailIn'), eErr = $('emailErr'), eGo = $('emailGo');
+  let emailBusy = false;
+  const emailLocked = () => !!(App.account && App.account.needsEmail);
+  function openEmail(change) {
+    const must = !change && emailLocked();
+    $('emailTitle').textContent = must ? 'Add your email' : 'Change your email';
+    $('emailKicker').textContent = must ? 'One quick thing' : 'Your account';
+    $('emailX').classList.toggle('hidden', must); $('emailOut').classList.toggle('hidden', !must);
+    eIn.value = (App.account && App.account.email) || ''; eErr.textContent = '';
+    openModal('emailModal', eIn);
+  }
+  eForm.addEventListener('submit', async (e) => {
+    e.preventDefault(); if (emailBusy) return;
+    const ev = C.validateEmail(eIn.value);
+    if (!ev.ok) { eErr.textContent = ev.err; Sfx.play('deny'); if (!reduce) gsap.fromTo(eGo, { x: -8 }, { x: 0, duration: 0.45, ease: 'elastic.out(1.2,.3)', clearProps: 'transform' }); return; }
+    emailBusy = true; eGo.disabled = true; eErr.textContent = '';
+    const r = await api('/api/email', { email: ev.email });
+    emailBusy = false; eGo.disabled = false;
+    if (!r.ok || !r.j.user) { eErr.textContent = r.j.error || 'Something went wrong.'; Sfx.play('deny'); return; }
+    App.account = r.j.user; modalId === 'emailModal' && closeModal(true); paintAccount();
+    Sfx.play('ready'); siteToast('Email saved. Thanks!');
+  });
+  $('emailOut').addEventListener('click', () => { App.account = Object.assign({}, App.account, { needsEmail: false }); logout(); });
+  $('acctMailBtn').addEventListener('click', () => openEmail(true));
   function openAcct() { if (!App.account) return openAuth('login'); paintAcctModal(); openModal('acctModal'); }
   $('acctShop').addEventListener('click', () => openShop());
   $('acctLogout').addEventListener('click', logout);
@@ -660,9 +691,12 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-12';
+  const NEWS_VERSION = 'update-13';
   const NEWS = [
-    { v: 'Update 12 · Chests and skins', tag: 'Newest', items: [
+    { v: 'Update 13 · Emails', tag: 'Newest', items: [
+      ['Accounts need an email', 'New accounts add an email when they sign up. If your account does not have one yet, you will be asked for it the next time you log in. Only the people who run the game can see it, never other players. It is not checked, so type it carefully.'],
+    ] },
+    { v: 'Update 12 · Chests and skins', items: [
       ['Chests', 'Spend wins on a Wooden (2), Silver (5) or Golden (12) chest. Each one holds a skin. The better the chest, the better the odds of rare, epic and legendary skins.'],
       ['216 skins', 'Every character has 12 skins in 5 rarities: patterns, glowing lava cracks, galaxy stars, glitch, holographic and gold. Some leave a trail behind you while you run. Everyone in the match sees your skin.'],
       ['Free daily chest', 'Claim a chest for free every day. Keep a streak going and it gets better. Day 7 is a Golden Chest.'],

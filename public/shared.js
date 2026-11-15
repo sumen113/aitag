@@ -245,6 +245,13 @@
     if (pw.length > 72) return { ok: false, err: 'Passwords are 72 characters max.' };
     return { ok: true };
   }
+  /** Email check: trimmed, lowercased, one @, a dot in the domain, no spaces. Not verified, just well-formed. */
+  function validateEmail(raw) {
+    const e = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!e) return { ok: false, err: 'Enter your email address.' };
+    if (e.length > 120 || !/^[^\s@,;<>()"']+@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(e)) return { ok: false, err: 'That email address does not look right.' };
+    return { ok: true, email: e };
+  }
   /** Sanitise a chat line: strip control chars, squash spaces, mask links and bad words, cap the length. */
   const flatten = (w) => w.toLowerCase().replace(/[01345@$7]/g, (c) => ({ 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', '@': 'a', $: 's', 7: 't' }[c])).replace(/[^a-z]/g, '');
   function cleanChat(raw) {
@@ -717,6 +724,6 @@
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
-    SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
+    SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

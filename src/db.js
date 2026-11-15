@@ -3,7 +3,7 @@
      - Postgres (set DATABASE_URL)  -> what you use in production (Neon, Supabase, Render Postgres, ...)
      - JSON file (no DATABASE_URL)  -> local development only; Render's disk is wiped on every deploy.
    Also a small key/value table (kv) for admin state: bans, mutes, banner.
-   User shape returned everywhere: { id, username, hash, wins, spent, owned: [itemId], settings: {}, created }
+   User shape returned everywhere: { id, username, hash, wins, spent, owned: [itemId], settings: {}, created, email }
    Spendable balance = wins - spent. Inventory rows are generic item ids ('char:frog', later 'trail:rainbow', ...). */
 const fs = require('fs');
 const path = require('path');
@@ -35,6 +35,9 @@ async function openPg(url, opts = {}) {
     created_at BIGINT NOT NULL,
     last_seen BIGINT NOT NULL DEFAULT 0
   )`);
+  /* email was added later: add the column to older databases (the second try covers servers without IF NOT EXISTS) */
+  try { await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT'); }
+  catch (e) { try { await pool.query('ALTER TABLE users ADD COLUMN email TEXT'); } catch (e2) { if (!/exist/i.test(e2.message)) throw e2; } }
   await pool.query(`CREATE TABLE IF NOT EXISTS inventory (
     user_id INTEGER NOT NULL,
     item_id TEXT NOT NULL,
@@ -56,14 +59,14 @@ async function openPg(url, opts = {}) {
     if (!row) return null;
     const inv = await pool.query('SELECT item_id FROM inventory WHERE user_id = $1', [row.id]);
     let settings = {}; try { settings = JSON.parse(row.settings || '{}'); } catch (e) { /* corrupt settings: ignore */ }
-    return { id: +row.id, username: row.username, hash: row.pass_hash, wins: +row.wins, spent: +row.spent, owned: withStarters(inv.rows.map((r) => r.item_id)), settings, created: +row.created_at };
+    return { id: +row.id, username: row.username, hash: row.pass_hash, wins: +row.wins, spent: +row.spent, owned: withStarters(inv.rows.map((r) => r.item_id)), settings, created: +row.created_at, email: row.email || '' };
   };
 
   return {
     kind: 'postgres',
-    async createUser(username, hash) {
+    async createUser(username, hash, email) {
       let r;
-      try { r = await pool.query('INSERT INTO users (username, username_lower, pass_hash, created_at) VALUES ($1, $2, $3, $4) RETURNING id', [username, lower(username), hash, Date.now()]); }
+      try { r = await pool.query('INSERT INTO users (username, username_lower, pass_hash, created_at, email) VALUES ($1, $2, $3, $4, $5) RETURNING id', [username, lower(username), hash, Date.now(), email || null]); }
       catch (e) { if (e.code === '23505' || /duplicate|unique/i.test(e.message)) return null; throw e; }   // username taken
       return this.userById(r.rows[0].id);
     },
@@ -73,6 +76,9 @@ async function openPg(url, opts = {}) {
     async addWin(id) { await pool.query('UPDATE users SET wins = wins + 1 WHERE id = $1', [id]); return this.userById(id); },
     async saveSettings(id, settings) { await pool.query('UPDATE users SET settings = $2 WHERE id = $1', [id, JSON.stringify(settings)]); },
     async touch(id) { await pool.query('UPDATE users SET last_seen = $2 WHERE id = $1', [id, Date.now()]); },
+    async setEmail(id, email) { await pool.query('UPDATE users SET email = $2 WHERE id = $1', [id, email || null]); return this.userById(id); },
+    /** Every account with its email ('' when none yet). Staff only. */
+    async listEmails() { return (await pool.query('SELECT id, username, email FROM users ORDER BY id ASC')).rows.map((r) => ({ id: +r.id, username: r.username, email: r.email || '' })); },
     /** Atomic: charge the price and grant the item in one transaction, or do neither. */
     async buy(id, item, price) {
       const c = await pool.connect();
@@ -168,14 +174,14 @@ async function openFile(file) {
       try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file + '.tmp', JSON.stringify(db)); fs.renameSync(file + '.tmp', file); } catch (e) { console.error('could not save dev db:', e.message); }
     }, 150);
   };
-  const view = (u) => u && { id: u.id, username: u.username, hash: u.hash, wins: u.wins, spent: u.spent, owned: withStarters(u.owned), settings: Object.assign({}, u.settings), created: u.created };
+  const view = (u) => u && { id: u.id, username: u.username, hash: u.hash, wins: u.wins, spent: u.spent, owned: withStarters(u.owned), settings: Object.assign({}, u.settings), created: u.created, email: u.email || '' };
   const byName = (n) => Object.values(db.users).find((u) => lower(u.username) === lower(n));
 
   return {
     kind: 'file',
-    async createUser(username, hash) {
+    async createUser(username, hash, email) {
       if (byName(username)) return null;
-      const u = { id: db.nextId++, username, hash, wins: 0, spent: 0, owned: [], settings: {}, created: Date.now() };
+      const u = { id: db.nextId++, username, hash, wins: 0, spent: 0, owned: [], settings: {}, created: Date.now(), email: email || '' };
       db.users[u.id] = u; save(); return view(u);
     },
     async userByName(n) { return view(byName(n)); },
@@ -184,6 +190,8 @@ async function openFile(file) {
     async addWin(id) { const u = db.users[id]; if (!u) return null; u.wins++; save(); return view(u); },
     async saveSettings(id, s) { if (db.users[id]) { db.users[id].settings = s; save(); } },
     async touch() {},
+    async setEmail(id, email) { const u = db.users[id]; if (!u) return null; u.email = email || ''; save(); return view(u); },
+    async listEmails() { return Object.values(db.users).sort((a, b) => a.id - b.id).map((u) => ({ id: u.id, username: u.username, email: u.email || '' })); },
     async buy(id, item, price) {
       const u = db.users[id]; if (!u) return { ok: false, err: 'Account not found.' };
       if (withStarters(u.owned).includes(item)) return { ok: false, err: 'You already own that.' };
