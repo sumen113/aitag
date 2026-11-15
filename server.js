@@ -247,6 +247,24 @@ wss.on('connection', (ws, req) => {
     ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
   }
 
+  /** Change character / colour / skin in the window before a round (after the vote). Same ownership rules as joining. */
+  async function look(m) {
+    const room = c.room, p = c.player;
+    if (!room || !p || !room.canPick()) return;
+    const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), id = T.CHARS[ci].id, col = T.cleanColor(m.k);
+    let user = null;
+    if (c.user && auth) { try { user = await auth.userFromCookie(req.headers.cookie); } catch (e) { return; } }
+    if (!room.solo && !T.ownsChar(user ? user.owned : [], id)) return;                  // practice lets you try anyone, like joining does
+    const skin = user && T.ownsSkin(user.owned, id, T.cleanSkin(m.sk)) ? T.cleanSkin(m.sk) : '';
+    if (!room.setLook(p, ci, col, skin)) return;
+    if (user && T.ownsChar(user.owned, id) && store) {
+      const st = user.settings || {}, ks = T.cleanColorList(st.ks, T.CHARS.length); ks[ci] = col;
+      const sks = Object.assign({}, st.sk); if (skin) sks[id] = skin; else delete sks[id];
+      store.saveSettings(user.id, { c: id, k: col, h: p.hat | 0, ks, sk: sks }).catch(() => {});
+    }
+    if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'look', c: ci, k: col, sk: skin }));
+  }
+
   ws.on('message', (data, isBinary) => {
     if (isBinary) return;
     const now = Date.now();                                   // token-bucket rate limit
@@ -264,7 +282,8 @@ wss.on('connection', (ws, req) => {
       }
     }
     else if (m.t === 'vote') { if (c.player) c.room.castVote(c.player, m.k === 'm' ? 'm' : 'd', Number(m.i) | 0); }
-    else if (m.t === 'typing') { if (c.player) c.player.lastActiveAt = now; }
+    else if (m.t === 'typing') { if (c.player) { c.player.lastActiveAt = now; c.player.typeAt = m.on && !c.player.muted ? now + 3000 : 0; } }     // bubble over your head while you type (3 s unless refreshed)
+    else if (m.t === 'char') { if (c.player && c.room && !c.lookBusy) { c.lookBusy = true; look(m).catch(() => {}).finally(() => { c.lookBusy = false; }); } }
     else if (m.t === 'join' && !c.player && !c.joining) {
       c.joining = true;
       join(m).catch((e) => { console.error('join error', e); fail('Could not join. Please try again.'); }).finally(() => { c.joining = false; });

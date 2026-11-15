@@ -729,3 +729,23 @@ body.dark .chest-art, .dark .chest-art { filter: none; }
 /* a panel fades while a player is standing behind it, so nobody can hide under the interface */
 .hud-tools, #timerBox, #role, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #joy { transition: opacity .18s ease; }
 #hud .hud-fade { opacity: .16 !important; }
+
+/* change-character window (first seconds of the countdown, after the vote) */
+#pick { position: absolute; left: 0; right: 0; bottom: 118px; display: grid; justify-items: center; padding: 0 12px; z-index: 6; pointer-events: none; }
+#pick.hidden { display: none; }
+.pick-card { width: min(640px, 100%); padding: 12px 14px 12px; display: grid; gap: 8px; pointer-events: auto; box-shadow: 5px 5px 0 var(--ink) !important; }
+.pick-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pick-head b { font-size: 22px; }
+.pick-bar { height: 8px; border: var(--bw) solid var(--ink); border-radius: 999px; background: var(--paper-2); overflow: hidden; }
+.pick-bar i { display: block; height: 100%; width: 100%; background: var(--red); transform-origin: left center; }
+.pick-row, .pick-skins { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.pick-skins.hidden { display: none; }
+.pk { display: grid; justify-items: center; gap: 2px; padding: 5px 6px 4px; border: var(--bw) solid var(--ink); border-radius: 14px; background: var(--card); cursor: pointer; font: 700 10px var(--mono); color: var(--ink); min-width: 62px; transition: transform .12s ease, background-color .12s ease; }
+.pk img { width: 44px; height: 44px; display: block; }
+.pk:hover { transform: translateY(-2px); }
+.pk:focus-visible { outline: 3px solid var(--blue, #4d7cff); outline-offset: 2px; }
+.pk.on { background: var(--yellow, #ffd23f); box-shadow: 3px 3px 0 var(--ink); }
+.pk.sk { min-width: 0; padding: 4px; border-radius: 12px; }
+.pk.sk img { width: 34px; height: 34px; }
+@media (max-width: 700px) { #pick { bottom: 126px; } .pk { min-width: 54px; } .pk span { display: none; } }
+@media (prefers-reduced-motion: reduce) { .pk { transition: none; } }

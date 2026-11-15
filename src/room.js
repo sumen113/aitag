@@ -40,6 +40,7 @@ class Room {
     this.modeOpt = T.MODE_BY_ID[opts.mode] || opts.mode === 'vote' ? opts.mode : (this.regular || this.solo ? 'vote' : 'classic');
     this.customTime = !!opts.roundTime && !this.regular && !this.solo;
     this.voteTime = +process.env.VOTE_TIME || opts.voteTime || T.VOTE_TIME;
+    this.pickTime = process.env.PICK_TIME !== undefined ? Math.max(0, +process.env.PICK_TIME || 0) : T.PICK_TIME;      // change-character window before each round's countdown
     this.mode = T.MODE_BY_ID[this.modeOpt] ? this.modeOpt : 'classic';
     this.vote = null; this.nextMap = null; this.elims = 0; this.passes = 0; this.tagCount = 0; this.itWant = 1;
     this.mapMode = opts.mapMode && T.MAP_BY_ID[opts.mapMode] ? opts.mapMode : 'rotate';
@@ -233,8 +234,19 @@ class Room {
     this.goos.length = 0; this.decoys.length = 0; this.seeds.length = 0; this.pits.length = 0; this.results = null; this.elims = 0; this.passes = 0; this.tagCount = 0;
     const sp = shuffle(this.map.spawns.slice()); let i = 0;
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
-    this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN; this.tl = T.COUNTDOWN;
+    this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN + this.pickTime; this.tl = this.timer;
     this.emit({ k: 'st', s: STATE.COUNT, m: this.map.id, rd: this.round, md: this.mode });
+  }
+
+  /** The change-character window: the first part of the countdown (before the 4-3-2-1), after the vote has closed. */
+  canPick() { return this.state === STATE.COUNT && this.timer > T.COUNTDOWN + 0.05; }
+
+  /** Swap a player's character, colour and skin during the window. Their ability state starts fresh. */
+  setLook(p, ci, col, skin) {
+    if (!this.canPick() || p.bot || !CHARS[ci]) return false;
+    p.c = ci; p.col = col; p.skin = skin || '';
+    p.cd = 0; p.abT = 0; p.aux = 0; p.bx = 0; p.by = 0; p.pitT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.vx = p.vy = 0; p.bowled = null;
+    this.rosterDirty = true; return true;
   }
 
   startPlay() {
@@ -320,7 +332,7 @@ class Room {
 
   /** Player chat: sanitised, rate limited (1 per 0.6 s, 5 per 8 s) and broadcast to the room as an event. */
   chat(p, raw) {
-    const now = Date.now();
+    const now = Date.now(); p.typeAt = 0;
     if (now - p.lastChat < 600) return;
     p.chatLog = p.chatLog.filter((t) => now - t < 8000);
     if (p.chatLog.length >= 5) return;
@@ -649,8 +661,9 @@ class Room {
 
   sendSnapshots() {
     const ps = [];
+    const tnow = Date.now();
     for (const p of this.players.values()) {
-      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out || p.gone ? 16 : 0) | (p.wait ? 32 : 0);
+      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out || p.gone ? 16 : 0) | (p.wait ? 32 : 0) | (p.typeAt > tnow ? 64 : 0);
       ps.push([p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags]);
     }
     const head = {

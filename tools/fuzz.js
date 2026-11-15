@@ -1,5 +1,5 @@
 'use strict';
-process.env.VOTE_TIME = process.env.VOTE_TIME || '0.4';   // regular/solo rooms vote before each round: keep it short in tests
+process.env.VOTE_TIME = process.env.VOTE_TIME || '0.4'; process.env.PICK_TIME = process.env.PICK_TIME || '0';   // regular/solo rooms vote before each round and have a change-character window: keep both short in tests
 /* Integration test: boots the real server, connects many ws clients, checks matchmaking, name rules,
    the 15-player rollover, bot rooms, garbage input handling, snapshot sanity and client-prediction drift.
    Usage: node tools/fuzz.js */

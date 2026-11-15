@@ -301,7 +301,13 @@
     if (owns(ci) && sel.c !== ci) pick(ci, true); else paintStage(false, true);
     bounce();
   }
-  Object.assign(App, { api, openModal, closeModal, el, store, equipSkin, owns, repaint: () => paintAccount(), openAuth: (m) => openAuth(m) });
+  /** the in-game picker changed your character: keep the menu selection in step so the next game starts with it */
+  function setLook(ci, sk) {
+    const id = CHARS[ci].id; sel.c = ci; store.set('c', ci);
+    if (sk) sel.sks[id] = sk; else delete sel.sks[id];
+    store.set('sks', sel.sks);
+  }
+  Object.assign(App, { setLook, api, openModal, closeModal, el, store, equipSkin, owns, repaint: () => paintAccount(), openAuth: (m) => openAuth(m) });
 
   const mouse = { x: 0.5, y: 0.5 };
   window.addEventListener('pointermove', (e) => { mouse.x = e.clientX / innerWidth; mouse.y = e.clientY / innerHeight; }, { passive: true });
@@ -691,9 +697,13 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-13';
+  const NEWS_VERSION = 'update-14';
   const NEWS = [
-    { v: 'Update 13 · Emails', tag: 'Newest', items: [
+    { v: 'Update 14 · Change character, typing bubbles', tag: 'Newest', items: [
+      ['Change character before every round', 'Once the vote closes you get 7 seconds to switch character (and skin) before the 4-3-2-1. Pick from the panel at the bottom of the screen. Only characters and skins you own are shown.'],
+      ['Typing bubbles', 'When someone is typing in chat, a little bubble with three dots shows over their head, so you know to expect a message.'],
+    ] },
+    { v: 'Update 13 · Emails', items: [
       ['Accounts need an email', 'New accounts add an email when they sign up. If your account does not have one yet, you will be asked for it the next time you log in. Only the people who run the game can see it, never other players. It is not checked, so type it carefully.'],
     ] },
     { v: 'Update 12 · Chests and skins', items: [

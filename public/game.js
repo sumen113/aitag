@@ -61,6 +61,7 @@
       case 'pg': { const rtt = performance.now() - m.ts; G.ping = G.ping ? G.ping * 0.7 + rtt * 0.3 : rtt; $('ping').textContent = Math.round(G.ping); break; }
       case 'err': { const f = G.joinResolve, ws = G.ws; G.ws = null; try { ws && ws.close(); } catch (e) { /* noop */ } if (f) f({ ok: false, err: m.m }); else overlay(m.m); break; }
       case 'kick': G.kicked = m.m; break;
+      case 'look': onLook(m); break;
       case 'award': onAward(m); break;
       case 'announce': onAnnounce(m); break;
       default: break;
@@ -72,7 +73,7 @@
     G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; if (m.name) G.sel.name = m.name;
     G.roster.clear(); onRoster(m.roster);
     G.me = null; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
-    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
+    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
     G.inGame = true; G.camSnap = true;
@@ -374,16 +375,23 @@
   abBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
   /* ================================== chat =================================== */
-  let chatOpen = false, lastTyping = 0;
+  let chatOpen = false, lastTyping = 0, typingSent = false;
+  /** tell the server (and so everyone) whether you are typing: a bubble with dots shows over your head */
+  function pingTyping(on) {
+    const n = performance.now();
+    if (on) { if (!typingSent || n - lastTyping > 1500) { typingSent = true; lastTyping = n; send({ t: 'typing', on: 1 }); } }
+    else if (typingSent) { typingSent = false; send({ t: 'typing', on: 0 }); }
+  }
+  const iTyping = () => chatOpen && chatInput.value.trim().length > 0;
   const chatEl = $('chat'), chatForm = $('chatForm'), chatInput = $('chatInput'), chatLog = $('chatLog');
   function openChat() {
     if (chatOpen || !live()) return;
     chatOpen = true; releaseAll(); setUnread(0); chatEl.classList.add('open'); chatForm.classList.remove('hidden'); quick.classList.remove('hidden');
-    chatInput.value = ''; chatInput.focus(); setTimeout(() => { if (chatOpen && document.activeElement !== chatInput) chatInput.focus(); }, 30); send({ t: 'typing' });
+    chatInput.value = ''; chatInput.focus(); setTimeout(() => { if (chatOpen && document.activeElement !== chatInput) chatInput.focus(); }, 30); send({ t: 'typing', on: 0 });
   }
   function closeChat(silent) {
     if (!chatOpen && !silent) return;
-    chatOpen = false; chatEl.classList.remove('open'); chatForm.classList.add('hidden'); quick.classList.add('hidden'); chatInput.value = ''; chatInput.blur();
+    chatOpen = false; chatEl.classList.remove('open'); chatForm.classList.add('hidden'); quick.classList.add('hidden'); chatInput.value = ''; chatInput.blur(); pingTyping(false);
   }
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -391,7 +399,7 @@
     if (m) send({ t: 'chat', m });
     closeChat();
   });
-  chatInput.addEventListener('input', () => { const n = performance.now(); if (n - lastTyping > 2500) { lastTyping = n; send({ t: 'typing' }); } });   // keeps you from being marked AFK while typing
+  chatInput.addEventListener('input', () => pingTyping(chatInput.value.trim().length > 0));   // also keeps you from being marked AFK while typing
   $('chatOpen').addEventListener('click', () => { Sfx.play('click'); openChat(); });
   const QUICK = ['GG!', 'Nice one!', 'So close!', 'Help!', 'Run!', 'Rematch?'];
   const quick = $('quickChat');
@@ -686,8 +694,20 @@
       g.fillStyle = e.isMe ? '#ffd23f' : '#fffaf0'; g.fillText(name, nx, sy - 4);
       if (e.afk) { g.font = '16px sans-serif'; g.fillText('💤', sx + half + 10, sy - 10); }
       if (bb && !e.decoy && G.t - bb.t < 5.5) drawBubble(g, bb, sx, sy - 22 - lift, l.alpha);
+      else if (e.typing && !e.decoy) drawTyping(g, sx, sy - 22 - lift, l.alpha, t);
       g.globalAlpha = 1;
     }
+  }
+
+  /* three bouncing dots in a little bubble: that player is typing */
+  function drawTyping(g, sx, sy, alpha, t) {
+    g.save(); g.globalAlpha = alpha; g.translate(sx, sy);
+    const w = 46, h = 24;
+    g.beginPath(); g.roundRect(-w / 2, -h - 8, w, h, 12); g.moveTo(-6, -8); g.lineTo(0, 0); g.lineTo(6, -8); g.closePath();
+    g.fillStyle = '#fffaf0'; g.strokeStyle = '#14122b'; g.lineWidth = 3; g.lineJoin = 'round'; g.stroke(); g.fill();
+    g.fillStyle = '#14122b';
+    for (let i = 0; i < 3; i++) { const b = RM.matches ? 0 : Math.sin(t * 9 - i * 0.9) * 3; g.beginPath(); g.arc((i - 1) * 11, -h / 2 - 8 + b, 3.2, 0, TAU); g.fill(); }
+    g.restore();
   }
 
   /* speech bubble above a player's head, ~5 s */
@@ -769,14 +789,14 @@
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true, typing: iTyping() });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
       if (inHide(s.x, s.y) && Math.hypot(s.x - mx, s.y - my) > HIDE_SEE) continue;      // in a bush and not close: out of sight
-      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), abT: s.abT, boost: false });
+      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), typing: !!(s.fl & 64), abT: s.abT, boost: false });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
     for (const d of G.decoys) {
@@ -851,8 +871,9 @@
       gsap.fromTo('#timer', { scale: 1.35 }, { scale: 1, duration: 0.35, ease: 'back.out(3)' });
     } else if (st !== STATE.PLAY) G.lastSecTick = -1;
 
-    // countdown
-    if (st === STATE.COUNT) {
+    // change-character window, then the 4-3-2-1
+    if (picking(left)) showPick(left); else hidePick();
+    if (st === STATE.COUNT && !picking(left)) {
       const n = Math.max(1, Math.ceil(left));
       if (n !== G.lastCount) { G.lastCount = n; countNum(n); Sfx.play('tick'); }
     } else if (G.lastCount !== -1) { G.lastCount = -1; gsap.killTweensOf($('countdown')); $('countdown').textContent = ''; }
@@ -875,7 +896,8 @@
         else txt = surv <= 1 ? 'Last survivor!' : `Survive! ${surv} left`;
       } else if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : "You're IT! Tag someone!"; }
       else txt = !its.length ? 'Run!' : its.length === 1 ? `Run! ${its[0].n} is IT` : `Run! ${its.map((r) => r.n).join(' & ')} are IT`;
-    } else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}` + (mode !== 'classic' ? ' · ' + C.MODE_BY_ID[mode].name : '');
+    } else if (st === STATE.COUNT && picking(left)) txt = 'Change your character if you like';
+    else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}` + (mode !== 'classic' ? ' · ' + C.MODE_BY_ID[mode].name : '');
     else if (st === STATE.VOTE) txt = 'Vote for the next round';
     else if (st === STATE.RESULTS) txt = 'Round over';
     else txt = G.solo ? 'Warming up…' : 'Waiting for players';
@@ -940,6 +962,8 @@
       const tg = e.querySelector('.tg'), lbl = isIt ? (G.mode === 'potato' ? 'POTATO' : G.mode === 'infection' ? 'ZOMBIE' : 'IT') : waitR ? 'NEXT' : outR ? 'OUT' : '';
       const tcls = 'tg' + (isIt ? (G.mode === 'potato' ? ' pt' : G.mode === 'infection' ? ' zb' : '') : lbl ? ' gh' : '');
       if (tg.textContent !== lbl) tg.textContent = lbl; if (tg.className !== tcls) tg.className = tcls; tg.style.display = lbl ? '' : 'none';
+      const look = r.c + '|' + r.k + '|' + (r.sk || '') + '|' + (r.h | 0);      // someone changed character in the pick window: new portrait
+      if (e.dataset.look !== look) { if (e.dataset.look) e.querySelector('img').src = Chars.avatar(r.c, r.k, 48, r.h, r.sk); e.dataset.look = look; }
       const nmEl = e.querySelector('.nm');
       if ((nmEl.dataset.tt || '') !== (r.tt || '')) { nmEl.replaceChildren(...(r.tt ? [titlePill(r.tt, r.tc)] : []), r.n); nmEl.dataset.tt = r.tt || ''; }
       const rk = e.querySelector('.rk'), sc = e.querySelector('.sc');
@@ -1018,6 +1042,59 @@
       });
     }
   }
+  /* ---- change-character window: the first seconds of the countdown, after the vote closes ---- */
+  const pickEl = $('pick'); let pickKey = '', pickDur = 1, pickTween = null, pickHiding = false;
+  const picking = (left) => G.state === STATE.COUNT && left > C.COUNTDOWN + 0.05;
+  const mineOk = (i) => G.solo || (window.App && App.owns(i));
+  function sendLook(ci, sk) { Sfx.play('click'); send({ t: 'char', c: ci, k: App.sel.ks[ci], sk: sk || '' }); }
+  function paintPick() {
+    const row = $('pickChars'), skins = $('pickSkins'), cur = G.sel.c, h = G.sel.h;
+    row.replaceChildren(); skins.replaceChildren();
+    for (let i = 0; i < CHARS.length; i++) {
+      if (!mineOk(i)) continue;
+      const b = el('button', 'pk' + (i === cur ? ' on' : '')); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(i === cur)); b.setAttribute('aria-label', CHARS[i].species);
+      const img = new Image(); img.alt = ''; img.src = Chars.avatar(i, App.sel.ks[i], 56, h, App.sel.skinOf(i)); b.append(img, el('span', '', CHARS[i].species));
+      b.addEventListener('click', () => { if (i !== G.sel.c) sendLook(i, App.sel.skinOf(i)); });
+      row.appendChild(b);
+    }
+    const id = CHARS[cur].id, mine = window.App && App.account ? C.SKIN_THEMES.filter((t) => C.ownsSkin(App.account.owned, id, t.id)) : [];
+    skins.classList.toggle('hidden', !mine.length);
+    if (mine.length) for (const t of [{ id: '', name: 'Default' }].concat(mine)) {
+      const b = el('button', 'pk sk' + ((G.sel.sk || '') === t.id ? ' on' : '')); b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String((G.sel.sk || '') === t.id)); b.title = t.name; b.setAttribute('aria-label', t.name + ' skin');
+      const img = new Image(); img.alt = ''; img.src = Chars.avatar(cur, App.sel.ks[cur], 40, h, t.id); b.append(img);
+      b.addEventListener('click', () => { if ((G.sel.sk || '') !== t.id) sendLook(cur, t.id); });
+      skins.appendChild(b);
+    }
+  }
+  function showPick(left) {
+    const sec = left - C.COUNTDOWN;
+    if (!pickKey) {
+      pickHiding = false; pickKey = 'r' + G.rd; pickDur = Math.max(0.5, sec); paintPick(); pickEl.classList.remove('hidden');
+      if (pickTween) pickTween.kill();
+      if (RM.matches) gsap.set(pickEl, { autoAlpha: 1 });
+      else pickTween = gsap.timeline().fromTo(pickEl, { autoAlpha: 0, y: 40 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: 'back.out(1.6)' }).from('#pickChars .pk', { y: 16, opacity: 0, stagger: 0.03, duration: 0.3, ease: 'power2.out' }, 0.1);
+    }
+    $('pickTimer').textContent = Math.max(1, Math.ceil(sec));
+    $('pickBar').style.transform = `scaleX(${clamp(sec / pickDur, 0, 1).toFixed(3)})`;
+  }
+  function hidePick(now) {
+    if (pickEl.classList.contains('hidden') || (pickHiding && !now)) return;       // called every frame: only start the fade once
+    pickKey = ''; if (pickTween) { pickTween.kill(); pickTween = null; }
+    if (now || RM.matches) { pickHiding = false; gsap.set(pickEl, { clearProps: 'all' }); pickEl.classList.add('hidden'); return; }
+    pickHiding = true;
+    pickTween = gsap.to(pickEl, { autoAlpha: 0, y: 30, duration: 0.25, overwrite: true, onComplete: () => { pickHiding = false; if (!pickKey) { pickEl.classList.add('hidden'); gsap.set(pickEl, { clearProps: 'all' }); } } });
+  }
+  /** the server accepted your new look */
+  function onLook(m) {
+    const ci = clamp(m.c | 0, 0, CHARS.length - 1);
+    G.sel.c = ci; G.sel.k = m.k; G.sel.sk = m.sk || '';
+    if (G.me) G.me.c = ci;
+    if (window.App && App.setLook) App.setLook(ci, G.sel.sk);
+    const def = CHARS[ci]; $('abIcon').innerHTML = Chars.icon(def.fx); $('abName').textContent = def.ability; lastAbLabel = '';
+    Sfx.play('equip'); G.camSnap = true;
+    if (pickKey) paintPick();
+  }
+
   function updateVote(vc, vt) {
     const key = vc.m.join(',') + '|' + vc.d.join(',') + '|' + G.rd;
     if (key !== voteKey || voteEl.classList.contains('hidden')) buildVote(vc, key);
@@ -1093,7 +1170,7 @@
   Game.leave = () => {
     closeWs(); G.inGame = false; G.me = null; G.state = STATE.WAIT; G.joinResolve = null;
     document.body.classList.remove('is-it'); releaseAll(); closeChat(true); chatLog.innerHTML = '';
-    $('results').classList.add('hidden'); $('overlay').classList.add('hidden'); $('waiting').classList.add('hidden'); hideVote(true);
+    $('results').classList.add('hidden'); $('overlay').classList.add('hidden'); $('waiting').classList.add('hidden'); hideVote(true); hidePick(true);
     $('feed').innerHTML = ''; $('toasts').innerHTML = ''; $('banner').innerHTML = ''; $('countdown').textContent = '';
     gsap.killTweensOf('#hud *'); gsap.set('#hud *', { clearProps: 'all' });
     Particles.clear();

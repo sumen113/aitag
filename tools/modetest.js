@@ -1,5 +1,5 @@
 'use strict';
-process.env.VOTE_TIME = '0.4';
+process.env.VOTE_TIME = '0.4'; process.env.PICK_TIME = '0';
 /* Game-mode rules, run straight against Room (no sockets): voting, Infection, Hot Potato, spectators. */
 const T = require('../public/shared.js');
 const { Room } = require('../src/room.js');
@@ -212,6 +212,35 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   for (let i = 0; i < 60 * 14; i++) r2.tick();
   const bad = [...r2.players.values()].filter((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < -50 || p.y < -50 || p.x > m.w + 50 || p.y > m.h + 50);
   ok(r2.map.id === m.id && bad.length === 0, m.id + ': round runs and nobody leaves the arena');
+}
+
+
+// ---- change-character window: the first part of the countdown, after the vote ----
+{
+  const got = []; const wsA = { readyState: 1, send(m) { got.push(JSON.parse(m)); }, rtt: 0 };
+  const r3 = new Room('pick', { kind: 'custom', name: 't', max: 15, mode: 'vote', roundTime: 120, bots: 0 });
+  r3.pickTime = 7;
+  const A = r3.addHuman(wsA, 'Aa', 0, 0, 0, 0), B = r3.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'Bb', 0, 0, 0, 0);
+  r3.tick(); ok(r3.state === T.STATE.VOTE, 'pick: the vote comes first');
+  ok(!r3.canPick() && !r3.setLook(A, 2, 1, ''), 'pick: no character change during the vote');
+  run(r3, 20, () => r3.state === T.STATE.COUNT);
+  ok(r3.state === T.STATE.COUNT && Math.abs(r3.timer - (T.COUNTDOWN + 7)) < 0.3, 'pick: the countdown starts with the 7 s change window in front of the 4-3-2-1');
+  ok(r3.canPick() && r3.setLook(A, 3, 2, 'lava') && A.c === 3 && A.col === 2 && A.skin === 'lava', 'pick: a player can change character, colour and skin');
+  ok(r3.setLook(A, 0, 0, '') && A.c === 0, 'pick: and change again');
+  ok(!r3.setLook(A, 99, 0, ''), 'pick: unknown characters are refused');
+  A.cd = 5; A.abT = 1; r3.setLook(A, 1, 0, ''); ok(A.cd === 0 && A.abT === 0, 'pick: ability state starts fresh on the new character');
+  run(r3, 9, () => !r3.canPick());
+  ok(!r3.canPick() && r3.state === T.STATE.COUNT && r3.timer <= T.COUNTDOWN + 0.1, 'pick: the window closes when the 4-3-2-1 starts');
+  ok(!r3.setLook(A, 2, 0, '') && A.c === 1, 'pick: no change once the countdown is running');
+  run(r3, 6, () => r3.state === T.STATE.PLAY); ok(r3.state === T.STATE.PLAY, 'pick: then the round starts');
+  ok(!r3.setLook(A, 2, 0, ''), 'pick: no change mid-round');
+
+  // typing bubble: flag bit 64 in snapshots, expires, and is cleared by sending the message
+  const flagOf = (pl) => { got.length = 0; r3.sendSnapshots(); const sn = got.filter((m) => m.t === 's').pop(); const e = sn.p.find((x) => x[0] === pl.id); return e[7]; };
+  ok((flagOf(B) & 64) === 0, 'typing: no bubble by default');
+  B.typeAt = clk + 3000; ok((flagOf(B) & 64) === 64, 'typing: bubble flag set while typing');
+  clk += 3100; ok((flagOf(B) & 64) === 0, 'typing: it expires after 3 s without a refresh');
+  B.typeAt = clk + 3000; B.lastChat = 0; r3.chat(B, 'hi'); ok((flagOf(B) & 64) === 0, 'typing: sending the message clears the bubble');
 }
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED'); process.exit(fails ? 1 : 0);
