@@ -76,7 +76,7 @@
     G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
-    G.inGame = true; G.camSnap = true;
+    G.inGame = true; G.camSnap = true; pollBonus();
     const def = CHARS[G.sel.c];
     $('abIcon').innerHTML = Chars.icon(def.fx); $('abName').textContent = def.ability;
     $('feed').innerHTML = ''; $('toasts').innerHTML = ''; $('results').classList.add('hidden'); $('overlay').classList.add('hidden');
@@ -433,10 +433,25 @@
     setTimeout(() => d.classList.add('old'), 20000);
     if (!m.p) Sfx.play('chat');
   }
+  /* staff "double wins" style event: a chip under the timer while it runs (checked every 20 s) */
+  let bonusAt = 0, bonusM = 0, bonusLeft = 0;
+  async function pollBonus() {
+    try { const s = await (await fetch('/api/stats', { cache: 'no-store' })).json(); bonusM = s.bonus ? s.bonus.m : 0; bonusLeft = s.bonus ? s.bonus.left : 0; bonusAt = performance.now(); } catch (e) { /* keep the last answer */ }
+    paintBonus();
+  }
+  function paintBonus() {
+    const left = bonusLeft - (performance.now() - bonusAt), chip = $('bonusChip');
+    if (!G.inGame || G.solo || bonusM < 2 || left <= 0) { chip.classList.add('hidden'); return; }
+    const tm = Math.ceil(left / 60e3), h = Math.floor(tm / 60), mn = tm % 60, txt = `x${bonusM} WINS · ${h ? h + 'h ' : ''}${mn}m left`;
+    if (chip.textContent !== txt) chip.textContent = txt;
+    chip.classList.remove('hidden');
+  }
+  setInterval(() => { if (G.inGame) { if (performance.now() - bonusAt > 20000) pollBonus(); else paintBonus(); } }, 5000);
   function onAward(m) {
     if (window.App && App.onAward) App.onAward(m);
-    const box = $('resWin'); box.className = 'res-win'; box.textContent = `★ +1 win saved · ${m.wins} total · ${m.balance} to spend`;
-    if (G.state !== STATE.RESULTS) toast(`+1 win · ${m.balance} to spend`);
+    const g = m.gain > 1 ? m.gain : 1, ws = g === 1 ? '+1 win' : `+${g} wins (x${g} event!)`;
+    const box = $('resWin'); box.className = 'res-win'; box.textContent = `★ ${ws} saved · ${m.wins} total · ${m.balance} to spend`;
+    if (G.state !== STATE.RESULTS) toast(`${ws} · ${m.balance} to spend`);
     else gsap.fromTo(box, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(3)' });
     Sfx.play('win');
   }
@@ -745,7 +760,7 @@
 
   /* Anyone standing under an on-screen panel (scoreboard, chat, timer, minimap, buttons...) used to be impossible to see,
      so people hid behind the interface. Now a panel fades out while a player is behind it, so they stay visible and taggable. */
-  const HUD_FADE = '.hud-tools, #timerBox, #role, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #joy';
+  const HUD_FADE = '.hud-tools, #timerBox, #role, #bonusChip, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #joy';
   let hudEls = null, hudRects = [], hudAt = 0, hudRectsAt = 0;
   function seeThrough(ents, dt) {
     hudAt -= dt; if (hudAt > 0) return; hudAt = 0.08;
@@ -1168,7 +1183,7 @@
     setTimeout(() => { if (G.inGame) toast(touchy ? `Drag to move · tap ${def.ability}` : def.id === 'avocado' ? 'WASD to move · aim with the mouse · CLICK or SPACE to shoot' : `WASD to move · SPACE for ${def.ability} · ENTER to chat`); }, 900);
   };
   Game.leave = () => {
-    closeWs(); G.inGame = false; G.me = null; G.state = STATE.WAIT; G.joinResolve = null;
+    closeWs(); G.inGame = false; $('bonusChip').classList.add('hidden'); G.me = null; G.state = STATE.WAIT; G.joinResolve = null;
     document.body.classList.remove('is-it'); releaseAll(); closeChat(true); chatLog.innerHTML = '';
     $('results').classList.add('hidden'); $('overlay').classList.add('hidden'); $('waiting').classList.add('hidden'); hideVote(true); hidePick(true);
     $('feed').innerHTML = ''; $('toasts').innerHTML = ''; $('banner').innerHTML = ''; $('countdown').textContent = '';

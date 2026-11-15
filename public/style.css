@@ -569,6 +569,8 @@ body.in-game .news-card { display: none !important; }
 .tone[aria-checked="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--ink); }
 
 /* ---- game modes: vote screen, potato fuse, spectators ---- */
+.role.bonus { background: var(--yellow); }
+.role.bonus.hidden { display: none; }
 #vote { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; background: rgba(20, 18, 43, .42); z-index: 6; }
 #vote.hidden { display: none; }
 .vote-card { width: min(720px, 100%); max-height: 100%; overflow: auto; padding: 16px 18px 14px; display: grid; gap: 8px; box-shadow: 6px 6px 0 var(--ink) !important; }

@@ -110,7 +110,7 @@ function join(name, cookie, c = 0) {
   r = await post('/api/chest/open', { tier: 'gold', gift: true }, pleb); j = await r.json(); ok(r.status === 200 && j.result.tier === 'gold' && j.user.chest.gifts.gold === 1 && j.user.balance === me4.user.balance, 'opening a gifted chest costs no wins and uses one gift');
   r = await post('/api/chest/open', { tier: 'wood', gift: true }, pleb); ok(r.status === 400, 'cannot open a gift you do not have');
   r = await post('/api/admin/bonus', { m: 3, hours: 2 }, boss, 'sesame'); j = await r.json(); ok(j.bonus && j.bonus.m === 3, 'start a win bonus');
-  j = await (await fetch(BASE + '/api/stats')).json(); ok(j.bonus && j.bonus.m === 3, 'the status shows the bonus to everyone');
+  j = await (await fetch(BASE + '/api/stats')).json(); ok(j.bonus && j.bonus.m === 3 && j.bonus.left > 7000e3 && j.bonus.left <= 7200e3, 'the status shows the bonus to everyone, with the time left (independent of the viewer\'s clock)');
   r = await post('/api/admin/bonus', { m: 9, hours: 500 }, boss, 'sesame'); j = await r.json(); ok(j.bonus.m === 5 && j.bonus.until - Date.now() <= 72 * 3600e3 + 1000, 'bonus limits are clamped');
   r = await post('/api/admin/bonus', { m: 1, hours: 0 }, boss, 'sesame'); j = await r.json(); ok(j.bonus === null, 'end the bonus');
   const pj = await join('x', pleb); await sleep(200);

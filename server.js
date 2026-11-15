@@ -60,7 +60,7 @@ const board = { list: null, at: 0 };                            // leaderboard c
 function stats() {
   let players = 0, pub = 0;
   for (const r of rooms.values()) { players += r.humanCount(); if (!r.solo) pub++; }
-  return { ok: true, players, rooms: pub, uptime: Math.round(process.uptime()), accounts: !!store, banner: admin ? admin.banner() : '', bonus: admin ? admin.bonus() : null };
+  return { ok: true, players, rooms: pub, uptime: Math.round(process.uptime()), accounts: !!store, banner: admin ? admin.banner() : '', bonus: admin && admin.bonus() ? Object.assign({ left: admin.bonus().until - Date.now() }, admin.bonus()) : null };      // `left` so clients with a wrong clock still show the right time
 }
 
 const server = http.createServer(async (req, res) => {
@@ -114,7 +114,7 @@ function createRoom(opts) {
   if (!r.solo) r.onWin = (p) => {
     if (!store || !p.uid) return;
     const b = admin && admin.bonus();                          // staff win-bonus event: x2, x3... for a while
-    store.addWin(p.uid).then(async (u) => { if (u && b) u = (await store.adjustWins(p.uid, b.m - 1)) || u; if (u) r.send(p, { t: 'award', wins: u.wins, balance: u.wins - u.spent }); }).catch((e) => console.error('addWin failed', e.message));
+    store.addWin(p.uid).then(async (u) => { if (u && b) u = (await store.adjustWins(p.uid, b.m - 1)) || u; if (u) r.send(p, { t: 'award', wins: u.wins, balance: u.wins - u.spent, gain: b ? b.m : 1 }); }).catch((e) => console.error('addWin failed', e.message));
   };
   return r;
 }
