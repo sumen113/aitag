@@ -440,22 +440,22 @@
     if (!m.p) Sfx.play('chat');
   }
   /* staff "double wins" style event: a chip under the timer while it runs (checked every 20 s) */
-  let bonusAt = 0, bonusM = 0, bonusLeft = 0;
+  let bonusAt = 0, bonusM = 0, bonusLeft = 0, bonusKind = 'wins';
   async function pollBonus() {
-    try { const s = await (await fetch('/api/stats', { cache: 'no-store' })).json(); bonusM = s.bonus ? s.bonus.m : 0; bonusLeft = s.bonus ? s.bonus.left : 0; bonusAt = performance.now(); } catch (e) { /* keep the last answer */ }
+    try { const s = await (await fetch('/api/stats', { cache: 'no-store' })).json(); bonusM = s.bonus ? s.bonus.m : 0; bonusKind = s.bonus && s.bonus.kind === 'points' ? 'points' : 'wins'; bonusLeft = s.bonus ? s.bonus.left : 0; bonusAt = performance.now(); } catch (e) { /* keep the last answer */ }
     paintBonus();
   }
   function paintBonus() {
     const left = bonusLeft - (performance.now() - bonusAt), chip = $('bonusChip');
     if (!G.inGame || G.solo || bonusM < 2 || left <= 0) { chip.classList.add('hidden'); return; }
-    const tm = Math.ceil(left / 60e3), h = Math.floor(tm / 60), mn = tm % 60, txt = `x${bonusM} WINS · ${h ? h + 'h ' : ''}${mn}m left`;
+    const tm = Math.ceil(left / 60e3), h = Math.floor(tm / 60), mn = tm % 60, txt = `x${bonusM} ${bonusKind === 'points' ? 'POINTS' : 'WINS'} · ${h ? h + 'h ' : ''}${mn}m left`;
     if (chip.textContent !== txt) chip.textContent = txt;
     chip.classList.remove('hidden');
   }
   setInterval(() => { if (G.inGame) { if (performance.now() - bonusAt > 20000) pollBonus(); else paintBonus(); } }, 5000);
   function onAward(m) {
     if (window.App && App.onAward) App.onAward(m);
-    const g = m.gain > 1 ? m.gain : 1, ws = g === 1 ? '+1 win' : `+${g} wins (x${g} event!)`;
+    const g = m.gain > 1 ? m.gain : 1, ws = g === 1 ? '+1 win' : m.pts ? `+1 win +${g - 1} bonus points (x${g} event!)` : `+${g} wins (x${g} event!)`;
     const box = $('resWin'); box.className = 'res-win'; box.textContent = `★ ${ws} saved · ${m.wins} total · ${m.balance} to spend`;
     if (G.state !== STATE.RESULTS) toast(`${ws} · ${m.balance} to spend`);
     else gsap.fromTo(box, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(3)' });

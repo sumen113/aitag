@@ -111,6 +111,23 @@ function join(name, cookie, c = 0) {
   r = await post('/api/chest/open', { tier: 'wood', gift: true }, pleb); ok(r.status === 400, 'cannot open a gift you do not have');
   r = await post('/api/admin/bonus', { m: 3, hours: 2 }, boss, 'sesame'); j = await r.json(); ok(j.bonus && j.bonus.m === 3, 'start a win bonus');
   j = await (await fetch(BASE + '/api/stats')).json(); ok(j.bonus && j.bonus.m === 3 && j.bonus.left > 7000e3 && j.bonus.left <= 7200e3, 'the status shows the bonus to everyone, with the time left (independent of the viewer\'s clock)');
+  // the two bonus types: 'wins' moves the leaderboard too, 'points' only adds spendable balance
+  {
+    const st2 = srv.getStore(), rm = srv.createRoom({ kind: 'public' }), lb = async () => ((await (await fetch(BASE + '/api/leaderboard')).json()).top.find((x) => x.username === 'Pleb') || { wins: 0 }).wins;
+    const win = async () => { const u = await st2.userByName('Pleb'); rm.onWin({ uid: u.id, name: 'Pleb' }); await new Promise((r2) => setTimeout(r2, 400)); return st2.userByName('Pleb'); };
+    srv.resetBoard();
+    let w0 = (await st2.userByName('Pleb')).wins, l0 = await lb();
+    r = await post('/api/admin/bonus', { m: 3, hours: 2, kind: 'points' }, boss, 'sesame'); j = await r.json(); ok(j.bonus && j.bonus.kind === 'points', 'a points-only bonus can be started');
+    j = await (await fetch(BASE + '/api/stats')).json(); ok(j.bonus.kind === 'points', 'everyone sees that it is a points bonus');
+    let u2 = await win(); srv.resetBoard();
+    ok(u2.wins - w0 === 3, 'points bonus: the win pays x3 spendable (' + (u2.wins - w0) + ')');
+    ok((await lb()) - l0 === 1, 'points bonus: the leaderboard only moves by 1 (' + ((await lb()) - l0) + ')');
+    w0 = u2.wins; l0 = await lb();
+    r = await post('/api/admin/bonus', { m: 2, hours: 2 }, boss, 'sesame'); j = await r.json(); ok(j.bonus.kind === 'wins', 'the default bonus type is wins');
+    u2 = await win(); srv.resetBoard();
+    ok(u2.wins - w0 === 2 && (await lb()) - l0 === 2, 'wins bonus: spendable and leaderboard both move by 2');
+    r = await post('/api/admin/bonus', { m: 1, hours: 0 }, boss, 'sesame');
+  }
   r = await post('/api/admin/bonus', { m: 9, hours: 500 }, boss, 'sesame'); j = await r.json(); ok(j.bonus.m === 5 && j.bonus.until - Date.now() <= 72 * 3600e3 + 1000, 'bonus limits are clamped');
   r = await post('/api/admin/bonus', { m: 1, hours: 0 }, boss, 'sesame'); j = await r.json(); ok(j.bonus === null, 'end the bonus');
   const pj = await join('x', pleb); await sleep(200);

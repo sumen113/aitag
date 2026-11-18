@@ -114,7 +114,7 @@ function createRoom(opts) {
   if (!r.solo) r.onWin = (p) => {
     if (!store || !p.uid) return;
     const b = admin && admin.bonus();                          // staff win-bonus event: x2, x3... for a while
-    store.addWin(p.uid).then(async (u) => { if (u && b) u = (await store.adjustWins(p.uid, b.m - 1)) || u; if (u) r.send(p, { t: 'award', wins: u.wins, balance: u.wins - u.spent, gain: b ? b.m : 1 }); }).catch((e) => console.error('addWin failed', e.message));
+    store.addWin(p.uid).then(async (u) => { if (u && b) { u = (await store.adjustWins(p.uid, b.m - 1)) || u; if (b.kind === 'points') await admin.shiftLbBase(u.username, b.m - 1); } if (u) { r.send(p, { t: 'award', wins: u.wins, balance: u.wins - u.spent, gain: b ? b.m : 1, pts: b && b.kind === 'points' }); } }).catch((e) => console.error('addWin failed', e.message));
   };
   return r;
 }

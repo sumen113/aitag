@@ -70,8 +70,8 @@
   /* ---------------------------- live / broadcast ---------------------------- */
   function paint(s) {
     const tiles = [['Players', s.humans], ['Rooms', s.rooms.length], ['Accounts', s.accounts], ['Uptime', fmtUp(s.uptime)], ['Memory', s.mem + ' MB'], ['Storage', s.db === 'postgres' ? 'Postgres' : 'Dev file']];
-    if (s.bonus) tiles.push(['Win bonus', `x${s.bonus.m} · ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left`]);
-    $('adBonusNow').textContent = s.bonus ? `Running now: x${s.bonus.m} wins, ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left.` : 'No bonus is running.';
+    if (s.bonus) tiles.push([s.bonus.kind === 'points' ? 'Points bonus' : 'Win bonus', `x${s.bonus.m} · ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left`]);
+    $('adBonusNow').textContent = s.bonus ? `Running now: x${s.bonus.m} ${s.bonus.kind === 'points' ? 'points (leaderboard unchanged)' : 'wins'}, ${fmtUp(Math.round((s.bonus.until - Date.now()) / 1000))} left.` : 'No bonus is running.';
     $('adTiles').replaceChildren(...tiles.map(([k, v]) => { const d = el('div', 'ad-tile'); d.append(el('span', 'mono', k), el('b', '', String(v))); return d; }));
 
     const pb = $('adPlayers').tBodies[0]; pb.replaceChildren();
@@ -249,7 +249,7 @@
   fill($('adSkTheme'), [['', 'All themes'], ...THEMES.map((t) => [t.id, `${t.name} (${rarName(t.rarity)})`])]);
   const tiers = T.CHEST_ORDER.map((id) => [id, T.CHEST_TIERS[id].name]);
   fill($('adGfTier'), tiers); fill($('adAllTier'), [['', 'No chest'], ...tiers]);
-  fill($('adBonusM'), [2, 3, 4, 5].map((m) => [String(m), `x${m} wins`]));
+  fill($('adBonusM'), [2, 3, 4, 5].map((m) => [String(m), `x${m}`]));
   const sk = { user: null };
   const curName = () => (sk.user ? sk.user.username : $('adSkUser').value.trim());
 
@@ -319,8 +319,8 @@
 
   /* ---------------------------------- events ---------------------------------- */
   $('adBonusForm').addEventListener('submit', async (e) => {
-    e.preventDefault(); const r = await api('bonus', { m: Number($('adBonusM').value), hours: Number($('adBonusH').value) });
-    done(r, `x${$('adBonusM').value} wins for ${$('adBonusH').value}h. Go!`);
+    e.preventDefault(); const kind = $('adBonusK').value, r = await api('bonus', { m: Number($('adBonusM').value), hours: Number($('adBonusH').value), kind });
+    done(r, `x${$('adBonusM').value} ${kind === 'points' ? 'points' : 'wins'} for ${$('adBonusH').value}h. Go!`);
   });
   $('adBonusEnd').addEventListener('click', async () => done(await api('bonus', { m: 1, hours: 0 }), 'Bonus ended.'));
   $('adAllForm').addEventListener('submit', async (e) => {

@@ -387,7 +387,7 @@
       const r = await fetch('/api/stats', { cache: 'no-store' }), s = await r.json();
       $('onlineNav').textContent = s.players ? `${s.players} playing now` : 'Be the first in';
       const bn = $('siteBanner'); let txt = s.banner || '';
-      if (s.bonus && s.bonus.left > 0) { const tm = Math.ceil(s.bonus.left / 60e3), h = Math.floor(tm / 60), m = tm % 60; txt = (txt ? txt + ' · ' : '') + `x${s.bonus.m} wins right now (${h ? h + 'h ' : ''}${m}m left)`; }
+      if (s.bonus && s.bonus.left > 0) { const tm = Math.ceil(s.bonus.left / 60e3), h = Math.floor(tm / 60), m = tm % 60; txt = (txt ? txt + ' · ' : '') + `x${s.bonus.m} ${s.bonus.kind === 'points' ? 'points' : 'wins'} right now (${h ? h + 'h ' : ''}${m}m left)`; }
       if ($('siteBannerTxt').textContent !== txt) $('siteBannerTxt').textContent = txt;
       bn.classList.toggle('hidden', !txt);
     } catch (e) { $('onlineNav').textContent = 'Online'; }

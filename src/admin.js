@@ -38,7 +38,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   /** Staff log: kept in the saved state (last 200), so it survives restarts and redeploys. */
   const record = (by, action, detail) => { st.log = st.log || []; st.log.unshift({ t: Date.now(), by, a: action, d: detail }); if (st.log.length > 200) st.log.length = 200; save(); console.log(`[admin] ${by}: ${action} ${detail}`); };
   /** Win bonus event: { m: multiplier, until: ms } or null. Expired events count as none. */
-  const bonus = () => { const b = st.bonus; return b && b.m > 1 && b.until > Date.now() ? { m: b.m, until: b.until } : null; };
+  const bonus = () => { const b = st.bonus; return b && b.m > 1 && b.until > Date.now() ? { m: b.m, until: b.until, kind: b.kind === 'points' ? 'points' : 'wins' } : null; };      // kind 'wins': every win counts x times everywhere. 'points': the extra counts as spendable points only, the leaderboard still sees 1 win
 
   const isAdmin = (name) => admins.has(lower(name));
   const banReason = (name) => { const b = st.bans[lower(name)]; return b ? b.reason || 'No reason given.' : null; };
@@ -46,6 +46,8 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   const banner = () => st.banner || '';
   /** A custom title (and its colour) given to an account from the staff page. Nobody has one by default, staff included. */
   const titleOf = (name) => { const t = st.titles && st.titles[lower(name)]; return t ? { t: t.t, c: t.c } : null; };
+  /** Points-only bonus: the extra wins are spendable but must not move the leaderboard, so they are added to the account's leaderboard baseline too. */
+  const shiftLbBase = async (name, n) => { if (!name || !n) return; st.lbBase = st.lbBase || {}; st.lbBase[lower(name)] = (st.lbBase[lower(name)] || 0) + n; await save(); };
   const lbBase = (name) => (st.lbBase && st.lbBase[lower(name)]) || 0;     // wins that no longer count toward the leaderboard
 
   /* ------------------------------- helpers ------------------------------- */
@@ -244,8 +246,9 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
       if (act === 'bonus') {                                 // win multiplier event (e.g. double wins for 3 hours)
         const m = Math.max(1, Math.min(5, body.m | 0)), hours = Math.max(0, Math.min(72, Number(body.hours) || 0));
         if (m <= 1 || !hours) { st.bonus = null; await save(); record(me, 'bonus-end', ''); return json(res, 200, { ok: true, bonus: null }), true; }
-        st.bonus = { m, until: Date.now() + Math.round(hours * 3600e3), by: me };
-        await save(); record(me, 'bonus', `x${m} wins for ${hours}h`);
+        const kind = body.kind === 'points' ? 'points' : 'wins';
+        st.bonus = { m, kind, until: Date.now() + Math.round(hours * 3600e3), by: me };
+        await save(); record(me, 'bonus', `x${m} ${kind === 'points' ? 'points (leaderboard unchanged)' : 'wins'} for ${hours}h`);
         return json(res, 200, { ok: true, bonus: bonus() }), true;
       }
 
@@ -297,7 +300,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, bonus, lbBase, titleOf, admins };
+  return { handle, load, isAdmin, banReason, isMuted, banner, bonus, lbBase, shiftLbBase, titleOf, admins };
 }
 
 module.exports = { create, ADMIN_USERNAMES };
