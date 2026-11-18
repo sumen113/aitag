@@ -30,13 +30,15 @@ class Room {
     this.diff = DIFFS[opts.diff] ? opts.diff : 'normal';
     this.botSpeed = DIFFS[this.diff].sm;
     this.regular = opts.kind === 'public';              // the always-on Regular server
-    this.name = opts.name || (this.regular ? T.REGULAR_NAME : 'Practice');
+    this.testServer = opts.kind === 'test';             // the always-on Test Server: wins count (3+ players), every round votes on a test-only mode
+    this.name = opts.name || (this.regular ? T.REGULAR_NAME : this.testServer ? T.TEST_NAME : 'Practice');
     this.roundTime = opts.roundTime || T.ROUND_TIME;    // seconds per game
     this.max = opts.max || T.MAX_PLAYERS;               // max players (bots use slots, humans push them out)
     this.botTarget = this.solo ? BOT_COUNT : Math.max(0, opts.bots | 0);
     this.lock = opts.lock || null;                      // { salt, hash } when the server has a password
     // game mode: a fixed one ('classic' | 'infection' | 'potato') or 'vote' (players vote on the map and the mode every round)
-    this.modeOpt = T.MODE_BY_ID[opts.mode] || opts.mode === 'vote' ? opts.mode : (this.regular || this.solo ? 'vote' : 'classic');
+    const fixedMode = T.MODE_BY_ID[opts.mode] && !T.MODE_BY_ID[opts.mode].testOnly;       // test-only modes can only be voted for on the Test Server
+    this.modeOpt = this.testServer ? 'vote' : fixedMode || opts.mode === 'vote' ? opts.mode : (this.regular || this.solo ? 'vote' : 'classic');
     this.customTime = !!opts.roundTime && !this.regular && !this.solo;
     this.voteTime = +process.env.VOTE_TIME || opts.voteTime || T.VOTE_TIME;
     this.pickTime = process.env.PICK_TIME !== undefined ? Math.max(0, +process.env.PICK_TIME || 0) : T.PICK_TIME;      // change-character window before each round's countdown
@@ -118,7 +120,7 @@ class Room {
     if (on && p.it && this.state === STATE.PLAY && this.mode !== 'infection') { p.it = 0; p.pot = 0; if (this.itId === p.id) this.itId = 0; this.reassignIt(); }
     this.rosterDirty = true;
   }
-  holdForNextRound(p) { if (this.mode !== 'classic' && (this.state === STATE.COUNT || this.state === STATE.PLAY)) { p.out = 1; p.wait = 1; } }      // classic tag can be joined any time
+  holdForNextRound(p) { if (!T.classicLike(this.mode) && (this.state === STATE.COUNT || this.state === STATE.PLAY)) { p.out = 1; p.wait = 1; } }      // classic tag can be joined any time
 
   rebalanceBots() {
     const humans = this.humanCount();
@@ -184,7 +186,7 @@ class Room {
   /** Everything between rounds starts here: a vote (regular servers, practice, "vote" custom servers) or straight into the countdown. */
   beginRound() {
     if (this.modeOpt === 'vote') {
-      const choice = this.mapMode === 'rotate' || this.players.size >= T.MODE_MIN_PLAYERS;      // nothing to vote on (fixed arena, too few players for special modes): skip the vote
+      const choice = this.testServer || this.mapMode === 'rotate' || this.players.size >= T.MODE_MIN_PLAYERS;      // nothing to vote on (fixed arena, too few players for special modes): skip the vote. The Test Server always votes on its mode.
       if (choice) this.startVote(); else { this.setMode('classic'); this.startCountdown(); }
     } else { this.setMode(this.modeOpt); this.startCountdown(); }
   }
@@ -194,7 +196,7 @@ class Room {
     this.itId = 0; this.results = null;
     const maps = this.mapMode !== 'rotate' ? [this.map.id] : shuffle(T.MAPS.filter((m) => m !== this.map)).slice(0, 3).map((m) => m.id);
     const crowd = this.players.size >= T.MODE_MIN_PLAYERS;               // Infection and Hot Potato only make sense with a crowd
-    this.vote = { maps, modes: T.MODES.filter((m) => crowd || m.id === 'classic').map((m) => m.id) };
+    this.vote = { maps, modes: T.MODES.filter((m) => this.testServer ? m.testOnly : !m.testOnly && (crowd || m.id === 'classic')).map((m) => m.id) };      // Test Server: only its two modes; everywhere else: never the test modes
     this.state = STATE.VOTE; this.timer = this.voteTime; this.tl = this.voteTime;
     this.emit({ k: 'st', s: STATE.VOTE, vc: { m: this.vote.maps, d: this.vote.modes } });
   }
@@ -222,7 +224,7 @@ class Room {
       this.setMode(this.vote.modes[anyMode || !this.solo ? best(t.d) : 0]);       // nobody voted in practice: classic; elsewhere a random pick
       this.nextMap = T.MAP_BY_ID[this.vote.maps[best(t.m)]];
     }
-    if (this.mode !== 'classic' && this.players.size < T.MODE_MIN_PLAYERS) this.setMode('classic');      // too few players (or people left during the vote)
+    if (!T.classicLike(this.mode) && this.players.size < T.MODE_MIN_PLAYERS) this.setMode('classic');      // too few players (or people left during the vote)
     let m = this.nextMap || (this.round > 0 && this.modeOpt !== 'vote' ? this.pickMap() : this.map);
     const need = this.modeDef().map;
     if (need) m = T.MAP_BY_ID[need];                    // Infection always plays on the big map
@@ -235,6 +237,14 @@ class Room {
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
     this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN + this.pickTime; this.tl = this.timer;
     this.emit({ k: 'st', s: STATE.COUNT, m: this.map.id, rd: this.round, md: this.mode });
+  }
+
+  /** Tagger Proximity: points per second for `p`, from how close they are to the nearest active tagger. Ghosted / freshly-tagged players only get the base rate. */
+  proxRate(p, hunters) {
+    if (!hunters.length || p.imm > 0 || ghosted(p)) return T.PROX_MIN;
+    let gap = Infinity;
+    for (const h of hunters) gap = Math.min(gap, Math.hypot(h.x - p.x, h.y - p.y) - (CHARS[h.c].radius + CHARS[p.c].radius + T.TAG_REACH));
+    return T.proxRate(Math.max(0, gap));
   }
 
   /** The change-character window: the first part of the countdown (before the 4-3-2-1), after the vote has closed. */
@@ -250,7 +260,7 @@ class Room {
 
   startPlay() {
     const arr = shuffle([...this.players.values()].filter((p) => !p.out));
-    this.itWant = this.mode === 'classic' ? T.itCountFor(arr.length) : 1;      // 7+ players: two taggers in classic tag; Infection and Hot Potato always start with exactly one
+    this.itWant = T.classicLike(this.mode) ? T.itCountFor(arr.length) : 1;      // 7+ players: two taggers in classic tag; Infection and Hot Potato always start with exactly one
     const its = arr.slice(0, this.itWant);
     const fuse = T.potatoFuse(0, 0);
     for (const it of its) { it.it = 1; it.stun = T.HEAD_START; if (this.mode === 'potato') it.pot = fuse + T.HEAD_START; }
@@ -260,12 +270,12 @@ class Room {
   }
 
   endRound() {
-    if (this.mode !== 'classic') for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
+    if (!T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
     const inMatch = [...this.players.values()].filter((p) => !p.wait);
     const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
     // wins are only paid out in the main (public) server, with at least MIN_WIN_PLAYERS real players, to registered accounts that were actually playing. Private/custom servers and practice never pay wins (anti-farming).
-    if (this.onWin && this.regular && !this.solo && list.length && this.activeHumans() >= MIN_WIN_PLAYERS) {
+    if (this.onWin && (this.regular || this.testServer) && !this.solo && list.length && this.activeHumans() >= MIN_WIN_PLAYERS) {
       const best = Math.floor(list[0].s);                // the displayed top score: everyone who finished on it shares the win
       if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
         if (Math.floor(r.s) !== best) break;
@@ -287,6 +297,7 @@ class Room {
   /** IT touched `victim`. Classic: the role moves. Infection: the victim joins the infected. Potato: the potato moves and its fuse restarts. */
   tag(it, victim) {
     this.tagCount++; it.tags++;
+    if (this.mode === 'points') it.score += T.TAG_POINTS;                    // Tagger Points: a tag is worth 10
     if (this.mode === 'infection') {
       victim.it = 1; victim.lock = 0.9; victim.stun = 0; victim.imm = 0;
       this.itId = victim.id;
@@ -297,7 +308,7 @@ class Room {
     victim.it = 1; victim.lock = T.TAG_LOCK; victim.stun = 0;
     if (this.mode === 'potato') { this.passes++; victim.pot = T.potatoFuse(this.passes, this.elims); }
     this.itId = victim.id;
-    this.emit({ k: 'tag', a: it.id, b: victim.id, x: victim.x, y: victim.y });
+    this.emit({ k: 'tag', a: it.id, b: victim.id, x: victim.x, y: victim.y, ...(this.mode === 'points' ? { pts: T.TAG_POINTS } : null) });
   }
 
   /** Hot Potato: the fuse ran out. The holder is eliminated (becomes a spectator ghost) and the potato lands on a random survivor. */
@@ -580,7 +591,8 @@ class Room {
     // ---- tagging & scoring
     if (this.state === STATE.PLAY) {
       const potato = this.mode === 'potato', infection = this.mode === 'infection';
-      for (const p of this.players.values()) if (!p.out && !p.gone && !p.afk && (potato || !p.it)) p.score += DT;          // time survived
+      const prox = this.mode === 'proximity', hunters = prox ? this.itPlayers().filter((h) => h.stun <= 0 && h.lock <= 0 && !h.out && !h.gone) : null;      // proximity only counts a tagger who can actually tag right now (no farming a stunned one)
+      for (const p of this.players.values()) if (!p.out && !p.gone && !p.afk && (potato || !p.it)) p.score += DT * (prox && !p.it ? this.proxRate(p, hunters) : 1);          // time survived (Tagger Proximity: faster the closer you are to IT)
       for (const it of this.itPlayers()) {
         if (!it.it || it.out || it.gone) continue;                       // already handed over by an earlier tag this tick
         if (potato) { it.pot -= DT; if (it.pot <= 0) { this.explode(it); continue; } }

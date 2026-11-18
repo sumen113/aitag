@@ -34,7 +34,16 @@
     { id: 'classic',   name: 'Classic Tag', short: 'Classic', time: 0,   map: '',         boost: 1.07, blurb: 'One tagger. Stay untagged the longest to win.' },
     { id: 'infection', name: 'Infection',   short: 'Infection', time: 150, map: 'outbreak', boost: 1.0, blurb: 'Every tag infects. Be the last survivor. Plays on the big Outbreak map.' },
     { id: 'potato',    name: 'Hot Potato',  short: 'Potato',  time: 180, map: '',         boost: 1.1, blurb: 'Pass the potato before it blows up. Last one standing wins.' },
+    // test-server modes (never on the Regular server, in practice or in player-made servers): classic tag with a different way to score
+    { id: 'proximity', name: 'Tagger Proximity', short: 'Proximity', time: 0, map: '', boost: 1.07, testOnly: true, blurb: 'The closer you are to IT, the faster you score. Risky, but even if you get tagged you can climb back to the top.' },
+    { id: 'points',    name: 'Tagger Points',    short: 'Points',    time: 0, map: '', boost: 1.07, testOnly: true, blurb: 'Tag someone as IT and get 10 points, on top of surviving. Getting tagged is a chance to catch up.' },
   ];
+  const classicLike = (id) => id === 'classic' || !!(MODE_BY_ID[id] && MODE_BY_ID[id].testOnly);     // one role that moves on a tag (not infection / potato)
+  const PROX_MIN = 0.3, PROX_MAX = 5, PROX_RANGE = 380;           // Tagger Proximity: points per second far from IT / touching IT / the distance over which the bonus fades
+  const TAG_POINTS = 10;                                          // Tagger Points: what a tag is worth
+  /** Tagger Proximity score rate (points/s) for a player `gap` px away from the tagger's tagging range. */
+  const proxRate = (gap) => { const f = 1 - Math.min(1, Math.max(0, gap / PROX_RANGE)); return PROX_MIN + (PROX_MAX - PROX_MIN) * f * f; };
+  const TEST_NAME = 'Test Server';
   const MODE_BY_ID = {}; MODES.forEach((m, i) => { m.i = i; MODE_BY_ID[m.id] = m; });
   const POTATO_START = 10, POTATO_MIN = 3, POTATO_PASS_STEP = 0.4, POTATO_ELIM_STEP = 0.5;      // fuse seconds: every pass and every elimination shortens it
   const potatoFuse = (passes, elims) => Math.max(POTATO_MIN, POTATO_START - POTATO_PASS_STEP * (passes || 0) - POTATO_ELIM_STEP * (elims || 0));
@@ -204,7 +213,7 @@
     const pass = o.pass == null ? '' : String(o.pass);
     if (pass && (pass.length < SERVER_LIMITS.PASS_MIN || pass.length > SERVER_LIMITS.PASS_MAX)) return { ok: false, err: `Passwords are ${SERVER_LIMITS.PASS_MIN}-${SERVER_LIMITS.PASS_MAX} characters (or leave it empty for an open server).` };
     const mode = o.mode === undefined || o.mode === '' ? 'vote' : String(o.mode);
-    if (mode !== 'vote' && !MODE_BY_ID[mode]) return { ok: false, err: 'Unknown game mode.' };
+    if (mode !== 'vote' && (!MODE_BY_ID[mode] || MODE_BY_ID[mode].testOnly)) return { ok: false, err: 'Unknown game mode.' };
     return { ok: true, name, time, max, map, bots, diff, pass, mode };
   }
 
@@ -722,7 +731,7 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };

@@ -7,11 +7,11 @@ const T = require('../public/shared.js');
 const WebSocket = require('ws');
 const BASE = 'http://127.0.0.1:3130', sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ok  ' : '  FAIL ') + m); if (!c) fails++; };
-function join(name, c = 0) {
+function join(name, c = 0, extra) {
   return new Promise((res) => {
     const ws = new WebSocket('ws://127.0.0.1:3130/ws'); const o = { ws, msgs: [], snap: null, looks: [], send: (m) => ws.send(JSON.stringify(m)) };
-    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name, mode: 'online', c, k: 0 })));
-    ws.on('message', (d) => { const m = JSON.parse(d); if (m.t === 'init') { o.id = m.id; res(o); } if (m.t === 's') o.snap = m; if (m.t === 'look') o.looks.push(m); });
+    ws.on('open', () => ws.send(JSON.stringify(Object.assign({ t: 'join', name, mode: 'online', c, k: 0 }, extra))));
+    ws.on('message', (d) => { const raw = String(d); const vm = /"vc":\{[^}]*\}/.exec(raw); if (vm) o.vc = JSON.parse('{' + vm[0] + '}').vc; const m = JSON.parse(raw); if (m.t === 'init') { o.id = m.id; res(o); } if (m.t === 'err') { o.err = m.m; res(o); } if (m.t === 's') o.snap = m; if (m.t === 'look') o.looks.push(m); });
   });
 }
 (async () => {
@@ -34,5 +34,20 @@ function join(name, c = 0) {
   A.send({ t: 'char', c: starter, k: 0 }); await sleep(300);
   ok(A.looks.length === 1, 'no change once the 4-3-2-1 has started');
   A.ws.close(); B.ws.close(); await sleep(200);
+  // ---- Test Server: listed, joinable, votes between its two test-only modes ----
+  srv.ensureTest();
+  const list = (await (await fetch(BASE + '/api/servers')).json()).servers;
+  const ts = list.find((x) => x.test);
+  ok(ts && ts.name === 'Test Server' && !ts.regular && !ts.lock && list[0].regular, 'the server list has the Test Server right after the Regular server');
+  const X = await join('Xxx', starter, { server: ts.id }), Y = await join('Yyy', starter, { server: ts.id });
+  for (let i = 0; i < 40 && !X.vc; i++) await sleep(100);
+  ok(X.vc && X.vc.d.join() === 'proximity,points', 'joining it opens a vote on exactly Tagger Proximity and Tagger Points (' + (X.vc && X.vc.d) + ')');
+  const regular = (await (await fetch(BASE + '/api/servers')).json()).servers[0];
+  ok(regular.regular, 'the Regular server is still first');
+  const cr = await join('Zzz', starter, { create: { name: 'Test Server', time: 90, max: 5, map: 'random', bots: 0, diff: 'normal', pass: '', mode: 'vote' } });
+  ok(!!cr.err && cr.id === undefined, 'nobody can create a server called Test Server (' + cr.err + ')'); cr.ws.close();
+  X.ws.close(); Y.ws.close(); await sleep(300);
+  ok(srv.ensureTest().testServer && [...srv.rooms.values()].filter((r) => r.testServer).length === 1, 'the Test Server comes back when everyone leaves');
+
   console.log(fails ? fails + ' FAILED' : 'ALL PASSED'); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

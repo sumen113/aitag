@@ -139,19 +139,23 @@ function findPublicRoom(name) {
 /** The Regular server always exists, even when nobody is in it. */
 function ensureRegular() { for (const r of rooms.values()) if (r.regular) return r; return createRoom({ kind: 'public' }); }
 
+/** The Test Server always exists too: wins count (3+ players), and every round votes on one of its two test-only modes. */
+function ensureTest() { for (const r of rooms.values()) if (r.testServer) return r; return createRoom({ kind: 'test', max: T.MAX_PLAYERS }); }
+
 /** What the server browser shows: the Regular server (all its lobbies as one entry) first, then player-made servers. */
 function serverList() {
   let reg = { id: 'regular', name: T.REGULAR_NAME, regular: true, players: 0, max: T.MAX_PLAYERS, lobbies: 0, time: T.ROUND_TIME, state: 0 };
   let bestState = -1;
-  const custom = [];
+  const custom = []; let test = null;
   for (const r of rooms.values()) {
     if (r.solo) continue;
     const n = r.humanCount();
+    if (r.testServer) { test = { id: r.code, name: r.name, regular: false, test: true, players: n, max: r.max, time: r.roundTime, mode: 'vote', state: r.state, full: n >= r.max, bots: 0, lock: false }; continue; }
     if (r.regular) { reg.players += n; reg.lobbies++; if (n > bestState) { bestState = n; reg.state = r.state; } }
     else custom.push({ id: r.code, name: r.name, regular: false, players: n, max: r.max, time: r.roundTime, map: r.mapMode, mode: r.modeOpt, state: r.state, full: n >= r.max, bots: r.botTarget, lock: !!r.lock });
   }
   custom.sort((a, b) => b.players - a.players || a.name.localeCompare(b.name));
-  return [reg, ...custom];
+  return test ? [reg, test, ...custom] : [reg, ...custom];
 }
 const CUSTOM_CAP = 40;
 const crypto = require('crypto');
@@ -214,7 +218,7 @@ wss.on('connection', (ws, req) => {
       const v = T.validateServer(m.create); if (!v.ok) return fail(v.err);
       const ipKey = ipKeyOf();
       let customs = 0, taken = false;
-      for (const r of rooms.values()) if (!r.solo && !r.regular) { customs++; if (r.name.toLowerCase() === v.name.toLowerCase()) taken = true; }
+      for (const r of rooms.values()) if (!r.solo && !r.regular) { if (!r.testServer) customs++; if (r.name.toLowerCase() === v.name.toLowerCase()) taken = true; }
       if (taken) return fail('A server with that name already exists. Pick another name or join it.');
       if (customs >= CUSTOM_CAP || rooms.size >= MAX_ROOMS) return fail('There are too many servers open right now. Join an existing one.');
       if (!mayCreate(user ? 'u' + user.id : ipKey)) return fail('You can only create 3 servers every 10 minutes. Join one instead.');
@@ -297,6 +301,7 @@ wss.on('connection', (ws, req) => {
     if (room.humanCount() === 0) {
       rooms.delete(room.code);
       if (room.regular) ensureRegular();                       // the Regular server never disappears: a fresh empty lobby takes its place
+      if (room.testServer) ensureTest();                       // neither does the Test Server
     }
   });
   ws.on('error', () => {});
@@ -330,9 +335,9 @@ setInterval(() => {
 }, 1000);
 
 if (require.main === module) {
-  ensureRegular();
+  ensureRegular(); ensureTest();
   server.listen(PORT, '0.0.0.0', () => console.log(`Tag Rush listening on :${PORT}`));
   init();
   process.on('SIGTERM', () => { server.close(); if (store) store.close().catch(() => {}); process.exit(0); });
 }
-module.exports = { resetLimits: () => createLog.clear(), resetBoard: () => { board.list = null; }, server, rooms, createRoom, findPublicRoom, ensureRegular, serverList, init, getStore: () => store };
+module.exports = { resetLimits: () => createLog.clear(), resetBoard: () => { board.list = null; }, server, rooms, createRoom, findPublicRoom, ensureRegular, ensureTest, serverList, init, getStore: () => store };

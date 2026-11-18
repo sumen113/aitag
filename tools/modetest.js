@@ -257,4 +257,48 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   ok(payout('custom', 3, { bots: 0 }) === 0, 'wins: not even a bot-free custom server with 3');
 }
 
+
+// ---- Test Server: always votes on a test-only mode; Tagger Proximity / Tagger Points ----
+{
+  const tsrv = (n) => mk('vote', n, { kind: 'test', name: T.TEST_NAME });
+  let t = tsrv(3); t.tick();
+  ok(t.testServer && t.state === T.STATE.VOTE && t.vote.modes.join() === 'proximity,points', 'test server: votes between exactly Tagger Proximity and Tagger Points, even with 3 players');
+  ok(t.modeOpt === 'vote' && !t.regular, 'test server: always a mode vote, not the regular server');
+  const rg = mk('vote', 8, { kind: 'public' }); rg.tick(); ok(!rg.vote.modes.some((m) => T.MODE_BY_ID[m].testOnly), 'regular server: never offers the test modes');
+  const pr = mk('vote', 8, { kind: 'bots' }); pr.tick(); ok(!(pr.vote && pr.vote.modes.some((m) => T.MODE_BY_ID[m].testOnly)), 'practice: never offers the test modes');
+  const cu = mk('points', 4, {}); ok(cu.modeOpt === 'classic', 'custom server: a test mode cannot be set as its mode');
+  ok(!T.validateServer({ name: 'Mine', time: 90, max: 5, map: 'random', mode: 'proximity' }).ok && !T.validateServer({ name: 'Mine', time: 90, max: 5, map: 'random', mode: 'points' }).ok, 'custom server: the create form refuses the test modes');
+
+  const play = (modeId, n) => {
+    const r = tsrv(n); r.tick(); const idx = r.vote.modes.indexOf(modeId);
+    for (const p of r.players.values()) { r.castVote(p, 'd', idx); r.castVote(p, 'm', 0); }
+    run(r, 4, () => r.state === T.STATE.COUNT); run(r, 14, () => r.state === T.STATE.PLAY);
+    ok(r.state === T.STATE.PLAY && r.mode === modeId, 'test server: voting for ' + modeId + ' plays it (3 players, still not forced to classic)');
+    return r;
+  };
+  // proximity: closer to IT = faster score. The tagger earns nothing; a stunned tagger gives nothing extra.
+  let r4 = play('proximity', 3);
+  let it = r4.itPlayers()[0], others = [...r4.players.values()].filter((p) => p !== it), A = others[0], Bp = others[1];
+  it.x = 800; it.y = 500; A.x = 800 + 130; A.y = 500; Bp.x = 800 + 900; Bp.y = 500; for (const p of r4.players.values()) { p.vx = p.vy = 0; p.score = 0; p.imm = 0; }
+  run(r4, 2.3); it.stun = 0; it.lock = 0;                                  // (head start over)
+  for (const p of r4.players.values()) { p.score = 0; }
+  const pos = (p) => [p.x, p.y];
+  it.stun = 0; run(r4, 2); 
+  ok(A.score > Bp.score * 3 && Bp.score > 0.4 && it.score === 0, 'proximity: standing close to IT scores much faster than far away (' + A.score.toFixed(1) + ' vs ' + Bp.score.toFixed(1) + '), IT earns nothing');
+  r4 = play('proximity', 3); it = r4.itPlayers()[0]; A = [...r4.players.values()].find((p) => p !== it);
+  it.x = 800; it.y = 500; A.x = 830; A.y = 500; it.stun = 2; A.score = 0; A.vx = A.vy = 0; A.imm = 0; it.vx = it.vy = 0;
+  run(r4, 1); ok(A.score < 0.5, 'proximity: standing next to a stunned tagger earns only the base rate (' + A.score.toFixed(2) + ')');
+  // points: +10 per tag
+  const r5 = play('points', 3); it = r5.itPlayers()[0]; A = [...r5.players.values()].find((p) => p !== it);
+  it.stun = 0; it.lock = 0; it.score = 0; it.x = 800; it.y = 500; A.x = 815; A.y = 500; A.imm = 0; A.vx = A.vy = 0; it.vx = it.vy = 0;
+  step(r5); ok(it.tags >= 1 && it.score >= T.TAG_POINTS && !it.it, 'points: tagging someone gives the tagger 10 points (' + it.score.toFixed(1) + ')');
+  ok(r5.evs.some((e) => e.k === 'tag' && e.pts === 10), 'points: the tag event carries the +10 for the client');
+  const r6 = play('proximity', 3); const it6 = r6.itPlayers()[0], V = [...r6.players.values()].find((p) => p !== it6);
+  it6.stun = 0; it6.lock = 0; it6.score = 0; it6.x = 800; it6.y = 500; V.x = 815; V.y = 500; V.imm = 0; V.vx = V.vy = 0; it6.vx = it6.vy = 0; step(r6);
+  ok(it6.score < 1, 'proximity: a tag itself is worth nothing extra');
+  // wins on the test server
+  const payoutT = (n) => { const r = tsrv(n); const won = []; r.onWin = (p) => won.push(p.id); let i = 1; const first = [...r.players.values()][0]; for (const p of r.players.values()) { p.uid = i++; p.score = p === first ? 60 : 5; p.lastActiveAt = clk; } r.state = T.STATE.PLAY; r.endRound(); return won.length; };
+  ok(payoutT(2) === 0 && payoutT(3) === 1, 'test server: wins count, but only with 3+ players');
+}
+
 console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED'); process.exit(fails ? 1 : 0);

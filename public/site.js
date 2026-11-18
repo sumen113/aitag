@@ -132,16 +132,16 @@
     if (!svMapsDone && d.maps) { for (const m of d.maps) { const o = el('option', null, m.name); o.value = m.id; $('svMap').appendChild(o); } svMapsDone = true; }
     svList.replaceChildren();
     for (const s of d.servers) {
-      const li = el('li', 'sv' + (s.regular ? ' reg' : '') + (s.full ? ' full' : ''));
+      const li = el('li', 'sv' + (s.regular ? ' reg' : '') + (s.test ? ' test' : '') + (s.full ? ' full' : ''));
       const info = el('div', 'sv-info');
-      info.append(el('b', 'sv-name', (s.lock ? '🔒 ' : '') + s.name), el('span', 'sv-meta mono', s.regular ? 'always on · vote on arena + mode every round · earns wins' + (s.state === 2 ? ' · match running, new players wait' : '') : modeLbl(s.mode) + ' · ' + fmtTime(s.time) + ' · ' + (s.bots ? s.bots + ' bots' : 'no bots') + ' · ' + (s.state === 2 ? 'match running, you wait' : 'lobby')));
+      info.append(el('b', 'sv-name', (s.lock ? '🔒 ' : '') + s.name), el('span', 'sv-meta mono', s.test ? 'always on · vote on Tagger Proximity or Tagger Points every round · earns wins with 3+ players' + (s.state === 2 ? ' · match running, new players wait' : '') : s.regular ? 'always on · vote on arena + mode every round · earns wins' + (s.state === 2 ? ' · match running, new players wait' : '') : modeLbl(s.mode) + ' · ' + fmtTime(s.time) + ' · ' + (s.bots ? s.bots + ' bots' : 'no bots') + ' · ' + (s.state === 2 ? 'match running, you wait' : 'lobby')));
       const cnt = el('span', 'sv-count mono', s.regular ? s.players + ' playing' : s.players + '/' + s.max);
       const b = el('button', 'btn ' + (s.regular ? 'btn-primary' : 'btn-ghost'), null);
       b.type = 'button'; b.disabled = !!s.full; b.append(el('span', 'btn-label', s.full ? 'Full' : 'Join'));
       b.addEventListener('click', () => { if (s.lock) return askPass(s); closeModal(); go('online', { server: s.id }); });
       li.append(info, cnt, b); svList.appendChild(li);
     }
-    if (d.servers.length === 1) svList.appendChild(el('li', 'sv empty', 'No player-made servers yet. Be the first!'));
+    if (!d.servers.some((s) => !s.regular && !s.test)) svList.appendChild(el('li', 'sv empty', 'No player-made servers yet. Be the first!'));
   }
   async function loadServers() {
     try { const r = await fetch('/api/servers', { cache: 'no-store' }); if (r.ok) paintServers(await r.json()); } catch (e) { svErr.textContent = 'Could not load the server list.'; }
@@ -702,6 +702,9 @@
     { v: 'Update 15 · Fair wins', tag: 'Newest', items: [
       ['No wins in private servers', 'Custom (private) servers and practice no longer give wins. Wins only count in the main server, so the leaderboard stays fair.'],
       ['More than 2 players needed', 'In the main server, a round only counts for wins when there are at least 3 real players. Two people taking turns to win rounds no longer works.'],
+      ['New: Test Server', 'A second always-on server, right under the Regular server. Wins count here too (3+ players needed) and everyone votes on the game mode every round, whatever the player count. It has two test-only modes that are not on the Regular server.'],
+      ['Tagger Proximity', 'The closer you are to IT, the faster you score (about 5 points a second right next to them, 0.3 far away; a glow shows the zone). Getting tagged does not end your chances: you can climb back to the top, but it is risky. Standing next to a tagger who is stunned or just tagged does not count.'],
+      ['Tagger Points', 'Tag someone as IT and you get 10 points on top of the normal survival points. Being tagged is just a chance to catch up by tagging someone else.'],
     ] },
     { v: 'Update 14 · Change character, typing bubbles', items: [
       ['Change character before every round', 'Once the vote closes you get 7 seconds to switch character (and skin) before the 4-3-2-1. Pick from the panel at the bottom of the screen. Only characters and skins you own are shown.'],

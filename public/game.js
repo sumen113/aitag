@@ -200,6 +200,12 @@
   const near = (x, y) => G.me && Math.hypot(x - G.me.x, y - G.me.y) < 900;
 
   /* =============================== events / fx ============================== */
+  /** Tagger Proximity multiplier for you right now (points per second), from your distance to the nearest IT */
+  function proxNow(me) {
+    let gap = Infinity;
+    for (const e of G.ents || []) { if (!e.it || e.decoy || e.out || e.isMe) continue; gap = Math.min(gap, Math.hypot(e.x - me.x, e.y - me.y) - (CHARS[e.c].radius + CHARS[me.c].radius + C.TAG_REACH)); }
+    return gap === Infinity ? C.PROX_MIN : C.proxRate(Math.max(0, gap));
+  }
   function onEvent(e) {
     switch (e.k) {
       case 'tag': {
@@ -211,7 +217,7 @@
         if (e.a) feed([el('span', '', rname(e.a)), el('span', '', zed ? ' infected ' : pot ? ' passed the potato to ' : ' tagged '), el('b', '', rb ? rb.n : '???')], mineA || mineB);
         else feed([el('b', '', rb ? rb.n : '???'), el('span', '', ' is the new IT')], mineB);
         if (mineB) { banner(zed ? "YOU'RE INFECTED!" : pot ? 'YOU HAVE THE POTATO!' : "YOU'RE IT!", zed ? 'green' : pot ? 'orange' : 'red'); flash(); G.shake = 14; Sfx.play(zed ? 'infect' : 'youreIt'); Sfx.play('tagged'); }
-        else if (mineA) { banner(zed ? 'Infected ' + (rb ? rb.n : '') + '!' : pot ? 'Passed it on!' : 'Tagged ' + (rb ? rb.n : '') + '!', zed ? 'green' : ''); G.shake = 9; Sfx.play('tag'); }
+        else if (mineA) { banner(zed ? 'Infected ' + (rb ? rb.n : '') + '!' : pot ? 'Passed it on!' : 'Tagged ' + (rb ? rb.n : '') + '!' + (e.pts ? ` +${e.pts}` : ''), zed ? 'green' : ''); G.shake = 9; Sfx.play('tag'); }
         else if (near(e.x, e.y)) { G.shake = Math.max(G.shake, 4); Sfx.play('tag'); }
         break; }
       case 'st':
@@ -599,6 +605,12 @@
     const color = zed ? '#7ddc4f' : C.colorFor(e.k);      // zombies turn green
     const skin = zed ? '' : e.sk || '';                   // ...and lose their skin, so everyone can tell who is infected
 
+    // Tagger Proximity: a soft ring around IT shows where the points are
+    if (G.mode === 'proximity' && e.it && !e.decoy && !e.out && G.state === STATE.PLAY) {
+      const R = r + C.PROX_RANGE * 0.5, gr = g.createRadialGradient(x, fyPos, r, x, fyPos, R * 1.0);
+      gr.addColorStop(0, 'rgba(74,124,255,.22)'); gr.addColorStop(1, 'rgba(74,124,255,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(x, fyPos, R, 0, TAU); g.fill();
+    }
     // ground markers
     if (e.it && !e.decoy && !e.out) {
       const danger = G.mode === 'potato' && ptFuse(e.id) < 3, p = 0.5 + 0.5 * Math.sin(t * (danger ? 16 : 6)), a = 1;
@@ -823,7 +835,7 @@
       if (e.x < v.x0 - 60 || e.x > v.x1 + 60 || e.y < v.y0 - 80 || e.y > v.y1 + 60) continue;
       drawEnt(g, e, t, dt, labels);
     }
-    seeThrough(ents, dt);
+    G.ents = ents; seeThrough(ents, dt);
     MapRender.drawCanopy(g, map, v, t, { x: mx, y: my });
     if (CHARS[me.c].id === 'bat' && me.aux > 0 && G.state !== STATE.RESULTS) drawBeacon(g, me, t);
     drawSeeds(g, t);
@@ -909,7 +921,8 @@
       } else if (mode === 'infection') {
         if (isIt) { cls = 'role zombie'; txt = `You're infected! Spread it · ${surv} left`; }
         else txt = surv <= 1 ? 'Last survivor!' : `Survive! ${surv} left`;
-      } else if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : "You're IT! Tag someone!"; }
+      } else if (isIt) { cls = 'role it'; txt = me.stun > 0 ? "You're IT · hold on…" : mode === 'points' ? "You're IT! Each tag is +10" : "You're IT! Tag someone!"; }
+      else if (mode === 'proximity' && its.length) txt = `Closer to ${its[0].n} = more points · ×${proxNow(me).toFixed(1)}`;
       else txt = !its.length ? 'Run!' : its.length === 1 ? `Run! ${its[0].n} is IT` : `Run! ${its.map((r) => r.n).join(' & ')} are IT`;
     } else if (st === STATE.COUNT && picking(left)) txt = 'Change your character if you like';
     else if (st === STATE.COUNT) txt = `Round ${G.rd} · ${G.map.name}` + (mode !== 'classic' ? ' · ' + C.MODE_BY_ID[mode].name : '');
@@ -1014,6 +1027,8 @@
     infection: '<rect width="64" height="64" rx="12" fill="#dff7e3"/><g stroke="#14122b" stroke-width="3" stroke-linecap="round"><path d="M32 8v8M32 48v8M8 32h8M48 32h8M15 15l6 6M43 43l6 6M49 15l-6 6M21 43l-6 6"/></g><circle cx="32" cy="32" r="17" fill="#4fcf6a" stroke="#14122b" stroke-width="3.5"/><circle cx="26" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="38" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="26.5" cy="29.5" r="1.6" fill="#14122b"/><circle cx="37.5" cy="29.5" r="1.6" fill="#14122b"/><path d="M25 39h14" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M28 39v3M32 39v3M36 39v3" stroke="#14122b" stroke-width="2"/>',
     potato: '<rect width="64" height="64" rx="12" fill="#ffeacc"/><ellipse cx="31" cy="40" rx="20" ry="15" fill="#c98a4b" stroke="#14122b" stroke-width="3.5" transform="rotate(-12 31 40)"/><g fill="#7a4a22" opacity=".6"><circle cx="22" cy="38" r="2.2"/><circle cx="34" cy="45" r="2.2"/><circle cx="40" cy="35" r="2.2"/><circle cx="28" cy="46" r="1.6"/></g><path d="M36 26c4-5 8-5 11-9" fill="none" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M50 8l2.6 5.4 5.4 2.6-5.4 2.6L50 24l-2.6-5.4-5.4-2.6 5.4-2.6z" fill="#ffd23f" stroke="#14122b" stroke-width="2.2" stroke-linejoin="round"/>',
   };
+  MODE_ICONS.proximity = '<rect width="64" height="64" rx="12" fill="#e4ecff"/><circle cx="32" cy="32" r="26" fill="none" stroke="#4a7cff" stroke-width="3" stroke-dasharray="3 5"/><circle cx="32" cy="32" r="16" fill="none" stroke="#4a7cff" stroke-width="3.5"/><circle cx="32" cy="32" r="7" fill="#ff4d5e" stroke="#14122b" stroke-width="3"/><circle cx="48" cy="20" r="4.5" fill="#ffd23f" stroke="#14122b" stroke-width="2.5"/>';
+  MODE_ICONS.points = '<rect width="64" height="64" rx="12" fill="#fff3c9"/><circle cx="32" cy="32" r="21" fill="#ffd23f" stroke="#14122b" stroke-width="3.5"/><text x="32" y="40" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="22" fill="#14122b">+10</text>';
   function modeIcon(id) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('aria-hidden', 'true');
     s.innerHTML = MODE_ICONS[id] || MODE_ICONS.classic; return s;
