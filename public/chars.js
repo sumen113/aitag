@@ -443,51 +443,40 @@ const Chars = (() => {
       g.restore();
     },
     god(g, c, o) {
-      // Staff-only, "biblically accurate": no body at all. Two turning wheels covered in eyes, three pairs of feathered wings, and three glowing eyes in the hub.
+      // Staff-only, "biblically accurate": no body. Three pairs of feathered wings that all meet in the centre, with two turning wheels covered in eyes. Everything takes the skin colour.
       const TAU = Math.PI * 2, fl = Math.sin(o.t * (3 + 9 * o.fly)) * (0.07 + 0.24 * o.fly) + Math.sin(o.t * 1.7) * 0.03, hov = Math.sin(o.t * 2.6) * 1.4;
-      const pulse = 0.78 + 0.22 * Math.sin(o.t * 4), beam = o.beam ? 1 : 0, cy = -28 + hov;
+      const cy = -26 + hov, rgb = /^#[0-9a-f]{6}$/i.test(c.m) ? [1, 3, 5].map((k) => parseInt(c.m.slice(k, k + 2), 16)) : [200, 200, 200];
+      const dark = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255 < 0.42, ring = dark ? c.ll : c.d, iris = dark ? c.l : c.d;
       const smallEye = (x, y, r) => {
         g.beginPath(); g.ellipse(x, y, r, r * 0.74, 0, 0, TAU); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 1.1; g.strokeStyle = OUT; g.stroke();
-        g.beginPath(); g.arc(x + o.lx * 0.3, y + o.ly * 0.2, r * 0.42, 0, TAU); g.fillStyle = '#e8a410'; g.fill();
+        g.beginPath(); g.arc(x + o.lx * 0.3, y + o.ly * 0.2, r * 0.42, 0, TAU); g.fillStyle = iris; g.fill();
       };
-      // wings, three pairs; each is a fan of feathers (back row cream, front rows white), all growing out of the hub
-      const wing = (sx, sy, rot, rows) => {
+      // wings, three pairs; each is a fan of feathers growing out of one point in the middle (back rows the skin colour, front row a lighter tint of it)
+      const wing = (rot, rows) => {
         for (const sd of [-1, 1]) {
-          g.save(); g.translate(sd * sx, sy); g.scale(sd, 1); g.rotate(rot - fl * (rot < 0 ? 1.2 : 0.6));
+          g.save(); g.translate(0, cy); g.scale(sd, 1); g.rotate(rot - fl * (rot < 0 ? 1.2 : 0.6));
           for (const [len, w, fill, n, a0, a1] of rows) {
             for (let i = 0; i < n; i++) {
               const a = a0 + (i * (a1 - a0)) / Math.max(1, n - 1), l = len * (0.72 + 0.28 * Math.sin((i / Math.max(1, n - 1)) * Math.PI * 0.85 + 0.45));
-              ell(g, Math.cos(a) * l * 0.5, Math.sin(a) * l * 0.5, l * 0.5, w, fill, 1.6, a);
+              ell(g, Math.cos(a) * l * 0.5, Math.sin(a) * l * 0.5, l * 0.5, w, fill, 1.25, a);
             }
           }
           g.restore();
         }
       };
-      wing(5, cy - 4, -0.3, [[36, 4.8, '#fff4c4', 5, -1.55, -0.95], [25, 4.2, '#ffffff', 4, -1.4, -0.9]]);                      // upper pair, raised
-      wing(6, cy, -0.05, [[44, 5.8, c.ll, 6, -0.75, 0.05], [32, 5.2, '#ffffff', 5, -0.62, 0.05], [20, 4.4, '#ffffff', 4, -0.5, 0.08]]);      // main pair
-      wing(5, cy + 4, 0.25, [[32, 4.8, c.ll, 5, 0.35, 1.2], [21, 4.2, '#ffffff', 4, 0.45, 1.1]]);                                  // lower pair, swept down
+      wing(-0.3, [[36, 4.8, c.m, 5, -1.55, -0.95], [25, 4.2, c.l, 4, -1.4, -0.9]]);                                  // upper pair, raised
+      wing(-0.05, [[44, 5.8, c.m, 6, -0.75, 0.05], [32, 5.2, c.l, 5, -0.62, 0.05], [20, 4.4, c.ll, 4, -0.5, 0.08]]);    // main pair
+      wing(0.25, [[32, 4.8, c.m, 5, 0.35, 1.2], [21, 4.2, c.l, 4, 0.45, 1.1]]);                                       // lower pair, swept down
       // the wheels (ophanim): one round, one tilted, each ringed with eyes that look where God looks
-      for (const [rx, ry, spin, n] of [[29, 29, 0.55, 10], [29, 12, -0.8, 8]]) {
+      for (const [rx, ry, spin, n] of [[23, 23, 0.55, 9], [23, 9.5, -0.8, 7]]) {
         const rot = spin > 0 ? 0 : -0.5, cr = Math.cos(rot), sr = Math.sin(rot);
-        g.beginPath(); g.ellipse(0, cy, rx, ry, rot, 0, TAU); g.lineWidth = 5.2; g.strokeStyle = OUT; g.stroke(); g.lineWidth = 2.6; g.strokeStyle = '#ffcf3a'; g.stroke();
+        g.beginPath(); g.ellipse(0, cy, rx, ry, rot, 0, TAU); g.lineWidth = 5.2; g.strokeStyle = OUT; g.stroke(); g.lineWidth = 2.6; g.strokeStyle = ring; g.stroke();
         for (let k = 0; k < n; k++) {
           const a = o.t * spin + (k * TAU) / n, px = Math.cos(a) * rx, py = Math.sin(a) * ry;
-          smallEye(px * cr - py * sr, cy + px * sr + py * cr, 3.4);
+          smallEye(px * cr - py * sr, cy + px * sr + py * cr, 3.2);
         }
       }
-      // hub: a soft light with the three glowing eyes
-      const hub = g.createRadialGradient(0, cy, 0, 0, cy, 17);
-      hub.addColorStop(0, `rgba(255,250,215,${0.95})`); hub.addColorStop(0.6, `rgba(255,226,120,${0.55 * pulse})`); hub.addColorStop(1, 'rgba(255,214,70,0)');
-      g.beginPath(); g.arc(0, cy, 17, 0, TAU); g.fillStyle = hub; g.fill();
-      for (const [ex, ey, er] of [[-6.4, cy + 2.6, 4.3], [6.4, cy + 2.6, 4.3], [0, cy - 7.4, 4.3]]) {
-        const R = er * (2.8 + beam * 1.4), gr = g.createRadialGradient(ex, ey, 0, ex, ey, R);
-        gr.addColorStop(0, `rgba(255,246,170,${0.9 * pulse})`); gr.addColorStop(0.45, `rgba(255,222,90,${0.38 * pulse})`); gr.addColorStop(1, 'rgba(255,214,70,0)');
-        g.beginPath(); g.arc(ex, ey, R, 0, TAU); g.fillStyle = gr; g.fill();
-        g.save(); g.translate(ex, ey); g.scale(1, Math.max(0.1, 1 - o.blink * 0.92));
-        g.beginPath(); g.ellipse(0, 0, er * 1.12, er * 0.92, 0, 0, TAU); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#e8a410'; g.stroke();
-        g.beginPath(); g.arc(o.lx * 0.5, o.ly * 0.4, er * 0.45, 0, TAU); g.fillStyle = '#ffd23f'; g.fill();
-        g.restore();
-      }
+      g.beginPath(); g.arc(0, cy, 4.2, 0, TAU); fillStroke(g, c.l, 2);                                                  // where every wing meets
     },
   };
 

@@ -65,7 +65,7 @@ Classic tag can be joined at any time. Infection and Hot Potato can't be joined 
 
 ## God, the secret character (v7.9)
 
-Staff-only 19th character (`secret: true`, last in `CHARS`, so stored indexes are unaffected). Three glowing eyes and angel wings. It is never in the shop, chests, the cast page, practice bots or anyone else's picker. Radius 27 (1.5x a normal player), drawn as a "biblically accurate" angel with no body, head or face: two turning wheels covered in eyes, three pairs of wings and three glowing eyes in the hub. Hats are never drawn on it.
+Staff-only 19th character (`secret: true`, last in `CHARS`, so stored indexes are unaffected). Three glowing eyes and angel wings. It is never in the shop, chests, the cast page, practice bots or anyone else's picker. Radius 27 (1.5x a normal player), drawn as a "biblically accurate" angel with no body, head or face: three pairs of wings that all meet in the centre and two smaller turning wheels covered in eyes. Wings and wheels take the skin colour. Hats are never drawn on it.
 - **God skins**: the 12 themes exist for God (`T.SECRET_SKINS`, in `SKIN_BY_ID` but not in `T.SKINS`), so chests never drop them, glitter can't craft them, and staff "give all skins" skips them. Staff give/take them on the skins tab by choosing the God character. The God row in the skin locker only shows for someone with the God unlock or any God skin. Owning a God skin does not let anyone play God.
 
 - **Access**: the account must be in `ADMIN_USERS` **and** have the `char:god` item, which a staff member toggles for themself with **Unlock God / Lock God** on their card in `/hq`. The server enforces both on join and on `char` changes (`T.canUseChar`), also in practice mode. Nothing about it is in the player update log.
