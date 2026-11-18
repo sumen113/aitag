@@ -120,14 +120,20 @@
       desc: 'Lash out with both hind legs: everyone in a wide cone behind you is launched away and stunned while you lurch forward. Run from the tagger, then kick them off your tail.' },
     { id: 'skunk',  fx: 'stink',  name: 'Pepper', species: 'Skunk',  natural: '#474560', ability: 'Stink Cloud', cd: 11, dur: 0,  speed: 1.00, radius: 17, role: 'Mind bender', price: 4,
       desc: 'Drop a stink cloud that flips the controls of everybody else inside it: left is right, up is down. It lingers for three seconds.' },
+    // Secret, staff only (never in the shop, chests, practice bots or any picker for players). Three moves instead of one: hold to fly, teleport to anyone, hold a sideways beam of light.
+    { id: 'god',    fx: 'divine', name: 'God',    species: 'Almighty', natural: '#fff1a8', ability: 'Ascend', cd: 2.5, dur: 0, speed: 1.08, radius: 19, role: 'Almighty', secret: true,
+      moves: [{ id: 'fly', name: 'Ascend', hold: true, key: 'Space' }, { id: 'tp', name: 'Teleport', key: 'Q' }, { id: 'beam', name: 'Beam of Light', hold: true, key: 'E' }],
+      desc: 'Hold to rise as high as you like, teleport to any player from a menu, and hold a beam of light that sweeps sideways through everything and stuns anyone it touches.' },
   ];
+  const PUBLIC_CHARS = CHARS.filter((c) => !c.secret).length;      // secret characters sit at the end of the list
+  const GOD_RISE = 170, GOD_FALL = 340, GOD_ZMAX = 900, GOD_AIR = 30, GOD_BEAM_W = 46, GOD_TP_CD = 2.5;     // px/s up, px/s down, ceiling, height at which you clear walls, beam thickness, teleport cooldown (s)
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
   /* ------------------------------- the shop ----------------------------- */
   // Everything purchasable lives in this list. To add a new kind of item later, add an entry here
   // (type: 'character' | 'colour' | 'trail' | ...) and teach the client how to show it; the server
   // already stores any item id in the player's inventory and checks the price + balance atomically.
-  const SHOP = CHARS.filter((c) => !c.starter).map((c) => ({ id: 'char:' + c.id, type: 'character', ref: c.id, name: c.species, price: c.price, blurb: c.desc }));
+  const SHOP = CHARS.filter((c) => !c.starter && !c.secret).map((c) => ({ id: 'char:' + c.id, type: 'character', ref: c.id, name: c.species, price: c.price, blurb: c.desc }));
   const SHOP_BY_ID = {}; SHOP.forEach((i) => (SHOP_BY_ID[i.id] = i));
   const STARTER_ITEMS = STARTERS.map((id) => 'char:' + id);
 
@@ -160,7 +166,7 @@
   const SKIN_THEME_BY_ID = {}; SKIN_THEMES.forEach((t) => (SKIN_THEME_BY_ID[t.id] = t));
   const skinId = (charId, themeId) => 'skin:' + charId + ':' + themeId;
   const SKINS = [], SKIN_BY_ID = {};
-  for (const c of CHARS) for (const t of SKIN_THEMES) {
+  for (const c of CHARS) if (!c.secret) for (const t of SKIN_THEMES) {
     const sk = { id: skinId(c.id, t.id), char: c.id, theme: t.id, rarity: t.rarity, name: t.name + ' ' + c.species };
     SKINS.push(sk); SKIN_BY_ID[sk.id] = sk;
   }
@@ -221,6 +227,12 @@
   /* titles: a short label with a colour, handed out from the staff page. Drawn as a coloured pill with readable text on top. */
   const titleColor = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? String(c).toLowerCase() : '#ffd23f');
   const titleInk = (c) => { const n = parseInt(titleColor(c).slice(1), 16), l = 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); return l > 150 ? '#14122b' : '#ffffff'; };
+  /** Secret characters need the staff unlock (an item on the account, granted from the staff page) AND a staff account; the server checks both. */
+  function canUseChar(owned, charId, staff) {
+    const def = CHARS.find((c) => c.id === charId); if (!def) return false;
+    if (def.secret) return !!staff && Array.isArray(owned) && owned.includes('char:' + charId);
+    return ownsChar(owned, charId);
+  }
   function ownsChar(owned, charId) { return STARTERS.includes(charId) || (Array.isArray(owned) && owned.includes('char:' + charId)); }
 
   /* --------------------------- player names ----------------------------- */
@@ -568,11 +580,11 @@
 
   /* ------------------------- player simulation -------------------------- */
   // The subset of a player's state that is simulated identically client + server.
-  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by'];
+  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by', 'z', 'bm'];
   const rnd = (v) => Math.round(v * 1000) / 1000;
 
   function newSim(id, c, x, y) {
-    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0 };
+    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0, z: 0, bm: 0 };
   }
   function packSim(p) { const a = new Array(SIM.length); for (let i = 0; i < SIM.length; i++) a[i] = rnd(+p[SIM[i]] || 0); return a; }
   function unpackSim(p, a) { for (let i = 0; i < SIM.length; i++) p[SIM[i]] = a[i]; }
@@ -591,6 +603,7 @@
       case 'mole': p.abT = def.dur; break;           // underground: untaggable until the dirt flies (see stepPlayer / server)
       case 'donkey': p.boostT = 0.45; break;         // the kick itself is resolved by the server; recoil lunges the donkey forward
       case 'bird': p.boostT = 0.8; break;           // the gale itself is resolved by the server; the bird glides off in a burst
+      case 'god': return;                            // God's moves are holds (see stepPlayer) and a menu (teleport), not a press
       case 'bat': p.bx = p.x; p.by = p.y; p.aux = 4; p.cd = 0.4; if (ev) ev.push(e); return;   // beacon placed; the full cooldown starts on recall / expiry
       default: break;                              // bear / octo / owl / raccoon / avocado / dog / skunk: world effects (incl. the flying seed) resolved by the server
     }
@@ -649,6 +662,14 @@
     if (wasDig && p.abT <= 0 && ev && !(ev.length && ev[ev.length - 1].n === 'surface')) ev.push({ k: 'ab', n: 'surface', id: p.id, x: p.x, y: p.y, dx: 0, dy: 0 });      // the tunnel time ran out
 
     const id = def.id;
+    if (id === 'god') {                                          // hold 1 = ascend (as long as you like), hold 2 = beam of light. Both are inputs, so client and server agree.
+      const h = stunned || p.out ? 0 : (inp.h | 0), wasBeam = p.bm;
+      p.bm = h & 2 ? 1 : 0;
+      if (h & 1) p.z = Math.min(GOD_ZMAX, (p.z || 0) + GOD_RISE * dt); else if (p.z > 0) p.z = Math.max(0, p.z - GOD_FALL * dt);
+      if (p.z < GOD_AIR && !circleFree(map, p.x, p.y, r)) p.z = Math.max(p.z, GOD_AIR);       // can't land inside a wall: hover until there is ground
+      if (p.bm && !wasBeam && ev) ev.push({ k: 'ab', n: 'beam', id: p.id, x: p.x, y: p.y, dx: p.fx >= 0 ? 1 : -1, dy: 0 });
+    }
+    const godAir = id === 'god' && p.z >= GOD_AIR;
     const inDash = p.abT > 0 && id === 'fox';
     const inLeap = p.abT > 0 && id === 'frog';
     const inPhase = p.abT > 0 && id === 'ghost';
@@ -686,6 +707,7 @@
       if (dx * dx + dy * dy < g.r * g.r) { maxSp *= 0.45; break; }
     }
     if (p.boostT > 0) maxSp *= 1.75;
+    if (id === 'god') { if (godAir) maxSp *= 1.18; if (p.bm) maxSp *= 0.6; }
 
     if (inDash || inLeap || inPounce) {
       const sp = inDash ? 800 : inPounce ? 700 : 520;
@@ -704,7 +726,7 @@
 
     p.x += (p.vx + driftX) * dt; p.y += (p.vy + driftY) * dt;
     const px = p.x, py = p.y;
-    if (!inLeap && !inPhase) collide(map, p, r);
+    if (!inLeap && !inPhase && !godAir) collide(map, p, r);
     clampBounds(map, p, r);
     if (inRoll) {                                                  // ricochet: whatever pushed us back reflects that axis
       const hx = Math.abs(p.x - px) > 0.01, hy = Math.abs(p.y - py) > 0.01;
@@ -732,7 +754,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, PUBLIC_CHARS, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

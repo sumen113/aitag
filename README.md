@@ -48,7 +48,7 @@ Pressing **Play online** opens a server picker.
 - **Bots**: you choose how many (up to max-1) and their difficulty. They use player slots and step aside as humans join.
 - **Passwords**: stored only as a salted scrypt hash in memory; wrong tries are limited to 8 per minute per IP.
 - **Win bonus event types** (staff Events tab): *Wins* (x2-x5, leaderboard moves too) or *Points only* (the win still counts 1 on the leaderboard; the extra is added to the balance for chests/shop and also to the account's `lbBase`, so the leaderboard never sees it).
-- **Test Server** (`kind: 'test'`, always on, one room, listed right after the Regular server): votes on the mode every round regardless of player count, from two test-only modes (`testOnly` in `T.MODES`): **Tagger Proximity** (non-IT players score `proxRate(gap)` points/s: 5 touching IT fading to 0.3 over 380 px; only counts a tagger who can tag right now, base rate for ghosted/immune players) and **Tagger Points** (+10 to the tagger per tag, plus normal survival). Both are classic tag otherwise (`T.classicLike`). They are never offered on the Regular server, practice or player-made servers (`validateServer` refuses them). Wins count here with 3+ real players, same as the Regular server.
+- **Test Server** (`kind: 'test'`, always on, one room, listed right after the Regular server): votes on the mode every round for any number of players (even one; `Room.minPlayers()` is 1 here, 2 everywhere else), from two test-only modes (`testOnly` in `T.MODES`): **Tagger Proximity** (non-IT players score `proxRate(gap)` points/s: 5 touching IT fading to 0.3 over 380 px; only counts a tagger who can tag right now, base rate for ghosted/immune players) and **Tagger Points** (+10 to the tagger per tag, plus normal survival). Both are classic tag otherwise (`T.classicLike`). They are never offered on the Regular server, practice or player-made servers (`validateServer` refuses them). Wins count here with 3+ real players, same as the Regular server.
 - **Wins**: only the main (public) server and the Test Server pay wins, and only when at least `MIN_WIN_PLAYERS` real players (default and minimum **3**) are playing. Custom/private servers and practice never give wins. The winner also needs a registered account and to have been active.
 - Limits: 40 custom servers at once, 3 creations per person/IP per 10 minutes, names unique and filtered. Limits live in `SERVER_LIMITS` (`public/shared.js`).
 - Servers live in memory, so a Render restart or free-tier sleep clears them (Regular comes straight back).
@@ -62,6 +62,20 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 - **Hot Potato**: the tagger holds a potato with a 10 s fuse. Every pass resets the fuse but shortens it by 0.4 s, every elimination by 0.5 s (floor 3 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
 
 Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
+
+## God, the secret character (v7.9)
+
+Staff-only 19th character (`secret: true`, last in `CHARS`, so stored indexes are unaffected). Three glowing eyes and angel wings. It is never in the shop, chests, skins, the cast page, practice bots or anyone else's picker.
+
+- **Access**: the account must be in `ADMIN_USERS` **and** have the `char:god` item, which a staff member toggles for themself with **Unlock God / Lock God** on their card in `/hq`. The server enforces both on join and on `char` changes (`T.canUseChar`), also in practice mode. Nothing about it is in the player update log.
+- **Ascend** (hold Space/Shift or the big button): altitude `z` rises while held (170 px/s, up to 900) and drifts down on release. At `GOD_AIR` (30) it passes over walls and is untaggable and cannot tag; it cannot land inside a wall (hovers until there is ground). The camera eases out as you climb.
+- **Teleport** (Q or its button): opens a player menu; `{t:'god',a:'tp',to:id}`; the room checks staff, God, cooldown (2.5 s), not stunned, not in the countdown (`Room.godTeleport`).
+- **Beam of light** (hold E or its button): a horizontal bar from God to the arena edge, in the direction it faces, through everything. `Room.stepBeams` stuns whoever it touches for as long as it touches them and cancels their ability: immunity, shields, leaps and tunnelling do not help.
+- Holds travel as a 7th element of an input (`h`: 1 = ascend, 2 = beam); `z` and `bm` are part of `T.SIM` so client prediction and the server agree.
+
+## Embedding in an iframe
+
+On https the login cookie is `HttpOnly; SameSite=None; Secure; Partitioned` so it survives inside another site's iframe (Partitioned keeps it where third-party cookies are blocked); plain http stays `SameSite=Lax`. Every POST still checks the Origin header. The game page may be framed (`FRAME_ANCESTORS`, default any; set it to your site to restrict); the staff page is always `X-Frame-Options: DENY`. Safari/Firefox ask once for storage access when you log in from inside a frame.
 
 ## Chests and skins (v7.4)
 

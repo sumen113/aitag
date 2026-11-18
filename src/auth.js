@@ -1,6 +1,6 @@
 'use strict';
 /* Accounts over plain HTTP + a session cookie. Passwords are hashed with scrypt (built into Node), sessions are
-   random 256-bit tokens stored hashed, the cookie is HttpOnly + SameSite=Lax (+ Secure on https), and every
+   random 256-bit tokens stored hashed, the cookie is HttpOnly + SameSite=None; Secure; Partitioned on https so it works inside an iframe (SameSite=Lax on plain http), and every
    POST must be same-origin JSON, so other websites can't make a visitor's browser act on their account. */
 const crypto = require('crypto');
 const T = require('../public/shared.js');
@@ -50,6 +50,8 @@ function clientIp(req) {
   return xf || (req.socket && req.socket.remoteAddress) || '?';
 }
 const isHttps = (req) => (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https' || !!(req.socket && req.socket.encrypted);
+/** On https the session cookie must also work when the game is embedded in another site (an iframe, e.g. a school's Google Site): SameSite=None + Secure, and Partitioned (CHIPS) so browsers that block third-party cookies still keep it, per embedding site. Plain http (local dev) stays Lax. Cross-site requests are still refused by the Origin check on every POST. */
+const cookieKind = (req) => (isHttps(req) ? 'SameSite=None; Secure; Partitioned' : 'SameSite=Lax');
 
 function publicUser(u) {
   return u && { username: u.username, wins: u.wins, spent: u.spent, balance: u.wins - u.spent, owned: u.owned, settings: u.settings || {} };
@@ -96,7 +98,7 @@ function create(store, opts = {}) {
   async function startSession(req, res, user) {
     const token = crypto.randomBytes(32).toString('base64url');
     await store.createSession(user.id, sha(token), Date.now() + SESSION_MS);
-    return { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MS / 1000}${isHttps(req) ? '; Secure' : ''}` };
+    return { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; Max-Age=${SESSION_MS / 1000}; ${cookieKind(req)}` };
   }
 
   /** Returns true if it handled the request. */
@@ -139,7 +141,7 @@ function create(store, opts = {}) {
       if (url === '/api/logout') {
         const tok = parseCookies(req.headers.cookie)[COOKIE];
         if (tok) await store.dropSession(sha(tok));
-        return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0` }), true;
+        return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; Max-Age=0; ${cookieKind(req)}` }), true;
       }
 
       if (url === '/api/email') {

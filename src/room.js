@@ -6,7 +6,7 @@ const { thinkBot, DIFFS } = require('./bots');
 
 const { CHARS, DT, STATE } = T;
 const IDX = {}; CHARS.forEach((c, i) => (IDX[c.id] = i));
-const ghosted = (q) => q.abT > 0 && (q.c === IDX.frog || q.c === IDX.mole);      // mid-leap or underground: can't be tagged, shoved, shot or trapped
+const ghosted = (q) => (q.abT > 0 && (q.c === IDX.frog || q.c === IDX.mole)) || (q.c === IDX.god && q.z >= T.GOD_AIR);      // mid-leap or underground: can't be tagged, shoved, shot or trapped
 const PIT_R = 34, PIT_TTL = 16, PIT_STUN = 1.8, PIT_SAFE = 1.4;                  // dog pits: radius, lifetime, how long a fallen player is stuck, grace after climbing out
 const BOT_COUNT = 4;                   // practice rooms: you + 4 bots
 const SNAP_HZ = Math.max(10, Math.min(60, +process.env.SNAP_HZ || 30));
@@ -62,6 +62,8 @@ class Room {
   /* ----------------------------- membership ----------------------------- */
   humanCount() { let n = 0; for (const p of this.players.values()) if (!p.bot) n++; return n; }
   activeHumans() { let n = 0; for (const p of this.players.values()) if (!p.bot && !p.wait) n++; return n; }   // players actually in the current match
+  /** Players needed to run rounds. The Test Server runs (and votes on its mode) for even a single player; everything else needs two. */
+  minPlayers() { return this.testServer ? 1 : 2; }
   activeCount() { let n = 0; for (const p of this.players.values()) if (!p.wait) n++; return n; }
   aliveCount() { let n = 0; for (const p of this.players.values()) if (!p.out) n++; return n; }
   modeDef() { return T.MODE_BY_ID[this.mode]; }
@@ -106,7 +108,7 @@ class Room {
     const used = new Set([...this.players.values()].map((p) => p.name.toLowerCase()));
     const free = BOT_NAMES.filter((n) => !used.has(n.toLowerCase()));
     const name = free.length ? free[(Math.random() * free.length) | 0] : 'Bot' + ((Math.random() * 99) | 0);
-    const p = this.makePlayer(name, (Math.random() * CHARS.length) | 0, Math.random() < 0.5 ? 0 : 1 + ((Math.random() * 7) | 0), true);
+    const p = this.makePlayer(name, (Math.random() * T.PUBLIC_CHARS) | 0, Math.random() < 0.5 ? 0 : 1 + ((Math.random() * 7) | 0), true);
     this.spawnFor(p);
     this.holdForNextRound(p);
     this.players.set(p.id, p);
@@ -149,13 +151,13 @@ class Room {
     }
     if (!p.bot) { if (this.humanCount() > 0) this.rebalanceBots(); }
     if (redo) this.redoRound('The infected player left. Voting again!');
-    else if (this.activeCount() < 2 && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
-    else if (this.state === STATE.VOTE && this.players.size < 2) this.toWait();
+    else if (this.activeCount() < this.minPlayers() && (this.state === STATE.COUNT || this.state === STATE.PLAY)) this.toWait();
+    else if (this.state === STATE.VOTE && this.players.size < this.minPlayers()) this.toWait();
   }
 
   /** The only infected player left: handing the infection to someone else would be unfair, so the round is scrapped and everyone goes back to the vote. */
   redoRound(msg) {
-    if (this.activeCount() < 2) { this.toWait(); return; }
+    if (this.activeCount() < this.minPlayers()) { this.toWait(); return; }
     this.emit({ k: 'redo', m: msg });
     this.beginRound();
   }
@@ -179,7 +181,7 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
@@ -254,7 +256,7 @@ class Room {
   setLook(p, ci, col, skin) {
     if (!this.canPick() || p.bot || !CHARS[ci]) return false;
     p.c = ci; p.col = col; p.skin = skin || '';
-    p.cd = 0; p.abT = 0; p.aux = 0; p.bx = 0; p.by = 0; p.pitT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.vx = p.vy = 0; p.bowled = null;
+    p.cd = 0; p.abT = 0; p.aux = 0; p.bx = 0; p.by = 0; p.z = 0; p.bm = 0; p.pitT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.vx = p.vy = 0; p.bowled = null;
     this.rosterDirty = true; return true;
   }
 
@@ -332,6 +334,7 @@ class Room {
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       x = Math.round(T.clamp(x, -1, 1) * 100) / 100; y = Math.round(T.clamp(y, -1, 1) * 100) / 100;
       const inp = { s, x, y, a: e[3] ? 1 : 0 };
+      if (e.length >= 7 && p.c === IDX.god && p.staff) inp.h = (e[6] | 0) & 3;      // held moves (God only): 1 = ascend, 2 = beam
       if (e[3] && e.length >= 6) { const ax = +e[4], ay = +e[5]; if (Number.isFinite(ax) && Number.isFinite(ay)) { const L = Math.hypot(ax, ay); if (L > 0.05) { inp.ax = Math.round(ax / L * 100) / 100; inp.ay = Math.round(ay / L * 100) / 100; } } }
       p.queue.push(inp);
       if (e[3]) p.lastActiveAt = now;           // using an ability counts as playing; plain movement is judged by how far you actually got (see the idle check in tick)
@@ -356,7 +359,7 @@ class Room {
   /* ------------------------------- the tick ----------------------------- */
   runStep(p, inp) {
     let i = inp;
-    if (this.state === STATE.COUNT) i = { s: inp.s, x: 0, y: 0, a: 0 };
+    if (this.state === STATE.COUNT) i = { s: inp.s, x: 0, y: 0, a: 0, h: 0 };
     const ev = [], wasLeap = p.c === IDX.frog && p.abT > 0;
     T.stepPlayer(p, i, this.ctx, ev);
     if (!p.bot) p.ack = inp.s;
@@ -515,6 +518,38 @@ class Room {
     }
   }
 
+  /** God's beam of light: a horizontal bar from God to the edge of the arena, through walls and everything else. Anyone in it is stunned (and any ability cancelled) for as long as it touches them: no immunity, shield, leap or tunnel helps. */
+  stepBeams() {
+    for (const g of this.players.values()) {
+      if (g.c !== IDX.god || !g.bm || g.out || g.gone) continue;
+      const dir = g.fx >= 0 ? 1 : -1, hw = T.GOD_BEAM_W / 2;
+      for (const q of this.players.values()) {
+        if (q === g || q.out || q.gone || q.c === IDX.god) continue;
+        const r = CHARS[q.c].radius;
+        if ((q.x - g.x) * dir < -r || Math.abs(q.y - g.y) > hw + r) continue;
+        if (q.stun <= 0) this.emit({ k: 'ab', n: 'beamhit', id: q.id, x: r1(q.x), y: r1(q.y), dx: dir, dy: 0 });
+        q.stun = Math.max(q.stun, 0.45);
+        q.abT = 0; q.pitT = 0;
+      }
+    }
+  }
+
+  /** God's second move: jump next to any other player. Chosen from a menu on the client; checked here (staff only, off cooldown, not stunned). */
+  godTeleport(p, toId) {
+    if (!p.staff || p.c !== IDX.god || p.out || p.gone || p.stun > 0 || p.cd > 0 || this.state === STATE.COUNT) return false;
+    const q = this.players.get(toId | 0);
+    if (!q || q === p || q.gone) return false;
+    const r = CHARS[p.c].radius, ox = p.x, oy = p.y;
+    let nx = q.x, ny = q.y;
+    for (let k = 0; k < 12; k++) {                                   // land beside them, on free ground
+      const a = (k / 12) * Math.PI * 2 + 0.6, tx = q.x + Math.cos(a) * 58, ty = q.y + Math.sin(a) * 58;
+      if (T.circleFree(this.map, tx, ty, r)) { nx = tx; ny = ty; break; }
+    }
+    p.x = nx; p.y = ny; p.vx = p.vy = 0; p.cd = T.GOD_TP_CD; this.resetHist(p);
+    this.emit({ k: 'ab', n: 'godtp', id: p.id, x: r1(ox), y: r1(oy), x1: r1(nx), y1: r1(ny), dx: 0, dy: 0 });
+    return true;
+  }
+
   popDecoy(d) {
     const i = this.decoys.indexOf(d); if (i < 0) return;
     this.decoys.splice(i, 1);
@@ -528,13 +563,13 @@ class Room {
     else if (this.state === STATE.PLAY) { this.tl -= DT; if (this.tl <= 0) this.endRound(); }
     else if (this.state === STATE.RESULTS) {
       this.timer -= DT; this.tl = Math.max(0, this.timer);
-      if (this.timer <= 0) { if (this.players.size >= 2) this.beginRound(); else this.toWait(); }
+      if (this.timer <= 0) { if (this.players.size >= this.minPlayers()) this.beginRound(); else this.toWait(); }
     }
     else if (this.state === STATE.VOTE) {
       this.timer -= DT; this.tl = Math.max(0, this.timer);
-      if (this.timer <= 0) { if (this.players.size >= 2) this.startCountdown(); else this.toWait(); }
+      if (this.timer <= 0) { if (this.players.size >= this.minPlayers()) this.startCountdown(); else this.toWait(); }
     }
-    else if (this.state === STATE.WAIT && this.players.size >= 2) this.beginRound();
+    else if (this.state === STATE.WAIT && this.players.size >= this.minPlayers()) this.beginRound();
 
     // ---- players
     for (const p of this.players.values()) {
@@ -587,6 +622,7 @@ class Room {
 
     this.stepSeeds();
     this.stepPits();
+    this.stepBeams();
 
     // ---- tagging & scoring
     if (this.state === STATE.PLAY) {
@@ -600,7 +636,7 @@ class Room {
         for (const d of this.decoys.slice()) {
           if (d.o !== it.id && Math.hypot(d.x - it.x, d.y - it.y) < ri + 16) { this.popDecoy(d); it.stun = Math.max(it.stun, 1.0); }
         }
-        if (it.stun <= 0 && it.lock <= 0 && !(it.c === IDX.mole && it.abT > 0)) {       // a mole can't tag from underground
+        if (it.stun <= 0 && it.lock <= 0 && !(it.c === IDX.mole && it.abT > 0) && !(it.c === IDX.god && it.z >= T.GOD_AIR)) {       // a mole can't tag from underground
           // Generous reach (TAG_REACH) plus a little rewind for laggy taggers: they saw their target a moment in the past,
           // so a tag also counts if the target WAS in reach shortly before. Capped at LAG_COMP_MAX so dodging still works.
           const comp = it.bot ? 0 : T.clamp((it.rtt + 90) / 1000 * 0.8, 0, T.LAG_COMP_MAX), kmax = Math.min(HIST - 2, Math.round(comp * T.TICK));
@@ -637,7 +673,7 @@ class Room {
         if (this.state !== STATE.PLAY) { /* the round was just scrapped */ }
         else if (potato && this.aliveCount() <= 1) this.endRound();
         else if (infection) { let surv = 0; for (const p of this.players.values()) if (!p.out && !p.it) surv++; if (surv <= (this.tagCount > 0 ? 1 : 0)) this.endRound(); }
-        else if (this.activeCount() < 2) this.toWait();
+        else if (this.activeCount() < this.minPlayers()) this.toWait();
       }
     }
 
@@ -673,8 +709,8 @@ class Room {
     const ps = [];
     const tnow = Date.now();
     for (const p of this.players.values()) {
-      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out || p.gone ? 16 : 0) | (p.wait ? 32 : 0) | (p.typeAt > tnow ? 64 : 0);
-      ps.push([p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags]);
+      const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out || p.gone ? 16 : 0) | (p.wait ? 32 : 0) | (p.typeAt > tnow ? 64 : 0) | (p.bm ? 128 : 0);
+      ps.push([p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags, r1(p.z || 0)]);
     }
     const head = {
       t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, md: this.mode, p: ps,

@@ -296,6 +296,19 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   const r6 = play('proximity', 3); const it6 = r6.itPlayers()[0], V = [...r6.players.values()].find((p) => p !== it6);
   it6.stun = 0; it6.lock = 0; it6.score = 0; it6.x = 800; it6.y = 500; V.x = 815; V.y = 500; V.imm = 0; V.vx = V.vy = 0; it6.vx = it6.vy = 0; step(r6);
   ok(it6.score < 1, 'proximity: a tag itself is worth nothing extra');
+  // any number of players can vote: even one person alone gets the mode vote every round
+  for (const n of [1, 2]) {
+    const t1 = tsrv(n); t1.tick();
+    ok(t1.state === T.STATE.VOTE && t1.vote.modes.join() === 'proximity,points', 'test server: ' + n + ' player(s) still get the mode vote');
+    const pp = [...t1.players.values()]; pp.forEach((p) => { t1.castVote(p, 'd', 1); t1.castVote(p, 'm', 0); });
+    run(t1, 4, () => t1.state === T.STATE.COUNT); run(t1, 14, () => t1.state === T.STATE.PLAY);
+    ok(t1.state === T.STATE.PLAY && t1.mode === 'points', 'test server: ' + n + ' player(s) play the voted mode');
+    run(t1, t1.tl + 1, () => t1.state === T.STATE.RESULTS); run(t1, 20, () => t1.state === T.STATE.VOTE);
+    ok(t1.state === T.STATE.VOTE, 'test server: ' + n + ' player(s) vote again next round');
+  }
+  { const t1 = tsrv(2); t1.tick(); const left = [...t1.players.values()][1]; t1.removePlayer(left); step(t1);
+    ok(t1.state === T.STATE.VOTE && t1.players.size === 1, 'test server: the vote carries on when all but one player leave'); }
+  { const g = mk('vote', 1, { kind: 'public' }); g.tick(); run(g, 1); ok(g.state === T.STATE.WAIT, 'regular server: one player still waits for company'); }
   // wins on the test server
   const payoutT = (n) => { const r = tsrv(n); const won = []; r.onWin = (p) => won.push(p.id); let i = 1; const first = [...r.players.values()][0]; for (const p of r.players.values()) { p.uid = i++; p.score = p === first ? 60 : 5; p.lastActiveAt = clk; } r.state = T.STATE.PLAY; r.endRound(); return won.length; };
   ok(payoutT(2) === 0 && payoutT(3) === 1, 'test server: wins count, but only with 3+ players');

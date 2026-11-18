@@ -442,13 +442,45 @@ const Chars = (() => {
       g.beginPath(); g.moveTo(-2.4, 3.4); g.quadraticCurveTo(0, 6.4, 2.4, 3.4); g.lineWidth = 1.6; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
       g.restore();
     },
+    god(g, c, o) {
+      // Staff-only. Three glowing eyes, feathered angel wings that beat slowly (and hard while flying), a white robe with a golden sash.
+      const fl = Math.sin(o.t * (3 + 9 * o.fly)) * (0.09 + 0.28 * o.fly) + Math.sin(o.t * 1.7) * 0.04, hov = Math.sin(o.t * 2.6) * 1.2;
+      for (const sd of [-1, 1]) {
+        g.save(); g.translate(sd * 9, -21 + hov); g.scale(sd, 1); g.rotate(-0.12 - fl);
+        for (const [rowLen, rowW, fill, n, a0] of [[50, 6.8, c.ll, 7, -1.12], [38, 6.2, '#ffffff', 6, -0.98], [24, 5.2, '#ffffff', 5, -0.78]]) {
+          for (let i = 0; i < n; i++) {
+            const a = a0 + i * (1.5 / (n - 1)), len = rowLen * (0.7 + 0.3 * Math.sin((i / (n - 1)) * Math.PI * 0.85 + 0.45));
+            ell(g, Math.cos(a) * len * 0.5, Math.sin(a) * len * 0.5 - 2, len * 0.5, rowW, fill, 1.8, a);
+          }
+        }
+        g.restore();
+      }
+      g.save(); g.translate(0, hov * 0.5);
+      feet(g, c.dd, 6, o, 0.85);
+      g.beginPath(); g.moveTo(-11, -25); g.quadraticCurveTo(-20, -9, -16.5, -2); g.lineTo(16.5, -2); g.quadraticCurveTo(20, -9, 11, -25); g.closePath(); fillStroke(g, '#ffffff', 2.4);
+      rrect(g, -13.6, -12.6, 27.2, 4.2, 2, '#ffcf3a', 1.7);
+      ell(g, 0, -27, 14, 14.6, c.l);
+      cheek(g, -9.8, -21.4, 2.8, 1.7); cheek(g, 9.8, -21.4, 2.8, 1.7);
+      g.beginPath(); g.moveTo(-3.4, -18.6); g.quadraticCurveTo(0, -16, 3.4, -18.6); g.lineWidth = 1.5; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
+      const pulse = 0.78 + 0.22 * Math.sin(o.t * 4), beam = o.beam ? 1 : 0;
+      for (const [ex, ey, er] of [[-6.2, -27.6, 3.9], [6.2, -27.6, 3.9], [0, -36.6, 3.2]]) {          // the three glowing eyes
+        const R = er * (3.2 + beam * 1.4), gr = g.createRadialGradient(ex, ey, 0, ex, ey, R);
+        gr.addColorStop(0, `rgba(255,246,170,${0.9 * pulse})`); gr.addColorStop(0.45, `rgba(255,222,90,${0.38 * pulse})`); gr.addColorStop(1, 'rgba(255,214,70,0)');
+        g.beginPath(); g.arc(ex, ey, R, 0, 7); g.fillStyle = gr; g.fill();
+        g.save(); g.translate(ex, ey); g.scale(1, Math.max(0.1, 1 - o.blink * 0.92));
+        g.beginPath(); g.ellipse(0, 0, er * 1.12, er * 0.92, 0, 0, 7); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#e8a410'; g.stroke();
+        g.beginPath(); g.arc(o.lx * 0.5, o.ly * 0.4, er * 0.42, 0, 7); g.fillStyle = '#ffd23f'; g.fill();
+        g.restore();
+      }
+      g.restore();
+    },
   };
 
   /* ---------------------------------- hats ---------------------------------- */
   // where the top of each character's head is (the hat's base sits here) and how wide the hat may be
   const HEAD = {
     fox: [0, -36, 12], frog: [0, -37, 11], ghost: [0, -45, 12], cat: [0, -35.5, 11], bear: [0, -39.5, 13], octo: [0, -41, 13],
-    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11], avocado: [0, -43.5, 10], dog: [0, -36.5, 12], mole: [0, -34.5, 11], donkey: [0, -36, 9], skunk: [0, -35.5, 11],
+    owl: [0, -39.5, 12], robot: [0, -37, 12], penguin: [0, -39.5, 11], raccoon: [0, -38, 12], bat: [0, -36.5, 10], star: [0, -40.5, 9], bird: [0, -39, 11], avocado: [0, -43.5, 10], dog: [0, -36.5, 12], mole: [0, -34.5, 11], donkey: [0, -36, 9], skunk: [0, -35.5, 11], god: [0, -41.5, 11],
     icon: [0, -1.5, 12],      // used by hatIcon(): hat sits on the origin at natural size
   };
   function drawHat(g, id, hat, o) {
@@ -540,7 +572,7 @@ const Chars = (() => {
     SK = th ? { th, t: o.t || 0 } : null;
     const s = o.s || 1, face = o.face || 1, t = o.t || 0, spd = o.spd || 0, pz = o.pose;
     const up = pz ? pz.up : 0, air = (o.air || 0) + up / 46;
-    const o2 = { t, spd, blink: o.blink || 0, lx: (o.lx || 0) * face, ly: o.ly || 0, gf: gt.f, hat: o.hat | 0 };
+    const o2 = { t, spd, blink: o.blink || 0, lx: (o.lx || 0) * face, ly: o.ly || 0, gf: gt.f, hat: o.hat | 0, fly: o.fly || 0, beam: o.beam || 0 };
     g.save();
     g.translate(o.x, o.y);
     if (o.shadow !== false) {
@@ -697,6 +729,10 @@ const Chars = (() => {
     swap: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
     seed: '<path d="M13.5 7.5c3.6-1.2 7 1.5 6.4 5.2-.6 3.5-4.4 5.2-6.9 3.3-2.3-1.8-2.4-7 .5-8.5z"/><path d="M2 9h6M3 13h5M5 17h4"/>',
     gust: '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 13h16a3 3 0 1 1-3 3"/><path d="M3 18h7"/>',
+    divine: '<path d="M12 21V6"/><path d="M6.5 11.5 12 6l5.5 5.5"/><path d="M4 21h16"/>',
+    fly: '<path d="M12 21V6"/><path d="M6.5 11.5 12 6l5.5 5.5"/><path d="M5 21h14"/>',
+    tp: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="8" stroke-dasharray="2.5 3"/>',
+    beam: '<path d="M2 12h20"/><path d="M2 8.5h12M2 15.5h12" stroke-dasharray="3 3"/><circle cx="19" cy="12" r="2.4"/>',
     echo: '<circle cx="12" cy="12" r="2"/><path d="M7.6 7.6a6.2 6.2 0 0 0 0 8.8M16.4 7.6a6.2 6.2 0 0 1 0 8.8M4.6 4.6a10.4 10.4 0 0 0 0 14.8M19.4 4.6a10.4 10.4 0 0 1 0 14.8"/>',
   };
   const icon = (fx, cls) => `<svg viewBox="0 0 24 24" class="${cls || 'ico'}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[fx] || ''}</svg>`;

@@ -99,7 +99,7 @@
       el('p', 'ch-sub', 'Every chest fills the bars (wooden 1, silver 2, golden 4). When a bar is full, your next chest is guaranteed to have an epic or better (or a legendary). Pulling one empties the bar.'));
     const foc = el('label', 'ch-focus'); foc.append(el('span', 'mono', 'Aim your chests at'));
     const sl = el('select'); sl.setAttribute('aria-label', 'Favourite character'); sl.disabled = !u;
-    sl.append(new Option('Any character', ''), ...CHARS.map((d) => new Option(`${d.name} the ${d.species}`, d.id)));
+    sl.append(new Option('Any character', ''), ...CHARS.filter((d) => !d.secret).map((d) => new Option(`${d.name} the ${d.species}`, d.id)));
     sl.value = c ? c.focus : ''; sl.addEventListener('change', async () => { const r = await A.api('/api/chest/focus', { char: sl.value }); if (r.j.user) A.account = r.j.user; if (!r.ok) A.toast(r.j.error || 'Could not set that.'); else { A.toast(sl.value ? 'Chests now favour that character (4x as likely).' : 'Chests are open to every character again.'); Sfx.play('click'); } paintAll(); });
     foc.append(sl, el('em', '', 'The character you pick shows up 4x as often in what you pull.'));
     info.append(bars, foc); panel.appendChild(info);
@@ -110,6 +110,7 @@
     const u = acct(), have = owned();
     const strip = el('div', 'lk-strip'); strip.setAttribute('role', 'tablist'); strip.setAttribute('aria-label', 'Character');
     CHARS.forEach((d, i) => {
+      if (d.secret) return;                       // the secret character has no skins
       const n = C.SKIN_THEMES.filter((t) => C.ownsSkin(have, d.id, t.id)).length;
       const b = el('button', 'lk-char' + (i === st.ch ? ' on' : '')); b.type = 'button'; b.setAttribute('aria-label', `${d.species}, ${n} of ${C.SKIN_THEMES.length} skins`); b.setAttribute('aria-selected', String(i === st.ch));
       b.append(skinImg(i, A.sel.skinOf(i), 72), el('em', n ? 'has' : '', `${n}/${C.SKIN_THEMES.length}`));

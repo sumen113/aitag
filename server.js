@@ -21,7 +21,8 @@ const MIME = {
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2', '.webp': 'image/webp',
 };
-const CSP = "default-src 'self'; script-src 'self' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss: https://cloud.umami.is https://gateway.umami.is https://api-gateway.umami.dev; frame-ancestors *; base-uri 'none'; form-action 'self'";
+const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS || '*').replace(/[;\r\n]/g, ' ').trim() || '*';        // who may embed the game page in an iframe (default: anyone)
+const csp = (ancestors) => "default-src 'self'; script-src 'self' https://cloud.umami.is; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss: https://cloud.umami.is https://gateway.umami.is https://api-gateway.umami.dev; frame-ancestors " + ancestors + "; base-uri 'none'; form-action 'self'";
 
 /* ------------------------------ static files ------------------------------ */
 const files = new Map();
@@ -94,10 +95,12 @@ const server = http.createServer(async (req, res) => {
   const f = files.get(url);
   if (!f) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
   const headers = {
-    'Content-Type': f.type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin',
+    'Content-Type': f.type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
     'Cache-Control': f.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
   };
-  if (url === '/index.html' || url === '/hq.html') headers['Content-Security-Policy'] = CSP;
+  // The game can be embedded in other sites (FRAME_ANCESTORS, default any); the staff page never can.
+  if (url === '/hq.html') { headers['X-Frame-Options'] = 'DENY'; headers['Content-Security-Policy'] = csp("'none'"); }
+  else if (url === '/index.html') headers['Content-Security-Policy'] = csp(FRAME_ANCESTORS);
   if (url === '/hq.html') headers['Cache-Control'] = 'no-store';
   if (f.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
     headers['Content-Encoding'] = 'gzip'; headers.Vary = 'Accept-Encoding';
@@ -206,8 +209,10 @@ wss.on('connection', (ws, req) => {
     }
     const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), col = T.cleanColor(m.k), hat = T.cleanHat(m.h);
     const ks = T.cleanColorList(m.ks, T.CHARS.length); ks[ci] = col;        // each character keeps its own colour
-    const owns = T.ownsChar(user ? user.owned : [], T.CHARS[ci].id);
+    const staffUser = !!(user && admin && admin.isAdmin(user.username));
+    const owns = T.canUseChar(user ? user.owned : [], T.CHARS[ci].id, staffUser);          // secret characters (God): staff accounts with the unlock only
     const skin = user && T.ownsSkin(user.owned, T.CHARS[ci].id, T.cleanSkin(m.sk)) ? T.cleanSkin(m.sk) : '';   // only skins this account really owns
+    if (T.CHARS[ci].secret && !owns) return fail('That character is not available.');            // not even in practice
     if (!owns && mode !== 'bots') return fail(user ? 'You have not unlocked that character yet. Visit the shop.' : 'Guests can only play the starter characters. Log in to use more.');
     if (ws.readyState !== 1) return;
     let room;
@@ -258,10 +263,11 @@ wss.on('connection', (ws, req) => {
     const ci = T.clamp(m.c | 0, 0, T.CHARS.length - 1), id = T.CHARS[ci].id, col = T.cleanColor(m.k);
     let user = null;
     if (c.user && auth) { try { user = await auth.userFromCookie(req.headers.cookie); } catch (e) { return; } }
-    if (!room.solo && !T.ownsChar(user ? user.owned : [], id)) return;                  // practice lets you try anyone, like joining does
+    const staffUser = !!(user && admin && admin.isAdmin(user.username));
+    if (T.CHARS[ci].secret ? !T.canUseChar(user ? user.owned : [], id, staffUser) : (!room.solo && !T.ownsChar(user ? user.owned : [], id))) return;      // practice lets you try anyone (but never the secret character)
     const skin = user && T.ownsSkin(user.owned, id, T.cleanSkin(m.sk)) ? T.cleanSkin(m.sk) : '';
     if (!room.setLook(p, ci, col, skin)) return;
-    if (user && T.ownsChar(user.owned, id) && store) {
+    if (user && T.canUseChar(user.owned, id, staffUser) && store) {
       const st = user.settings || {}, ks = T.cleanColorList(st.ks, T.CHARS.length); ks[ci] = col;
       const sks = Object.assign({}, st.sk); if (skin) sks[id] = skin; else delete sks[id];
       store.saveSettings(user.id, { c: id, k: col, h: p.hat | 0, ks, sk: sks }).catch(() => {});
@@ -286,6 +292,7 @@ wss.on('connection', (ws, req) => {
       }
     }
     else if (m.t === 'vote') { if (c.player) c.room.castVote(c.player, m.k === 'm' ? 'm' : 'd', Number(m.i) | 0); }
+    else if (m.t === 'god') { if (c.player && c.room && m.a === 'tp') c.room.godTeleport(c.player, Number(m.to) | 0); }          // God's teleport menu (staff only; the room re-checks everything)
     else if (m.t === 'typing') { if (c.player) { c.player.lastActiveAt = now; c.player.typeAt = m.on && !c.player.muted ? now + 3000 : 0; } }     // bubble over your head while you type (3 s unless refreshed)
     else if (m.t === 'char') { if (c.player && c.room && !c.lookBusy) { c.lookBusy = true; look(m).catch(() => {}).finally(() => { c.lookBusy = false; }); } }
     else if (m.t === 'join' && !c.player && !c.joining) {

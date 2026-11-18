@@ -37,6 +37,9 @@ const Sfx = (() => {
   }
 
   const S = {
+    beam() { tone(660, 0.5, 'sawtooth', 0.07, 1320); tone(990, 0.5, 'sine', 0.07, 1980, 0.03); noise(0.35, 0.1, 2000, 0, 6000); },
+    godtp() { tone(880, 0.12, 'sine', 0.12, 1760); tone(1320, 0.22, 'triangle', 0.09, 660, 0.08); },
+    beamhit() { tone(320, 0.14, 'square', 0.08, 110); noise(0.1, 0.1, 1500, 0, 300); },
     tag() { tone(520, 0.16, 'square', 0.16, 180); tone(300, 0.22, 'sawtooth', 0.1, 90, 0.04); noise(0.12, 0.25, 1800, 0, 400); },
     tagged() { tone(220, 0.35, 'sawtooth', 0.18, 70); tone(440, 0.12, 'square', 0.1, 880, 0.02); },
     youreIt() { tone(660, 0.12, 'square', 0.14); tone(440, 0.12, 'square', 0.14, null, 0.13); tone(660, 0.18, 'square', 0.14, null, 0.26); },

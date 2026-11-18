@@ -200,6 +200,13 @@
     owned.append(el('span', '', u.owned.length ? u.owned.map((x) => x.replace('char:', '')).join(', ') : 'only the starters'));
     c.append(owned);
 
+    if (u.admin) {                                      // the secret character: only staff accounts can unlock it, and only from here
+      const gd = el('div', 'ad-user-row'), has = u.owned.includes('char:god'); gd.append(el('span', 'mono', 'Secret'));
+      gd.append(el('span', '', has ? 'God is unlocked (pick it from the character screen)' : 'God is locked'));
+      const gb = el('button', 'ad-btn', has ? 'Lock God' : 'Unlock God'); gb.type = 'button';
+      gb.onclick = async () => done(await api('item', { username: u.username, item: 'char:god', on: !has }), has ? `God locked for ${u.username}` : `God unlocked for ${u.username}`);
+      gd.append(gb); c.append(gd);
+    }
     const sk = el('div', 'ad-user-row'); sk.append(el('span', 'mono', 'Skins'));
     const ch = u.chest;
     sk.append(el('span', '', `${u.skins.length}/${T.SKINS.length}` + (ch ? ` · ✦${ch.glitter} glitter · ${ch.opened} chest${ch.opened === 1 ? '' : 's'} opened · gifts ${ch.gifts.wood}W ${ch.gifts.silver}S ${ch.gifts.gold}G` : '')));
@@ -245,7 +252,7 @@
   const THEMES = T.SKIN_THEMES.slice().sort((a, b) => a.rarity - b.rarity);
   const rarName = (r) => T.RARITIES[r].name;
   const fill = (sel, items) => items.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.append(o); });
-  fill($('adSkChar'), [['', 'All characters'], ...T.CHARS.map((c) => [c.id, `${c.name} the ${c.species}`])]);
+  fill($('adSkChar'), [['', 'All characters'], ...T.CHARS.filter((c) => !c.secret).map((c) => [c.id, `${c.name} the ${c.species}`])]);
   fill($('adSkTheme'), [['', 'All themes'], ...THEMES.map((t) => [t.id, `${t.name} (${rarName(t.rarity)})`])]);
   const tiers = T.CHEST_ORDER.map((id) => [id, T.CHEST_TIERS[id].name]);
   fill($('adGfTier'), tiers); fill($('adAllTier'), [['', 'No chest'], ...tiers]);
@@ -277,6 +284,7 @@
     for (const t of THEMES) { const h = el('span', 'ad-skh', t.name); h.style.setProperty('--rc', T.RARITIES[t.rarity].col); head.append(h); }
     g.append(head);
     T.CHARS.forEach((ch, i) => {
+      if (ch.secret) return;
       const row = el('div', 'ad-skrow'), lab = el('button', 'ad-skc'); lab.type = 'button'; lab.title = `Give or take all ${ch.species} skins`;
       const im = new Image(); im.alt = ''; im.width = im.height = 34; im.src = Chars.avatar(i, 0, 48, 0, ''); lab.append(im, el('span', '', ch.species));
       const n = THEMES.filter((t) => have.has(T.skinId(ch.id, t.id))).length;

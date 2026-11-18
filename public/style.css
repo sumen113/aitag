@@ -751,3 +751,26 @@ body.dark .chest-art, .dark .chest-art { filter: none; }
 .pk.sk img { width: 34px; height: 34px; }
 @media (max-width: 700px) { #pick { bottom: 126px; } .pk { min-width: 54px; } .pk span { display: none; } }
 @media (prefers-reduced-motion: reduce) { .pk { transition: none; } }
+
+/* ---- God (staff-only character): two extra move buttons beside the big one, and a teleport menu ---- */
+.ability-btn.sub { width: 78px; height: 78px; }
+#godBeam { right: calc(max(18px, env(safe-area-inset-right)) + 126px); bottom: 4px; }
+#godTp { right: max(30px, env(safe-area-inset-right)); bottom: 132px; }
+.ability-btn.sub .nm { font-size: 11px; }
+.ability-btn.on { background: #fff3a8; box-shadow: 0 0 0 4px rgba(255, 226, 122, .55), 4px 4px 0 var(--ink); }
+#godBeam.on { background: #fff3a8; }
+#godTp.ready, #godBeam.ready { background: var(--yellow); }
+#godMenu { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); max-height: 46vh; display: flex; flex-direction: column; gap: 8px; padding: 12px; z-index: 30; pointer-events: auto; }
+#godMenu.hidden { display: none; }
+.god-head { display: flex; align-items: center; gap: 10px; }
+.god-head b { font-size: 16px; }
+.god-head .mono { margin-left: auto; font-size: 12px; opacity: .75; }
+.god-x { border: 3px solid var(--ink); background: var(--card); border-radius: 8px; width: 28px; height: 28px; font-size: 18px; line-height: 1; cursor: pointer; }
+.god-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; overflow-y: auto; padding: 2px; }
+.god-p { display: flex; align-items: center; gap: 8px; border: 3px solid var(--ink); border-radius: 12px; background: var(--paper); padding: 4px 8px 4px 4px; font: 700 13px var(--body, inherit); cursor: pointer; text-align: left; min-height: 48px; }
+.god-p img { width: 40px; height: 40px; flex: none; }
+.god-p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.god-p em { font: 700 10px var(--mono); background: #ff4d6d; color: #fff; border-radius: 6px; padding: 1px 5px; font-style: normal; margin-left: auto; }
+.god-p:hover:not(:disabled), .god-p:focus-visible { background: #fff3a8; }
+.god-p:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 700px) { #godTp { bottom: 124px; } #godBeam { right: calc(max(22px, env(safe-area-inset-right)) + 112px); } .ability-btn.sub { width: 68px; height: 68px; } }

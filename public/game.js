@@ -15,7 +15,7 @@
   /* ================================ state ================================== */
   const G = {
     ws: null, inGame: false, id: 0, solo: false, diff: 'normal', sel: { name: '', c: 0, k: 0 },
-    roster: new Map(), map: null, ctx: { map: null, goos: [] },
+    roster: new Map(), god: { fly: false, beam: false }, map: null, ctx: { map: null, goos: [] },
     me: null, px: 0, py: 0, pending: [], seq: 0, sendBuf: [], acc: 0, err: { x: 0, y: 0 },
     snaps: [], offset: null, goos: [], pits: [], decoys: [], decoysAt: 0, seeds: [], seedsAt: 0, uiOff: false,
     state: STATE.WAIT, tl: 0, tlAt: 0, rd: 0, itId: 0, res: null, mode: 'classic', pt: new Map(), ptAt: 0, voteDur: 14,
@@ -72,7 +72,7 @@
     G.sv = m.sv || null;
     G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; if (m.name) G.sel.name = m.name;
     G.roster.clear(); onRoster(m.roster);
-    G.me = null; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
+    G.me = null; G.god = { fly: false, beam: false }; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
     G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
@@ -132,7 +132,7 @@
       const a = clamp(G.acc / DT, 0, 1);
       const vx = G.px + (G.me.x - G.px) * a + G.err.x, vy = G.py + (G.me.y - G.py) * a + G.err.y;
       C.unpackSim(G.me, m.me);
-      const zero = { x: 0, y: 0, a: 0 };
+      const zero = { x: 0, y: 0, a: 0, h: 0 };
       for (const i of G.pending) C.stepPlayer(G.me, G.state === STATE.COUNT ? zero : i, G.ctx, null);
       G.px = G.me.x; G.py = G.me.y;
       const ex = vx - G.me.x, ey = vy - G.me.y;
@@ -152,11 +152,11 @@
     const sa = S[i], sb = S[i + 1], a = sa.by.get(id), b = sb ? sb.by.get(id) : null;
     if (a && b) {
       const t = clamp((rt - sa.ts) / (sb.ts - sa.ts || 1), 0, 1);
-      return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, vx: a[3] + (b[3] - a[3]) * t, vy: a[4] + (b[4] - a[4]) * t, fx: b[5], fy: b[6], fl: b[7], abT: b[8] };
+      return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, vx: a[3] + (b[3] - a[3]) * t, vy: a[4] + (b[4] - a[4]) * t, fx: b[5], fy: b[6], fl: b[7], abT: b[8], alt: (a[11] || 0) + ((b[11] || 0) - (a[11] || 0)) * t };
     }
     const e = a || b; if (!e) return null;
     const dt = a && !b ? clamp((rt - sa.ts) / 1000, 0, 0.15) : 0;
-    return { x: e[1] + e[3] * dt, y: e[2] + e[4] * dt, vx: e[3], vy: e[4], fx: e[5], fy: e[6], fl: e[7], abT: e[8] };
+    return { x: e[1] + e[3] * dt, y: e[2] + e[4] * dt, vx: e[3], vy: e[4], fx: e[5], fy: e[6], fl: e[7], abT: e[8], alt: e[11] || 0 };
   }
 
   /* ============================ HUD feedback (GSAP) ========================== */
@@ -256,7 +256,7 @@
   }
 
   const POSE_FX = new Set(['dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'shieldhit', 'swap', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'slide', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
-  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl', 'seedhit', 'seedpop', 'pitfall']);   // effects the local sim doesn't predict: show them for me too
+  const SERVER_FX = new Set(['shieldhit', 'swap', 'splash', 'bowl', 'seedhit', 'seedpop', 'pitfall', 'godtp', 'beamhit']);   // effects the local sim doesn't predict: show them for me too
   function abilityFx(e, local) {
     const id = e.n, x = e.x, y = e.y;
     const loud = local || near(x, y);
@@ -350,6 +350,13 @@
       case 'splash':
         Particles.burst(x, y + 10, '#5ddc8a', 18, 330, 7, 0.6); Particles.ring(x, y + 10, 8, 64, '#5ddc8a', 0.45, 7); Particles.ring(x, y + 10, 4, 40, '#fff', 0.3, 4);
         if (loud) { Sfx.play('splash'); if (local) G.shake = Math.max(G.shake, 5); } break;
+      case 'beam':
+        Particles.ring(x, y, 6, 90, '#fff3a8', 0.4, 6); Particles.burst(x, y, '#ffe27a', 14, 300, 5, 0.5); if (loud) Sfx.play('beam'); break;
+      case 'godtp':
+        for (const [px, py, c] of [[x, y, '#fff3a8'], [e.x1, e.y1, '#ffffff']]) { Particles.ring(px, py, 8, 96, c, 0.5, 6); Particles.burst(px, py, '#ffe27a', 16, 320, 5, 0.55); for (let i = 0; i < 5; i++) Particles.star(px, py, '#fff6b0', 9, 0.7, (Math.random() - 0.5) * 200, -40 - Math.random() * 90); }
+        if (loud || near(e.x1, e.y1)) Sfx.play('godtp'); if (e.id === G.id) G.camSnap = true; break;
+      case 'beamhit':
+        Particles.burst(x, y, '#fff3a8', 12, 340, 5, 0.45); Particles.star(x, y - 20, '#ffd23f', 12, 0.6, 0, -140); if (loud) Sfx.play('beamhit'); break;
       default: break;
     }
   }
@@ -365,19 +372,59 @@
     if (typing()) return;
     if (e.code === 'Enter' || e.code === 'NumpadEnter') { if (G.uiOff) setUi(false); openChat(); e.preventDefault(); return; }
     if (MOVE[e.code]) { K[MOVE[e.code]] = true; e.preventDefault(); }
+    else if (isGod() && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) { G.god.fly = true; Sfx.unlock(); e.preventDefault(); }      // God: hold to ascend
+    else if (isGod() && e.code === 'KeyE') { G.god.beam = true; Sfx.unlock(); e.preventDefault(); }                                                          // God: hold for the beam of light
+    else if (isGod() && e.code === 'KeyQ') { if (!e.repeat) toggleGodMenu(); e.preventDefault(); }                                                           // God: teleport menu
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; Sfx.unlock(); } e.preventDefault(); }
     else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
     else if (e.code === 'KeyM') toggleMute();
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
-  window.addEventListener('keyup', (e) => { if (MOVE[e.code]) K[MOVE[e.code]] = false; });
+  window.addEventListener('keyup', (e) => {
+    if (MOVE[e.code]) K[MOVE[e.code]] = false;
+    if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') G.god.fly = false;
+    else if (e.code === 'KeyE') G.god.beam = false;
+  });
   window.addEventListener('pagehide', () => closeWs());
-  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.joy.active = false; $('joy').classList.add('hidden'); };
+  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.god.fly = G.god.beam = false; G.joy.active = false; $('joy').classList.add('hidden'); };
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => { G.acc = 0; if (document.hidden) releaseAll(); });
 
   const abBtn = $('abilityBtn');
-  abBtn.addEventListener('pointerdown', (e) => { G.abilityQueued = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  abBtn.addEventListener('pointerdown', (e) => { if (isGod()) G.god.fly = true; else G.abilityQueued = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) abBtn.addEventListener(ev, () => { G.god.fly = false; });
+  /* ===== God (staff only): three moves. Ascend = hold Space / the big button, Teleport = Q / its button (opens a player menu), Beam = hold E / its button ===== */
+  const isGod = () => !!G.me && CHARS[G.me.c].id === 'god';
+  const godBeamBtn = $('godBeam'), godTpBtn = $('godTp'), godMenu = $('godMenu');
+  godBeamBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('beam'); godTpBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('tp');
+  godBeamBtn.addEventListener('pointerdown', (e) => { G.god.beam = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) godBeamBtn.addEventListener(ev, () => { G.god.beam = false; });
+  godTpBtn.addEventListener('pointerdown', (e) => { Sfx.unlock(); toggleGodMenu(); e.preventDefault(); e.stopPropagation(); });
+  let godMenuAt = 0;
+  function closeGodMenu() { if (godMenu.classList.contains('hidden')) return; gsap.to(godMenu, { autoAlpha: 0, y: 14, duration: 0.18, overwrite: true, onComplete: () => godMenu.classList.add('hidden') }); }
+  function toggleGodMenu() { if (!godMenu.classList.contains('hidden')) closeGodMenu(); else openGodMenu(); }
+  function openGodMenu() {
+    if (!isGod()) return;
+    godMenu.classList.remove('hidden'); paintGodMenu(true);
+    gsap.fromTo(godMenu, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out', overwrite: true });
+  }
+  /** one button per other player: tap to teleport next to them. Rebuilt a few times a second while open so the list stays current. */
+  function paintGodMenu(force) {
+    const now = performance.now(); if (!force && now - godMenuAt < 400) return; godMenuAt = now;
+    const list = $('godList'), cd = G.me ? G.me.cd : 0;
+    const others = [...G.roster.entries()].filter(([id, r]) => id !== G.id && !r.gone).sort((a, b) => String(a[1].n).localeCompare(String(b[1].n)));
+    $('godNote').textContent = cd > 0 ? `Ready in ${Math.ceil(cd)}s` : others.length ? 'Pick who to teleport to' : 'Nobody else is here yet';
+    const key = others.map(([id, r]) => id + ':' + r.c + ':' + (r.fl & 1) + ':' + (cd > 0 ? 1 : 0)).join('|');
+    if (list.dataset.key === key) return; list.dataset.key = key; list.replaceChildren();
+    for (const [id, r] of others) {
+      const b = el('button', 'god-p' + (r.fl & 1 ? ' it' : '')); b.type = 'button'; b.disabled = cd > 0; b.setAttribute('aria-label', 'Teleport to ' + r.n);
+      const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, 0, 48, r.h | 0, r.sk || ''); b.append(img, el('span', '', r.n));
+      if (r.fl & 1) b.append(el('em', '', 'IT'));
+      b.addEventListener('click', () => { send({ t: 'god', a: 'tp', to: id }); closeGodMenu(); });
+      list.appendChild(b);
+    }
+  }
+  $('godClose').onclick = () => closeGodMenu();
   abBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
   /* ================================== chat =================================== */
@@ -513,13 +560,14 @@
   $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; Sfx.unlock(); } });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
+  const LOCAL_FX = new Set(['beam', 'tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
     let a = G.abilityQueued ? 1 : 0; G.abilityQueued = false;
     if (G.state === STATE.COUNT) { x = y = a = 0; }
     const inp = { s: ++G.seq, x, y, a };
+    if (isGod() && G.state !== STATE.COUNT) { const h = (G.god.fly ? 1 : 0) | (G.god.beam ? 2 : 0); if (h) inp.h = h; }
     if (a) { const aim = mouseAim(); if (aim) { inp.ax = aim[0]; inp.ay = aim[1]; } }
     G.pending.push(inp); G.sendBuf.push(inp);
     if (G.pending.length > 180) G.pending.shift();
@@ -532,7 +580,7 @@
   function flushInputs() {
     if (!G.sendBuf.length) return;
     G.lastSend = performance.now();
-    send({ t: 'in', i: G.sendBuf.slice(-10).map((i) => (i.ax === undefined ? [i.s, i.x, i.y, i.a] : [i.s, i.x, i.y, i.a, i.ax, i.ay])) });
+    send({ t: 'in', i: G.sendBuf.slice(-10).map((i) => (i.h ? [i.s, i.x, i.y, i.a, i.ax || 0, i.ay || 0, i.h] : i.ax === undefined ? [i.s, i.x, i.y, i.a] : [i.s, i.x, i.y, i.a, i.ax, i.ay])) });
     G.sendBuf.length = 0;
   }
 
@@ -589,7 +637,8 @@
     const on = e.abT > 0, leap = on && id === 'frog', phase = on && id === 'ghost', cloak = on && id === 'cat', dash = on && id === 'fox';
     const slide = on && id === 'penguin';
     const shield = on && id === 'robot' && !e.it, surge = on && id === 'robot' && e.it;
-    const air = leap ? Math.sin(Math.PI * clamp(1 - e.abT / 0.6, 0, 1)) : 0;
+    const gAlt = id === 'god' ? e.alt || 0 : 0;
+    const air = leap ? Math.sin(Math.PI * clamp(1 - e.abT / 0.6, 0, 1)) : gAlt * 0.22 / 46;      // God rises up to ~200 px above its shadow
     let alpha = 1;
     if (cloak && !e.isMe) return;      // a cloaked cat is fully invisible to everyone else: no body, shadow, marker or name
     if (cloak) alpha = 0.42;
@@ -639,7 +688,7 @@
     const flopT = slide ? 1.2 : 0; v.flop += (flopT - v.flop) * Math.min(1, dt * 14);
     const dizzy = e.stun ? Math.sin(t * 14) * 0.14 : 0;
     const drawPose = { up: pz.up, sq: pz.sq, rot: pz.rot + v.spin + v.flop + dizzy };
-    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18), hat: e.h | 0, skin, pose: drawPose });
+    Chars.draw(g, e.c, { x, y: fyPos, s, color, face: v.face, lx: e.fx, ly: e.fy, t: t + v.ph, spd, air, alpha, blink, lean: clamp(e.vx / 900, -0.18, 0.18), hat: e.h | 0, skin, pose: drawPose, fly: gAlt > 6 ? 1 : 0, beam: e.beam });
 
     if (shield) {
       const rad = r * 1.9, cy = fyPos - r * 1.15, flick = e.abT < 0.6 ? 0.45 + 0.55 * Math.abs(Math.sin(t * 28)) : 1;
@@ -655,6 +704,33 @@
       for (let k = 0; k < 10; k++) { const rr = k % 2 ? 2.6 : 6; g.lineTo(Math.cos(k * TAU / 10) * rr, Math.sin(k * TAU / 10) * rr); } g.closePath(); g.fill(); g.stroke(); g.restore();
     }
     if (!cloak || e.isMe) labels.push({ e, x, y: fyPos - 50 * s - air * 46, alpha: phase ? 0.7 : 1 });
+  }
+
+  /** God's beam of light: a bright bar from God out to the edge of the arena, over walls and everything. It sits at God's real (ground) height, where it stuns; a faint column joins it to God when flying. */
+  function drawBeam(g, e, t, v) {
+    const map = G.map, dir = e.fx >= 0 ? 1 : -1, hw = C.GOD_BEAM_W / 2, x0 = e.x, x1 = dir > 0 ? map.w : 0, y = e.y, w = hw * (0.92 + 0.08 * Math.sin(t * 38));
+    const xa = Math.max(Math.min(x0, x1), v.x0), xb = Math.min(Math.max(x0, x1), v.x1);
+    g.save(); g.globalCompositeOperation = 'lighter';
+    if (xb > xa) {
+      const gr = g.createLinearGradient(0, y - w * 1.6, 0, y + w * 1.6);
+      gr.addColorStop(0, 'rgba(255,214,90,0)'); gr.addColorStop(0.28, 'rgba(255,225,120,.42)'); gr.addColorStop(0.5, 'rgba(255,255,236,.95)'); gr.addColorStop(0.72, 'rgba(255,225,120,.42)'); gr.addColorStop(1, 'rgba(255,214,90,0)');
+      g.fillStyle = gr; g.fillRect(xa, y - w * 1.6, xb - xa, w * 3.2);
+      g.fillStyle = 'rgba(255,255,255,.7)';
+      const len = Math.abs(x1 - x0) || 1;
+      for (let k = 0; k < 14; k++) {                                       // light streaks racing away from God
+        const f = ((t * 1.6 + k * 0.137) % 1), sx = x0 + dir * f * len, yy = y + (((k * 7) % 5) - 2) * w * 0.28;
+        if (sx > v.x0 - 60 && sx < v.x1 + 60) g.fillRect(dir > 0 ? sx - 70 : sx, yy - 1.5, 70, 3);
+      }
+    }
+    const R = w * 2.4, rg = g.createRadialGradient(x0, y, 0, x0, y, R);
+    rg.addColorStop(0, 'rgba(255,255,240,.95)'); rg.addColorStop(0.4, 'rgba(255,230,130,.5)'); rg.addColorStop(1, 'rgba(255,214,90,0)');
+    g.fillStyle = rg; g.beginPath(); g.arc(x0, y, R, 0, TAU); g.fill();
+    if ((e.alt || 0) > 20) {
+      const top = y - (e.alt || 0) * 0.22 - 20, cg = g.createLinearGradient(0, top, 0, y);
+      cg.addColorStop(0, 'rgba(255,240,170,.05)'); cg.addColorStop(1, 'rgba(255,240,170,.55)');
+      g.fillStyle = cg; g.fillRect(x0 - 5, top, 10, y - top);
+    }
+    g.restore();
   }
 
   /* a burrowed mole is just a moving mound of dirt: a dome with a crumbly trail */
@@ -772,7 +848,7 @@
 
   /* Anyone standing under an on-screen panel (scoreboard, chat, timer, minimap, buttons...) used to be impossible to see,
      so people hid behind the interface. Now a panel fades out while a player is behind it, so they stay visible and taggable. */
-  const HUD_FADE = '.hud-tools, #timerBox, #role, #bonusChip, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #joy';
+  const HUD_FADE = '.hud-tools, #timerBox, #role, #bonusChip, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #godBeam, #godTp, #godMenu, #joy';
   let hudEls = null, hudRects = [], hudAt = 0, hudRectsAt = 0;
   function seeThrough(ents, dt) {
     hudAt -= dt; if (hudAt > 0) return; hudAt = 0.08;
@@ -798,7 +874,7 @@
     const a = clamp(G.acc / DT, 0, 1);
     const k = Math.exp(-dt * 12); G.err.x *= k; G.err.y *= k;
     const mx = G.px + (me.x - G.px) * a + G.err.x, my = G.py + (me.y - G.py) * a + G.err.y;
-    G.zoom += (G.zoomT - G.zoom) * (1 - Math.exp(-dt * 6));
+    G.zoom += (G.zoomT * (1 - 0.22 * clamp((me.z || 0) / C.GOD_ZMAX, 0, 1)) - G.zoom) * (1 - Math.exp(-dt * 6));       // God: the view eases out as you climb
     const z = G.zoom, hw = W / 2 / z, hh = H / 2 / z;
     const tx = mx + me.vx * 0.12, ty = my + me.vy * 0.12;
     if (G.camSnap) { G.cam.x = tx; G.cam.y = ty; G.camSnap = false; } else { const f = 1 - Math.exp(-dt * 9); G.cam.x += (tx - G.cam.x) * f; G.cam.y += (ty - G.cam.y) * f; }
@@ -816,20 +892,21 @@
     MapRender.drawObstacles(g, map, v, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true, typing: iTyping() });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true, typing: iTyping(), alt: me.z || 0, beam: !!me.bm });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
       if (inHide(s.x, s.y) && Math.hypot(s.x - mx, s.y - my) > HIDE_SEE) continue;      // in a bush and not close: out of sight
-      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), typing: !!(s.fl & 64), abT: s.abT, boost: false });
+      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), typing: !!(s.fl & 64), abT: s.abT, boost: false, alt: s.alt || 0, beam: !!(s.fl & 128) });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
     for (const d of G.decoys) {
       const o = G.roster.get(d.o);
       ents.push({ key: 'd' + d.id, id: d.o, decoy: true, c: d.c, k: d.k, sk: o && o.sk, name: o ? o.n : '', x: d.x + d.vx * since, y: d.y + d.vy * since, vx: d.vx, vy: d.vy, fx: d.vx / 215, fy: d.vy / 215, it: false, stun: false, imm: false, abT: 0, boost: false });
     }
+    for (const e of ents) if (e.beam && !e.decoy) drawBeam(g, e, t, v);
     const order = ents.slice().sort((p, q) => p.y - q.y), labels = [];
     for (const e of order) {
       if (e.x < v.x0 - 60 || e.x > v.x1 + 60 || e.y < v.y0 - 80 || e.y > v.y1 + 60) continue;
@@ -948,16 +1025,23 @@
     else w.classList.add('hidden');
 
     // ability button
-    const def = CHARS[me.c], p = me.cd > 0 ? 1 - me.cd / def.cd : 1;
+    const def = CHARS[me.c], god = def.id === 'god', p = me.cd > 0 && !god ? 1 - me.cd / def.cd : 1;
     abBtn.style.setProperty('--p', p.toFixed(3));
+    godBeamBtn.classList.toggle('hidden', !god); godTpBtn.classList.toggle('hidden', !god);
+    if (god) {                                                    // three moves: the big button is Ascend (hold); Teleport and Beam sit beside it
+      godBeamBtn.classList.toggle('on', !!G.god.beam); abBtn.classList.toggle('on', !!G.god.fly); godBeamBtn.classList.toggle('stunned', me.stun > 0);
+      godTpBtn.style.setProperty('--p', (me.cd > 0 ? 1 - me.cd / C.GOD_TP_CD : 1).toFixed(3)); godTpBtn.classList.toggle('cd', me.cd > 0);
+      const t0 = me.cd > 0 ? String(Math.ceil(me.cd)) : ''; if ($('godTpCd').textContent !== t0) $('godTpCd').textContent = t0;
+      if (!godMenu.classList.contains('hidden')) paintGodMenu(false);
+    } else if (!godMenu.classList.contains('hidden')) closeGodMenu();
     const bat = def.id === 'bat' && me.aux > 0, pounce = def.id === 'cat' && me.abT > 0 && def.dur - me.abT > 0.25;
     const label = bat ? 'Recall' : pounce ? 'Pounce' : def.ability;
     if (label !== lastAbLabel) { lastAbLabel = label; $('abName').textContent = label; if (bat || pounce) gsap.fromTo(abBtn, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', clearProps: 'transform' }); }
-    const ready = (me.cd <= 0 || bat || pounce) && me.stun <= 0;
-    abBtn.classList.toggle('cd', me.cd > 0 && !bat && !pounce); abBtn.classList.toggle('ready', ready); abBtn.classList.toggle('stunned', me.stun > 0);
+    const ready = (me.cd <= 0 || bat || pounce || god) && me.stun <= 0;
+    abBtn.classList.toggle('cd', me.cd > 0 && !bat && !pounce && !god); abBtn.classList.toggle('ready', ready); abBtn.classList.toggle('stunned', me.stun > 0);
     if (ready && !G.wasReady && st === STATE.PLAY) gsap.fromTo(abBtn, { scale: 0.85 }, { scale: 1, duration: 0.5, ease: 'back.out(3)', clearProps: 'transform' });
     G.wasReady = ready;
-    const cdText = me.cd > 0 && !bat && !pounce ? String(Math.ceil(me.cd)) : '';
+    const cdText = me.cd > 0 && !bat && !pounce && !god ? String(Math.ceil(me.cd)) : '';
     if ($('abCd').textContent !== cdText) $('abCd').textContent = cdText;
 
     const now = performance.now();
@@ -1075,7 +1159,7 @@
   /* ---- change-character window: the first seconds of the countdown, after the vote closes ---- */
   const pickEl = $('pick'); let pickKey = '', pickDur = 1, pickTween = null, pickHiding = false;
   const picking = (left) => G.state === STATE.COUNT && left > C.COUNTDOWN + 0.05;
-  const mineOk = (i) => G.solo || (window.App && App.owns(i));
+  const mineOk = (i) => (CHARS[i].secret ? !!(window.App && App.owns(i)) : G.solo || (window.App && App.owns(i)));      // practice lets you try anyone, except the secret character
   function sendLook(ci, sk) { Sfx.play('click'); send({ t: 'char', c: ci, k: App.sel.ks[ci], sk: sk || '' }); }
   function paintPick() {
     const row = $('pickChars'), skins = $('pickSkins'), cur = G.sel.c, h = G.sel.h;

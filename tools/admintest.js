@@ -145,6 +145,25 @@ function join(name, cookie, c = 0) {
   r = await post('/api/admin/email', { username: 'Pleb', email: ' New@Example.com ' }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && j.user.email === 'new@example.com', 'staff can set an email (trimmed, lowercased)');
   r = await post('/api/admin/users', { q: 'Pleb' }, boss, 'sesame'); j = await r.json(); ok(j.users[0].email === 'new@example.com', 'staff see the email on the account card');
   j = await (await fetch(BASE + '/api/stats')).json(); ok(!JSON.stringify(j).includes('@example.com'), 'public stats never contain emails');
+  // God: the secret character. Staff-only, unlocked from the staff page, never joinable by anyone else (not even in practice)
+  const GODI = T.CHARS.findIndex((c) => c.id === 'god');
+  let gj = await join('x', boss, GODI); ok(gj.msgs.some((m) => m.t === 'err') && !gj.init, 'staff cannot join as God before unlocking it');
+  r = await post('/api/admin/item', { username: 'Pleb', item: 'char:god', on: true }, boss, 'sesame'); ok(r.status === 400, 'a non-staff account cannot be given God');
+  r = await post('/api/admin/item', { username: 'Boss', item: 'char:god', on: true }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && j.user.owned.includes('char:god'), 'staff can unlock God for themselves');
+  gj = await join('x', boss, GODI); ok(!!gj.init, 'staff with the unlock can join as God: ' + JSON.stringify(gj.msgs.filter((m) => m.t === 'err')));
+  gj.ws.send(JSON.stringify({ t: 'god', a: 'tp', to: -5 })); await sleep(100); ok(!gj.closed, 'a teleport request for nobody is ignored');
+  const pg2 = await join('x', pleb, GODI); ok(pg2.msgs.some((m) => m.t === 'err') && !pg2.init, 'players cannot join as God');
+  const prac = await new Promise((res) => { const ws = new WebSocket('ws://127.0.0.1:3120/ws', { headers: { cookie: pleb } }); const o = { msgs: [] }; ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name: 'x', mode: 'bots', c: GODI, k: 0 }))); ws.on('message', (d) => { const m = JSON.parse(d); o.msgs.push(m); if (m.t === 'init' || m.t === 'err') { o.ws = ws; res(o); } }); });
+  ok(prac.msgs.some((m) => m.t === 'err'), 'not even practice mode lets players pick God');
+  try { prac.ws.close(); gj.ws.close(); } catch (e) { /* ignore */ }
+  r = await post('/api/admin/item', { username: 'Boss', item: 'char:god', on: false }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && !j.user.owned.includes('char:god'), 'staff can lock God again');
+  // the login cookie works inside an iframe on https (SameSite=None; Secure; Partitioned), and stays Lax on plain http
+  r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' }, body: JSON.stringify({ username: 'Boss', password: 'correct-horse-9' }) });
+  let ck = r.headers.get('set-cookie') || ''; ok(/SameSite=None/.test(ck) && /Secure/.test(ck) && /Partitioned/.test(ck) && /HttpOnly/.test(ck), 'https cookie is iframe-ready: ' + ck.replace(/=[^;]{10,};/, '=…;'));
+  r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'Boss', password: 'correct-horse-9' }) });
+  ck = r.headers.get('set-cookie') || ''; ok(/SameSite=Lax/.test(ck) && !/Secure/.test(ck), 'plain http cookie stays Lax');
+  r = await fetch(BASE + '/'); ok(!r.headers.get('x-frame-options') && /frame-ancestors \*/.test(r.headers.get('content-security-policy')), 'the game page may be embedded');
+  r = await fetch(BASE + '/hq'); ok(r.headers.get('x-frame-options') === 'DENY' && /frame-ancestors 'none'/.test(r.headers.get('content-security-policy')), 'the staff page may not be embedded');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');

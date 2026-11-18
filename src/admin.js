@@ -194,7 +194,8 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
 
       if (act === 'item') {
         const u = await target(); if (!u) return noUser(), true;
-        const item = T.SHOP_BY_ID[String(body.item)] || T.parseSkin(String(body.item)); if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
+        const item = T.SHOP_BY_ID[String(body.item)] || T.parseSkin(String(body.item)) || (body.item === 'char:god' ? { id: 'char:god' } : null); if (!item) return json(res, 400, { error: 'Unknown item.' }), true;
+        if (item.id === 'char:god' && !isAdmin(u.username)) return json(res, 400, { error: 'Only staff accounts can have this one.' }), true;
         const n = body.on === false ? await store.revokeItem(u.id, item.id) : await store.grantItem(u.id, item.id);
         record(me, body.on === false ? 'revoke' : 'grant', `${item.id} ${body.on === false ? 'from' : 'to'} ${u.username}`); return json(res, 200, { ok: true, user: await userRow(n, auth) }), true;
       }

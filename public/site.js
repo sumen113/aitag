@@ -16,7 +16,7 @@
     get(k, d) { try { const v = localStorage.getItem('tagrush.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('tagrush.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } },
   };
-  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6', '#d8efb0', '#f0d2a2', '#d9c7b0', '#d5d8dc', '#e1d2f0'];   // one per character, same order as CHARS
+  const STAGE = ['#ffc58a', '#a8e8b0', '#c9d6ff', '#cdd3ea', '#e8c4a0', '#ffb3d3', '#f3deaa', '#a9d3ff', '#b9c9ff', '#c9d1e3', '#d6bff2', '#ffc0b0', '#fff0a6', '#d8efb0', '#f0d2a2', '#d9c7b0', '#d5d8dc', '#e1d2f0', '#fff5c2'];   // one per character, same order as CHARS
   // colour row (one row, always): [default, 6 presets, custom]. Presets are COLORS[1..6]; anything else saved from older versions falls back to default.
   const PRESETS = 7;
   const rowColor = (k) => { k = C.cleanColor(k); return k < PRESETS || k >= C.CUSTOM_BASE ? k : 0; };
@@ -257,7 +257,7 @@
   }
   function paintStage(animate, quiet) {
     const def = CHARS[sel.c];
-    pic.querySelectorAll('.pick').forEach((b, i) => { b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.ks[i], 96, sel.h, sel.skinOf(i)); });
+    pic.querySelectorAll('.pick').forEach((b, i) => { b.hidden = !!CHARS[i].secret && !owns(i); b.setAttribute('aria-checked', String(i === sel.c)); b.classList.toggle('locked', !owns(i)); b.setAttribute('aria-label', CHARS[i].species + (owns(i) ? '' : ' (locked)')); b.querySelector('img').src = Chars.avatar(i, sel.ks[i], 96, sel.h, sel.skinOf(i)); });
     paintLockSticker();
     const isCustom = sel.k >= C.CUSTOM_BASE;
     if (isCustom) { const n = sel.k - C.CUSTOM_BASE; lastTone = Math.floor(n / 360); if (document.activeElement !== hueEl) hueEl.value = n % 360; }
@@ -332,6 +332,7 @@
   function buildCast() {
     const grid = $('castGrid');
     CHARS.forEach((def, i) => {
+      if (def.secret) return;                                  // never on the public character page
       const card = el('button', 'cast-card card'); card.type = 'button'; card.style.setProperty('--c', STAGE[i]); card.setAttribute('aria-label', `Play as ${def.species}`);
       const art = el('div', 'cast-art'); const img = new Image(); img.alt = def.species; img.loading = 'lazy'; img.src = Chars.avatar(i, 0, 240); art.appendChild(img);
       const info = el('div', 'cast-info');
@@ -506,7 +507,7 @@
       if (Number.isInteger(u.settings.h)) { sel.h = C.cleanHat(u.settings.h); store.set('h', sel.h); }
       if (u.settings.sk && typeof u.settings.sk === 'object') { for (const k of Object.keys(u.settings.sk)) sel.sks[k] = u.settings.sk[k]; store.set('sks', sel.sks); }
     }
-    if (!u && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }
+    if ((!u || CHARS[sel.c].secret) && !owns(sel.c)) { sel.c = firstOwned(); store.set('c', sel.c); }      // guests fall back to a starter; nobody keeps the secret character without the unlock
     paintAccount();
     if (u && u.needsEmail) setTimeout(() => { if (emailLocked() && modalId !== 'emailModal') openEmail(false); }, 350);
   }
@@ -588,8 +589,13 @@
   }
   function openAuth(m) { setAuthMode(m || 'login'); aPass.value = ''; openModal('authModal', aUser); }
   $('authTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { setAuthMode(b.dataset.t); Sfx.play('click'); } });
+  /** Inside an iframe, Safari/Firefox hide the login cookie until the player allows it: ask once, from the click, before logging in. (Chrome keeps it via the Partitioned cookie.) */
+  async function framedStorage() {
+    try { if (window.top !== window && document.hasStorageAccess && !(await document.hasStorageAccess())) await document.requestStorageAccess(); } catch (e) { /* declined: the partitioned cookie may still work */ }
+  }
   aForm.addEventListener('submit', async (e) => {
     e.preventDefault(); if (authBusy) return;
+    await framedStorage();
     const username = aUser.value.trim(), password = aPass.value;
     let err = '';
     if (mode === 'signup') { const v = C.validateUsername(username); if (!v.ok) err = v.err; else { const pv = C.validatePassword(password); if (!pv.ok) err = pv.err; else { const ev = C.validateEmail(aEmail.value); if (!ev.ok) err = ev.err; } } }
@@ -607,7 +613,7 @@
   function paintAcctModal() {
     const u = App.account; if (!u) return;
     $('acctTitle').textContent = u.username; $('stWins').textContent = u.wins; $('stBal').textContent = u.balance;
-    $('stOwned').textContent = `${CHARS.filter((_, i) => owns(i)).length}/${CHARS.length}`;
+    $('stOwned').textContent = `${CHARS.filter((d, i) => !d.secret && owns(i)).length}/${C.PUBLIC_CHARS}`;
     $('acctMail').textContent = u.email ? `Email: ${u.email}` : 'No email on this account yet.';
   }
 
