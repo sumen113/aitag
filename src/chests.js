@@ -127,6 +127,7 @@ function create(store, opts = {}) {
     craft: (user, skinId) => exclusive(user.id, async () => {
       const sk = T.parseSkin(skinId);
       if (!sk) return { ok: false, err: 'Unknown skin.' };
+      if (T.CHARS.find((c) => c.id === sk.char).secret) return { ok: false, err: 'That skin can only be given by staff.' };
       const u = await store.userById(user.id);
       if (!u) return { ok: false, err: 'Account not found.' };
       if (u.owned.includes(sk.id)) return { ok: false, err: 'You already own that skin.' };

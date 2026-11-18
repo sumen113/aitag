@@ -121,7 +121,7 @@
     { id: 'skunk',  fx: 'stink',  name: 'Pepper', species: 'Skunk',  natural: '#474560', ability: 'Stink Cloud', cd: 11, dur: 0,  speed: 1.00, radius: 17, role: 'Mind bender', price: 4,
       desc: 'Drop a stink cloud that flips the controls of everybody else inside it: left is right, up is down. It lingers for three seconds.' },
     // Secret, staff only (never in the shop, chests, practice bots or any picker for players). Three moves instead of one: hold to fly, teleport to anyone, hold a sideways beam of light.
-    { id: 'god',    fx: 'divine', name: 'God',    species: 'Almighty', natural: '#fff1a8', ability: 'Ascend', cd: 2.5, dur: 0, speed: 1.08, radius: 19, role: 'Almighty', secret: true,
+    { id: 'god',    fx: 'divine', name: 'God',    species: 'Almighty', natural: '#fff1a8', ability: 'Ascend', cd: 2.5, dur: 0, speed: 1.08, radius: 27, role: 'Almighty', secret: true,
       moves: [{ id: 'fly', name: 'Ascend', hold: true, key: 'Space' }, { id: 'tp', name: 'Teleport', key: 'Q' }, { id: 'beam', name: 'Beam of Light', hold: true, key: 'E' }],
       desc: 'Hold to rise as high as you like, teleport to any player from a menu, and hold a beam of light that sweeps sideways through everything and stuns anyone it touches.' },
   ];
@@ -165,11 +165,13 @@
   ];
   const SKIN_THEME_BY_ID = {}; SKIN_THEMES.forEach((t) => (SKIN_THEME_BY_ID[t.id] = t));
   const skinId = (charId, themeId) => 'skin:' + charId + ':' + themeId;
-  const SKINS = [], SKIN_BY_ID = {};
-  for (const c of CHARS) if (!c.secret) for (const t of SKIN_THEMES) {
+  const SKINS = [], SECRET_SKINS = [], SKIN_BY_ID = {};
+  for (const c of CHARS) for (const t of SKIN_THEMES) {
     const sk = { id: skinId(c.id, t.id), char: c.id, theme: t.id, rarity: t.rarity, name: t.name + ' ' + c.species };
-    SKINS.push(sk); SKIN_BY_ID[sk.id] = sk;
+    (c.secret ? SECRET_SKINS : SKINS).push(sk); SKIN_BY_ID[sk.id] = sk;       // secret-character skins are real skins, but never in SKINS: no chest drops them and bulk "give everything" skips them
   }
+  /** The skins a staff action on `charId` covers: that character's own, or (no character) every normal skin. */
+  const skinPool = (charId) => (charId && SECRET_SKINS.some((s) => s.char === charId) ? SECRET_SKINS.filter((s) => s.char === charId) : SKINS);
   /** 'skin:fox:lava' -> the skin record, or null. */
   const parseSkin = (item) => (typeof item === 'string' && Object.prototype.hasOwnProperty.call(SKIN_BY_ID, item) ? SKIN_BY_ID[item] : null);
   /** A theme id that really exists, or '' (no skin). */
@@ -754,7 +756,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, PUBLIC_CHARS, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, PUBLIC_CHARS, SECRET_SKINS, skinPool, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

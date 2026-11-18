@@ -14,7 +14,10 @@ const GOD = T.CHARS.findIndex((c) => c.id === 'god');
 ok(GOD === T.CHARS.length - 1 && T.CHARS[GOD].secret, 'God is the last character and is flagged secret');
 ok(T.PUBLIC_CHARS === T.CHARS.length - 1, 'public character count excludes God');
 ok(!T.SHOP.some((s) => s.id === 'char:god'), 'God is not in the shop');
-ok(!T.SKINS.some((s) => /^god/.test(s.id)) && !T.SKINS.some((s) => s.char === 'god'), 'God has no skins (so no chest drops)');
+ok(!T.SKINS.some((s) => s.char === 'god') && T.SECRET_SKINS.length === T.SKIN_THEMES.length && T.SECRET_SKINS.every((s) => T.parseSkin(s.id)), 'God has its own skins, kept out of SKINS (so no chest drops them)');
+{ const ch = require('../src/chests.js'); const src = require('fs').readFileSync(require.resolve('../src/chests.js'), 'utf8'); ok(/T\.SKINS\.filter\(\(s\) => s\.rarity === r\)/.test(src) && !!ch, 'the chest pool is built from SKINS only'); }
+ok(T.skinPool('god').length === T.SKIN_THEMES.length && T.skinPool('').every((s) => s.char !== 'god') && T.skinPool('fox').every((s) => s.char !== 'god'), 'staff skin actions only reach God skins when God is named');
+ok(T.CHARS[GOD].radius === 27, 'God is 1.5x a normal player (radius 27 vs 18)');
 ok(!T.canUseChar([], 'god', true) && !T.canUseChar(['char:god'], 'god', false) && T.canUseChar(['char:god'], 'god', true), 'God needs both a staff account and the unlock');
 ok(T.canUseChar([], 'fox', false), 'starters still free for everybody');
 ok(T.SIM.includes('z') && T.SIM.includes('bm'), 'altitude and beam are part of the predicted state');

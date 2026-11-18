@@ -443,17 +443,37 @@ const Chars = (() => {
       g.restore();
     },
     god(g, c, o) {
-      // Staff-only. Three glowing eyes, feathered angel wings that beat slowly (and hard while flying), a white robe with a golden sash.
-      const fl = Math.sin(o.t * (3 + 9 * o.fly)) * (0.09 + 0.28 * o.fly) + Math.sin(o.t * 1.7) * 0.04, hov = Math.sin(o.t * 2.6) * 1.2;
-      for (const sd of [-1, 1]) {
-        g.save(); g.translate(sd * 9, -21 + hov); g.scale(sd, 1); g.rotate(-0.12 - fl);
-        for (const [rowLen, rowW, fill, n, a0] of [[50, 6.8, c.ll, 7, -1.12], [38, 6.2, '#ffffff', 6, -0.98], [24, 5.2, '#ffffff', 5, -0.78]]) {
-          for (let i = 0; i < n; i++) {
-            const a = a0 + i * (1.5 / (n - 1)), len = rowLen * (0.7 + 0.3 * Math.sin((i / (n - 1)) * Math.PI * 0.85 + 0.45));
-            ell(g, Math.cos(a) * len * 0.5, Math.sin(a) * len * 0.5 - 2, len * 0.5, rowW, fill, 1.8, a);
+      // Staff-only, "biblically accurate": two turning wheels covered in eyes, three pairs of feathered wings, and a face with three glowing eyes.
+      const TAU = Math.PI * 2, fl = Math.sin(o.t * (3 + 9 * o.fly)) * (0.07 + 0.24 * o.fly) + Math.sin(o.t * 1.7) * 0.03, hov = Math.sin(o.t * 2.6) * 1.2;
+      const pulse = 0.78 + 0.22 * Math.sin(o.t * 4), beam = o.beam ? 1 : 0, cy = -27 + hov * 0.5;
+      const smallEye = (x, y, r) => {
+        g.beginPath(); g.ellipse(x, y, r, r * 0.74, 0, 0, TAU); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 1.1; g.strokeStyle = OUT; g.stroke();
+        g.beginPath(); g.arc(x + o.lx * 0.3, y + o.ly * 0.2, r * 0.42, 0, TAU); g.fillStyle = '#e8a410'; g.fill();
+      };
+      // wings, three pairs; each is a fan of feathers (back row cream, front rows white)
+      const wing = (sx, sy, rot, rows) => {
+        for (const sd of [-1, 1]) {
+          g.save(); g.translate(sd * sx, sy + hov); g.scale(sd, 1); g.rotate(rot - fl * (rot < 0 ? 1.2 : 0.6));
+          for (const [len, w, fill, n, a0, a1] of rows) {
+            for (let i = 0; i < n; i++) {
+              const a = a0 + (i * (a1 - a0)) / Math.max(1, n - 1), l = len * (0.72 + 0.28 * Math.sin((i / Math.max(1, n - 1)) * Math.PI * 0.85 + 0.45));
+              ell(g, Math.cos(a) * l * 0.5, Math.sin(a) * l * 0.5, l * 0.5, w, fill, 1.6, a);
+            }
           }
+          g.restore();
         }
-        g.restore();
+      };
+      wing(6, -32, -0.3, [[34, 4.8, '#fff4c4', 5, -1.55, -0.95], [24, 4.2, '#ffffff', 4, -1.4, -0.9]]);                    // upper pair, raised
+      wing(8, -23, -0.05, [[42, 5.8, c.ll, 6, -0.75, 0.05], [31, 5.2, '#ffffff', 5, -0.62, 0.05], [19, 4.4, '#ffffff', 4, -0.5, 0.08]]);   // main pair
+      wing(6, -16, 0.25, [[30, 4.8, c.ll, 5, 0.35, 1.2], [20, 4.2, '#ffffff', 4, 0.45, 1.1]]);                               // lower pair, swept down
+      // the wheels (ophanim): one round, one tilted, each ringed with eyes that look where God looks
+      for (const [rx, ry, spin, n] of [[29, 29, 0.55, 10], [29, 12, -0.8, 8]]) {
+        g.beginPath(); g.ellipse(0, cy, rx, ry, spin > 0 ? 0 : -0.5, 0, TAU); g.lineWidth = 5.2; g.strokeStyle = OUT; g.stroke(); g.lineWidth = 2.6; g.strokeStyle = '#ffcf3a'; g.stroke();
+        const rot = spin > 0 ? 0 : -0.5, cr = Math.cos(rot), sr = Math.sin(rot);
+        for (let k = 0; k < n; k++) {
+          const a = o.t * spin + (k * TAU) / n, px = Math.cos(a) * rx, py = Math.sin(a) * ry;
+          smallEye(px * cr - py * sr, cy + px * sr + py * cr, 3.4);
+        }
       }
       g.save(); g.translate(0, hov * 0.5);
       feet(g, c.dd, 6, o, 0.85);
@@ -462,14 +482,13 @@ const Chars = (() => {
       ell(g, 0, -27, 14, 14.6, c.l);
       cheek(g, -9.8, -21.4, 2.8, 1.7); cheek(g, 9.8, -21.4, 2.8, 1.7);
       g.beginPath(); g.moveTo(-3.4, -18.6); g.quadraticCurveTo(0, -16, 3.4, -18.6); g.lineWidth = 1.5; g.strokeStyle = OUT; g.lineCap = 'round'; g.stroke();
-      const pulse = 0.78 + 0.22 * Math.sin(o.t * 4), beam = o.beam ? 1 : 0;
       for (const [ex, ey, er] of [[-6.2, -27.6, 3.9], [6.2, -27.6, 3.9], [0, -36.6, 3.2]]) {          // the three glowing eyes
         const R = er * (3.2 + beam * 1.4), gr = g.createRadialGradient(ex, ey, 0, ex, ey, R);
         gr.addColorStop(0, `rgba(255,246,170,${0.9 * pulse})`); gr.addColorStop(0.45, `rgba(255,222,90,${0.38 * pulse})`); gr.addColorStop(1, 'rgba(255,214,70,0)');
-        g.beginPath(); g.arc(ex, ey, R, 0, 7); g.fillStyle = gr; g.fill();
+        g.beginPath(); g.arc(ex, ey, R, 0, TAU); g.fillStyle = gr; g.fill();
         g.save(); g.translate(ex, ey); g.scale(1, Math.max(0.1, 1 - o.blink * 0.92));
-        g.beginPath(); g.ellipse(0, 0, er * 1.12, er * 0.92, 0, 0, 7); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#e8a410'; g.stroke();
-        g.beginPath(); g.arc(o.lx * 0.5, o.ly * 0.4, er * 0.42, 0, 7); g.fillStyle = '#ffd23f'; g.fill();
+        g.beginPath(); g.ellipse(0, 0, er * 1.12, er * 0.92, 0, 0, TAU); g.fillStyle = '#fffdf0'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#e8a410'; g.stroke();
+        g.beginPath(); g.arc(o.lx * 0.5, o.ly * 0.4, er * 0.42, 0, TAU); g.fillStyle = '#ffd23f'; g.fill();
         g.restore();
       }
       g.restore();

@@ -109,8 +109,10 @@
   function paintLocker(panel) {
     const u = acct(), have = owned();
     const strip = el('div', 'lk-strip'); strip.setAttribute('role', 'tablist'); strip.setAttribute('aria-label', 'Character');
+    const godSeen = have.includes('char:god') || C.SECRET_SKINS.some((s) => have.includes(s.id));      // the secret character shows up here only for people who have it (or one of its skins)
+    if (CHARS[st.ch].secret && !godSeen) st.ch = 0;
     CHARS.forEach((d, i) => {
-      if (d.secret) return;                       // the secret character has no skins
+      if (d.secret && !godSeen) return;
       const n = C.SKIN_THEMES.filter((t) => C.ownsSkin(have, d.id, t.id)).length;
       const b = el('button', 'lk-char' + (i === st.ch ? ' on' : '')); b.type = 'button'; b.setAttribute('aria-label', `${d.species}, ${n} of ${C.SKIN_THEMES.length} skins`); b.setAttribute('aria-selected', String(i === st.ch));
       b.append(skinImg(i, A.sel.skinOf(i), 72), el('em', n ? 'has' : '', `${n}/${C.SKIN_THEMES.length}`));
@@ -119,7 +121,7 @@
     });
     panel.appendChild(strip);
     const d = CHARS[st.ch], cur = A.sel.skinOf(st.ch);
-    const head = el('div', 'lk-head'); head.append(el('h3', '', `${d.name} the ${d.species}`), el('p', 'ch-sub', u ? 'Tap a skin you own to wear it. Locked ones can be crafted with glitter.' : 'Log in to collect skins. Here is everything you can win.'));
+    const head = el('div', 'lk-head'); head.append(el('h3', '', `${d.name} the ${d.species}`), el('p', 'ch-sub', u ? (d.secret ? 'Tap a skin you own to wear it.' : 'Tap a skin you own to wear it. Locked ones can be crafted with glitter.') : 'Log in to collect skins. Here is everything you can win.'));
     panel.appendChild(head);
     const grid = el('div', 'lk-grid');
     const card = (theme) => {
@@ -131,6 +133,7 @@
       const nm = el('h4', '', theme ? C.skinName(d.id, theme) : 'Default'); const rr = el('span', 'lk-rar', theme ? RAR[th.rarity].name : 'Free');
       const btn = el('button', 'buy-btn'); btn.type = 'button';
       if (own) { btn.textContent = on ? 'Wearing ✓' : 'Wear'; if (on) btn.classList.add('owned'); btn.addEventListener('click', () => { if (on) return; A.equipSkin(st.ch, theme); Sfx.play('equip'); A.toast(theme ? `${C.skinName(d.id, theme)} equipped.` : 'Back to the default look.'); paintAll(); }); }
+      else if (d.secret) { btn.textContent = 'Given by staff'; btn.classList.add('no'); btn.disabled = true; }       // never craftable, never in chests
       else {
         const cost = C.GLITTER_CRAFT[th.rarity], g = chest() ? chest().glitter : 0;
         btn.textContent = `Craft ✦${cost}`; if (!u || g < cost) btn.classList.add('no');
@@ -141,7 +144,7 @@
     grid.appendChild(card(''));
     C.SKIN_THEMES.slice().sort((a, b) => a.rarity - b.rarity).forEach((t) => grid.appendChild(card(t.id)));
     panel.appendChild(grid);
-    panel.appendChild(el('p', 'ch-sub lk-foot', `Crafting costs ✦${C.GLITTER_CRAFT.join(' / ✦')} glitter (common to legendary). A duplicate skin turns into ✦${C.GLITTER_DUP.join(' / ✦')}.`));
+    panel.appendChild(el('p', 'ch-sub lk-foot', d.secret ? 'These skins are not in chests and cannot be crafted: only staff can hand them out.' : `Crafting costs ✦${C.GLITTER_CRAFT.join(' / ✦')} glitter (common to legendary). A duplicate skin turns into ✦${C.GLITTER_DUP.join(' / ✦')}.`));
   }
 
   function paintAll() {

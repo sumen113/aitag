@@ -209,7 +209,7 @@
     }
     const sk = el('div', 'ad-user-row'); sk.append(el('span', 'mono', 'Skins'));
     const ch = u.chest;
-    sk.append(el('span', '', `${u.skins.length}/${T.SKINS.length}` + (ch ? ` · ✦${ch.glitter} glitter · ${ch.opened} chest${ch.opened === 1 ? '' : 's'} opened · gifts ${ch.gifts.wood}W ${ch.gifts.silver}S ${ch.gifts.gold}G` : '')));
+    sk.append(el('span', '', `${u.skins.filter((s) => T.SKINS.some((k) => k.id === s)).length}/${T.SKINS.length}` + (ch ? ` · ✦${ch.glitter} glitter · ${ch.opened} chest${ch.opened === 1 ? '' : 's'} opened · gifts ${ch.gifts.wood}W ${ch.gifts.silver}S ${ch.gifts.gold}G` : '')));
     const mg = el('button', 'ad-btn', 'Manage skins'); mg.type = 'button'; mg.onclick = () => { $('adSkUser').value = u.username; openTab('skins'); lookup(u.username); };
     sk.append(mg); c.append(sk);
 
@@ -252,7 +252,7 @@
   const THEMES = T.SKIN_THEMES.slice().sort((a, b) => a.rarity - b.rarity);
   const rarName = (r) => T.RARITIES[r].name;
   const fill = (sel, items) => items.forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.append(o); });
-  fill($('adSkChar'), [['', 'All characters'], ...T.CHARS.filter((c) => !c.secret).map((c) => [c.id, `${c.name} the ${c.species}`])]);
+  fill($('adSkChar'), [['', 'All characters'], ...T.CHARS.map((c) => [c.id, `${c.name} the ${c.species}` + (c.secret ? ' (secret: given by hand only)' : '')])]);
   fill($('adSkTheme'), [['', 'All themes'], ...THEMES.map((t) => [t.id, `${t.name} (${rarName(t.rarity)})`])]);
   const tiers = T.CHEST_ORDER.map((id) => [id, T.CHEST_TIERS[id].name]);
   fill($('adGfTier'), tiers); fill($('adAllTier'), [['', 'No chest'], ...tiers]);
@@ -262,7 +262,7 @@
 
   function prevSkin() {
     const ch = $('adSkChar').value, th = $('adSkTheme').value, img = $('adSkImg'), txt = $('adSkTxt');
-    const n = T.SKINS.filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
+    const n = T.skinPool(ch).filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
     if (ch && th) { img.hidden = false; img.src = Chars.avatar(T.CHARS.findIndex((c) => c.id === ch), 0, 96, 0, th); txt.textContent = T.skinName(ch, th); }
     else { img.hidden = !ch && !th; if (ch) img.src = Chars.avatar(T.CHARS.findIndex((c) => c.id === ch), 0, 96, 0, ''); else if (th) img.src = Chars.avatar(0, 0, 96, 0, th); txt.textContent = `${n} skins`; }
   }
@@ -284,7 +284,6 @@
     for (const t of THEMES) { const h = el('span', 'ad-skh', t.name); h.style.setProperty('--rc', T.RARITIES[t.rarity].col); head.append(h); }
     g.append(head);
     T.CHARS.forEach((ch, i) => {
-      if (ch.secret) return;
       const row = el('div', 'ad-skrow'), lab = el('button', 'ad-skc'); lab.type = 'button'; lab.title = `Give or take all ${ch.species} skins`;
       const im = new Image(); im.alt = ''; im.width = im.height = 34; im.src = Chars.avatar(i, 0, 48, 0, ''); lab.append(im, el('span', '', ch.species));
       const n = THEMES.filter((t) => have.has(T.skinId(ch.id, t.id))).length;
@@ -308,7 +307,7 @@
   }
   $('adSkLookup').addEventListener('submit', (e) => { e.preventDefault(); lookup($('adSkUser').value); });
   const bulk = (on) => {
-    const ch = $('adSkChar').value, th = $('adSkTheme').value, n = T.SKINS.filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
+    const ch = $('adSkChar').value, th = $('adSkTheme').value, n = T.skinPool(ch).filter((x) => (!ch || x.char === ch) && (!th || x.theme === th)).length;
     if (n > 12 && !confirm(`${on ? 'Give' : 'Take away'} ${n} skins ${on ? 'to' : 'from'} ${curName() || 'this player'}?`)) return;
     setSkins({ char: ch, theme: th, on });
   };

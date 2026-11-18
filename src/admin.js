@@ -212,7 +212,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         const ch = String(body.char || ''), th = String(body.theme || '');
         if (ch && !T.CHARS.some((c) => c.id === ch)) return json(res, 400, { error: 'Unknown character.' }), true;
         if (th && !T.cleanSkin(th)) return json(res, 400, { error: 'Unknown theme.' }), true;
-        const list = T.SKINS.filter((s) => (!ch || s.char === ch) && (!th || s.theme === th));
+        const list = T.skinPool(ch).filter((s) => (!ch || s.char === ch) && (!th || s.theme === th));      // God skins only when God is named: never swept up by 'all characters'
         const on = body.on !== false, have = new Set(u.owned);
         let n = 0;
         for (const s of list) { if (on !== have.has(s.id)) { if (on) await store.grantItem(u.id, s.id); else await store.revokeItem(u.id, s.id); n++; } }

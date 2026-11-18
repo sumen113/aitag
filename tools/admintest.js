@@ -156,6 +156,13 @@ function join(name, cookie, c = 0) {
   const prac = await new Promise((res) => { const ws = new WebSocket('ws://127.0.0.1:3120/ws', { headers: { cookie: pleb } }); const o = { msgs: [] }; ws.on('open', () => ws.send(JSON.stringify({ t: 'join', name: 'x', mode: 'bots', c: GODI, k: 0 }))); ws.on('message', (d) => { const m = JSON.parse(d); o.msgs.push(m); if (m.t === 'init' || m.t === 'err') { o.ws = ws; res(o); } }); });
   ok(prac.msgs.some((m) => m.t === 'err'), 'not even practice mode lets players pick God');
   try { prac.ws.close(); gj.ws.close(); } catch (e) { /* ignore */ }
+  // God skins: only by hand, never swept up by "all", never craftable
+  r = await post('/api/admin/skin', { username: 'Pleb', char: '', theme: '', on: true }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && !j.user.skins.some((x) => x.startsWith('skin:god:')) && j.user.skins.length === T.SKINS.length, 'giving "all skins" skips the God skins');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'god', theme: 'gold', on: true }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && j.user.skins.includes('skin:god:gold'), 'staff can give one God skin');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'god', theme: '', on: true }, boss, 'sesame'); j = await r.json(); ok(j.user.skins.filter((x) => x.startsWith('skin:god:')).length === T.SKIN_THEMES.length, 'staff can give every God skin');
+  r = await post('/api/admin/skin', { username: 'Pleb', char: 'god', theme: '', on: false }, boss, 'sesame'); j = await r.json(); ok(!j.user.skins.some((x) => x.startsWith('skin:god:')), 'and take them away again');
+  r = await post('/api/chest/craft', { skin: 'skin:god:lava' }, plain); j = await r.json(); ok(r.status === 400 && /staff/.test(j.error || j.err || ''), 'God skins cannot be crafted with glitter: ' + JSON.stringify(j).slice(0, 80));
+  r = await post('/api/admin/skin', { username: 'Pleb', char: '', theme: '', on: false }, boss, 'sesame');
   r = await post('/api/admin/item', { username: 'Boss', item: 'char:god', on: false }, boss, 'sesame'); j = await r.json(); ok(r.status === 200 && !j.user.owned.includes('char:god'), 'staff can lock God again');
   // the login cookie works inside an iframe on https (SameSite=None; Secure; Partitioned), and stays Lax on plain http
   r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' }, body: JSON.stringify({ username: 'Boss', password: 'correct-horse-9' }) });
