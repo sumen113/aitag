@@ -13,8 +13,7 @@ const SNAP_HZ = Math.max(10, Math.min(60, +process.env.SNAP_HZ || 30));
 const AFK_AFTER = 30000;   // ms of standing still before you count as afk (no win credit / survival score)
 const IDLE_MOVE = 50;      // px you have to travel in a second to not count as standing still (standing still never removes you; only a lost connection does)
 const SNAP_EVERY = Math.max(1, Math.round(T.TICK / SNAP_HZ));   // 60 Hz sim -> 30 Hz snapshots by default
-const MIN_WIN_PLAYERS = +process.env.MIN_WIN_PLAYERS || 3;      // humans needed in a public lobby for a win to count (anti-farming)
-const CUSTOM_MIN_WIN_PLAYERS = Math.max(MIN_WIN_PLAYERS, +process.env.CUSTOM_MIN_WIN_PLAYERS || 3);   // custom servers need a few more humans (private rooms are easy to farm)
+const MIN_WIN_PLAYERS = Math.max(3, +process.env.MIN_WIN_PLAYERS || 3);   // humans needed in the main server for a win to count: always MORE than 2 (anti-farming); config can raise it, never lower it
 const MIN_WIN_SCORE = 30;                                       // and the winner must have actually survived this long
 const HIST = 16;                                                // position history (ticks) for lag compensation
 const BOT_NAMES = ['Pixel', 'Mochi', 'Zippy', 'Nova', 'Biscuit', 'Turbo', 'Waffles', 'Comet', 'Noodle', 'Blip', 'Gizmo', 'Pickle', 'Sprout', 'Ziggle', 'Tofu', 'Jelly'];
@@ -265,9 +264,8 @@ class Room {
     const inMatch = [...this.players.values()].filter((p) => !p.wait);
     const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
-    // wins are paid out in online servers with enough real players and no bots (custom servers: a few more players), to registered accounts that were actually playing
-    const need = this.regular ? MIN_WIN_PLAYERS : this.botTarget === 0 ? CUSTOM_MIN_WIN_PLAYERS : Infinity;
-    if (this.onWin && !this.solo && list.length && this.activeHumans() >= need) {
+    // wins are only paid out in the main (public) server, with at least MIN_WIN_PLAYERS real players, to registered accounts that were actually playing. Private/custom servers and practice never pay wins (anti-farming).
+    if (this.onWin && this.regular && !this.solo && list.length && this.activeHumans() >= MIN_WIN_PLAYERS) {
       const best = Math.floor(list[0].s);                // the displayed top score: everyone who finished on it shares the win
       if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
         if (Math.floor(r.s) !== best) break;

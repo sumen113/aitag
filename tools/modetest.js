@@ -243,4 +243,18 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   B.typeAt = clk + 3000; B.lastChat = 0; r3.chat(B, 'hi'); ok((flagOf(B) & 64) === 0, 'typing: sending the message clears the bubble');
 }
 
+
+// ---- wins are anti-farm: main server only, and only with 3+ real players ----
+{
+  const payout = (kind, n, extra) => {
+    const r = mk('classic', n, Object.assign({ kind }, extra)); const won = []; r.onWin = (p) => won.push(p.id);
+    let i = 1; for (const p of r.players.values()) { p.uid = i++; p.score = p === [...r.players.values()][0] ? 60 : 5; p.lastActiveAt = clk; }
+    r.state = T.STATE.PLAY; r.endRound(); return won.length;
+  };
+  ok(payout('public', 2) === 0, 'wins: no win in the main server with only 2 players');
+  ok(payout('public', 3) === 1, 'wins: a win is paid in the main server with 3 players');
+  ok(payout('custom', 8) === 0, 'wins: a private/custom server never pays wins, however many are in it');
+  ok(payout('custom', 3, { bots: 0 }) === 0, 'wins: not even a bot-free custom server with 3');
+}
+
 console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED'); process.exit(fails ? 1 : 0);

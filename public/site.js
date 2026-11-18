@@ -697,9 +697,13 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-14';
+  const NEWS_VERSION = 'update-15';
   const NEWS = [
-    { v: 'Update 14 · Change character, typing bubbles', tag: 'Newest', items: [
+    { v: 'Update 15 · Fair wins', tag: 'Newest', items: [
+      ['No wins in private servers', 'Custom (private) servers and practice no longer give wins. Wins only count in the main server, so the leaderboard stays fair.'],
+      ['More than 2 players needed', 'In the main server, a round only counts for wins when there are at least 3 real players. Two people taking turns to win rounds no longer works.'],
+    ] },
+    { v: 'Update 14 · Change character, typing bubbles', items: [
       ['Change character before every round', 'Once the vote closes you get 7 seconds to switch character (and skin) before the 4-3-2-1. Pick from the panel at the bottom of the screen. Only characters and skins you own are shown.'],
       ['Typing bubbles', 'When someone is typing in chat, a little bubble with three dots shows over their head, so you know to expect a message.'],
     ] },

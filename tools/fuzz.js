@@ -308,7 +308,7 @@ const post = (url, body, cookie) => fetch(BASE + url, { method: 'POST', headers:
   const j4 = await client({ name: 'Joiner4', mode: 'online', c: STI[0], k: 2, server: sv.id });
   ok(j2.init && j3.init && !j4.init && /full/i.test(j4.err || ''), 'max players enforced (3 in, 4th refused: ' + j4.err + ')');
   const crm = [...srv.rooms.values()].find((r) => r.name === 'Friday Chaos');
-  ok(crm && crm.roundTime === 60 && !!crm.onWin && crm.botTarget === 0, 'custom room has 60s rounds and can award wins');
+  ok(crm && crm.roundTime === 60 && crm.botTarget === 0 && !crm.regular, 'custom room has 60s rounds and is not the main server');
   const rj = await client({ name: 'Ghost', mode: 'online', c: STI[0], k: 0, server: 'R99999' });
   ok(!!rj.err, 'joining a closed server fails cleanly'); rj.ws.close();
   const m5 = await client({ name: 'Maker5', mode: 'online', c: STI[0], k: 0, create: { name: 'Third A', time: 90, max: 4 } });

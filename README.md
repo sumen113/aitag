@@ -36,7 +36,7 @@ Notes
 - Bandwidth: each player receives ~30 snapshots/s. A full 15-player lobby is roughly **1.7 GB per hour**. Set `SNAP_HZ=20` to cut that by a third.
 - `GET /health` and `/api/stats` return `{players, rooms, uptime, accounts}`.
 
-Environment variables: `PORT` (set by Render), `DATABASE_URL`, `ADMIN_USERS`, `ADMIN_PASSCODE`, `MIN_WIN_PLAYERS` (default 3), `SNAP_HZ` (default 30, range 10-60),
+Environment variables: `PORT` (set by Render), `DATABASE_URL`, `ADMIN_USERS`, `ADMIN_PASSCODE`, `MIN_WIN_PLAYERS` (default and minimum 3), `SNAP_HZ` (default 30, range 10-60),
 `PGSSL_STRICT=1` (verify the database certificate; off by default because several hosts use private CAs), `PGSSLMODE=disable` (local Postgres).
 
 ## Servers
@@ -47,7 +47,7 @@ Pressing **Play online** opens a server picker.
 - **Custom servers**: anyone can create one with a name (3-22 chars), game length (**60-600 s, never under 60**), max players (2-15), an arena (or random), optional **bots** and an optional **password**. They show in the list live (🔒 = password) and vanish when the last player leaves.
 - **Bots**: you choose how many (up to max-1) and their difficulty. They use player slots and step aside as humans join.
 - **Passwords**: stored only as a salted scrypt hash in memory; wrong tries are limited to 8 per minute per IP.
-- **Wins in custom servers**: they count, but only with **no bots** and at least `CUSTOM_MIN_WIN_PLAYERS` humans (default 3, never below `MIN_WIN_PLAYERS`), and the winner still needs a registered account, a score of 30+ and not be AFK. This keeps solo/2-account farming in private rooms from working.
+- **Wins**: only the main (public) server pays wins, and only when at least `MIN_WIN_PLAYERS` real players (default and minimum **3**) are playing. Custom/private servers and practice never give wins. The winner also needs a registered account and to have been active.
 - Limits: 40 custom servers at once, 3 creations per person/IP per 10 minutes, names unique and filtered. Limits live in `SERVER_LIMITS` (`public/shared.js`).
 - Servers live in memory, so a Render restart or free-tier sleep clears them (Regular comes straight back).
 
