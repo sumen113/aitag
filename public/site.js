@@ -302,12 +302,12 @@
     bounce();
   }
   /** the in-game picker changed your character: keep the menu selection in step so the next game starts with it */
-  function setLook(ci, sk) {
+  function pickedInGame(ci, sk) {
     const id = CHARS[ci].id; sel.c = ci; store.set('c', ci);
     if (sk) sel.sks[id] = sk; else delete sel.sks[id];
     store.set('sks', sel.sks);
   }
-  Object.assign(App, { setLook, api, openModal, closeModal, el, store, equipSkin, owns, repaint: () => paintAccount(), openAuth: (m) => openAuth(m) });
+  Object.assign(App, { setLook: pickedInGame, api, openModal, closeModal, el, store, equipSkin, owns, repaint: () => paintAccount(), openAuth: (m) => openAuth(m) });
 
   const mouse = { x: 0.5, y: 0.5 };
   window.addEventListener('pointermove', (e) => { mouse.x = e.clientX / innerWidth; mouse.y = e.clientY / innerHeight; }, { passive: true });
