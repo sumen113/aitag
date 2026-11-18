@@ -98,9 +98,7 @@ const server = http.createServer(async (req, res) => {
     'Content-Type': f.type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
     'Cache-Control': f.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
   };
-  // The game can be embedded in other sites (FRAME_ANCESTORS, default any); the staff page never can.
-  if (url === '/hq.html') { headers['X-Frame-Options'] = 'DENY'; headers['Content-Security-Policy'] = csp("'none'"); }
-  else if (url === '/index.html') headers['Content-Security-Policy'] = csp(FRAME_ANCESTORS);
+    if (url === '/index.html' || url === '/hq.html') headers['Content-Security-Policy'] = csp(FRAME_ANCESTORS);
   if (url === '/hq.html') headers['Cache-Control'] = 'no-store';
   if (f.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
     headers['Content-Encoding'] = 'gzip'; headers.Vary = 'Accept-Encoding';

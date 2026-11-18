@@ -75,7 +75,7 @@ Staff-only 19th character (`secret: true`, last in `CHARS`, so stored indexes ar
 
 ## Embedding in an iframe
 
-On https the login cookie is `HttpOnly; SameSite=None; Secure; Partitioned` so it survives inside another site's iframe (Partitioned keeps it where third-party cookies are blocked); plain http stays `SameSite=Lax`. Every POST still checks the Origin header. The game page may be framed (`FRAME_ANCESTORS`, default any; set it to your site to restrict); the staff page is always `X-Frame-Options: DENY`. Safari/Firefox ask once for storage access when you log in from inside a frame.
+On https the login cookie is `HttpOnly; SameSite=None; Secure; Partitioned` so it survives inside another site's iframe (Partitioned keeps it where third-party cookies are blocked); plain http stays `SameSite=Lax`. Every POST still checks the Origin header. The game page and the staff page (`/hq`, which is opened from inside the embedded game) may be framed (`FRAME_ANCESTORS`, default any; set it to your site to restrict). The staff page is still protected by the staff account, the passcode and the Origin check. Safari/Firefox ask once for storage access when you log in from inside a frame.
 
 ## Chests and skins (v7.4)
 

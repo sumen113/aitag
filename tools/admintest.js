@@ -163,7 +163,7 @@ function join(name, cookie, c = 0) {
   r = await fetch(BASE + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'Boss', password: 'correct-horse-9' }) });
   ck = r.headers.get('set-cookie') || ''; ok(/SameSite=Lax/.test(ck) && !/Secure/.test(ck), 'plain http cookie stays Lax');
   r = await fetch(BASE + '/'); ok(!r.headers.get('x-frame-options') && /frame-ancestors \*/.test(r.headers.get('content-security-policy')), 'the game page may be embedded');
-  r = await fetch(BASE + '/hq'); ok(r.headers.get('x-frame-options') === 'DENY' && /frame-ancestors 'none'/.test(r.headers.get('content-security-policy')), 'the staff page may not be embedded');
+  r = await fetch(BASE + '/hq'); ok(!r.headers.get('x-frame-options') && /frame-ancestors \*/.test(r.headers.get('content-security-policy')), 'the staff page opens inside the embedded game too (it was refused to connect in a frame)');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');
