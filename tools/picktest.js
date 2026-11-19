@@ -41,7 +41,7 @@ function join(name, c = 0, extra) {
   ok(ts && ts.name === 'Test Server' && !ts.regular && !ts.lock && list[0].regular, 'the server list has the Test Server right after the Regular server');
   const X = await join('Xxx', starter, { server: ts.id }), Y = await join('Yyy', starter, { server: ts.id });
   for (let i = 0; i < 40 && !X.vc; i++) await sleep(100);
-  ok(X.vc && X.vc.d.join() === 'proximity,points', 'joining it opens a vote on exactly Tagger Proximity and Tagger Points (' + (X.vc && X.vc.d) + ')');
+  ok(X.vc && X.vc.d.join() === 'proximity,abilityhold,points', 'joining it opens a vote on exactly the three Test Server modes (' + (X.vc && X.vc.d) + ')');
   const regular = (await (await fetch(BASE + '/api/servers')).json()).servers[0];
   ok(regular.regular, 'the Regular server is still first');
   const cr = await join('Zzz', starter, { create: { name: 'Test Server', time: 90, max: 5, map: 'random', bots: 0, diff: 'normal', pass: '', mode: 'vote' } });

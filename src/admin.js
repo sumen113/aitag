@@ -18,7 +18,36 @@ const ADMIN_USERNAMES = [
 ];
 
 const KEY = 'admin-state';
+/** Front-page text staff may rewrite. Each key matches a data-ct="key" element in public/index.html (a test checks they stay in sync). */
+const SITE_FIELDS = [
+  { k: 'eyebrow1', max: 40, g: 'Top of the page', label: 'Tag 1 (above the title)' },
+  { k: 'eyebrow2', max: 40, g: 'Top of the page', label: 'Tag 2' },
+  { k: 'eyebrow3', max: 40, g: 'Top of the page', label: 'Tag 3' },
+  { k: 'h1a', max: 24, g: 'Top of the page', label: 'Big title, first word' },
+  { k: 'h1b', max: 24, g: 'Top of the page', label: 'Big title, second word (coloured)' },
+  { k: 'lede', max: 500, g: 'Top of the page', label: 'Intro paragraph' },
+  { k: 'castKicker', max: 40, g: 'Characters section', label: 'Small label' },
+  { k: 'castTitle', max: 120, g: 'Characters section', label: 'Heading (Enter = new line)' },
+  { k: 'castLede', max: 500, g: 'Characters section', label: 'Paragraph' },
+  { k: 'arenaKicker', max: 40, g: 'Arenas section', label: 'Small label' },
+  { k: 'arenaTitle', max: 120, g: 'Arenas section', label: 'Heading (Enter = new line)' },
+  { k: 'arenaLede', max: 500, g: 'Arenas section', label: 'Paragraph' },
+  { k: 'howKicker', max: 40, g: 'How to play', label: 'Small label' },
+  { k: 'howTitle', max: 120, g: 'How to play', label: 'Heading (Enter = new line)' },
+  { k: 'step1t', max: 60, g: 'How to play', label: 'Step 1 title' },
+  { k: 'step1p', max: 300, g: 'How to play', label: 'Step 1 text' },
+  { k: 'step2t', max: 60, g: 'How to play', label: 'Step 2 title' },
+  { k: 'step2p', max: 300, g: 'How to play', label: 'Step 2 text' },
+  { k: 'step3t', max: 60, g: 'How to play', label: 'Step 3 title' },
+  { k: 'step3p', max: 300, g: 'How to play', label: 'Step 3 text' },
+  { k: 'finalTitle', max: 80, g: 'Bottom of the page', label: 'Last heading' },
+  { k: 'footNote', max: 80, g: 'Bottom of the page', label: 'Footer line' },
+];
+const SITE_LINKS_MAX = 8;
+const URL_OK = /^(https?:\/\/|mailto:)[^\s"'<>]{1,300}$/i;
 const lower = (s) => String(s || '').toLowerCase();
+/** Front-page text keeps line breaks (one \n = a new line) but is otherwise tidied like everything else. */
+const clipText = (s, n) => String(s == null ? '' : s).replace(/\r/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n);
 const clip = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
 
 function create({ store, rooms, activeUsers, wss, opts = {} }) {
@@ -27,7 +56,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   if (admins.size && !passcode) console.warn('ADMIN_USERS is set but ADMIN_PASSCODE is not: the admin panel stays locked until you set ADMIN_PASSCODE.');
   if (!admins.size) console.log('Admin panel: no admin usernames configured (set ADMIN_USERS or edit src/admin.js).');
 
-  let st = { bans: {}, mutes: {}, banner: '', lbBase: {}, titles: {}, bonus: null, log: [] };           // persisted
+  let st = { bans: {}, mutes: {}, banner: '', lbBase: {}, titles: {}, bonus: null, site: { text: {}, links: [] }, log: [] };           // persisted
   const guestMutes = new Set();                           // guests only, lost on restart
   const fails = new Map();                                // ip -> [timestamps] of wrong passcodes
 
@@ -44,6 +73,8 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   const banReason = (name) => { const b = st.bans[lower(name)]; return b ? b.reason || 'No reason given.' : null; };
   const isMuted = (name, isAccount) => (isAccount ? !!st.mutes[lower(name)] : guestMutes.has(lower(name)));
   const banner = () => st.banner || '';
+  /** What the public front page shows on top of its built-in copy: overrides by key, and a row of links. */
+  const site = () => ({ text: Object.assign({}, (st.site && st.site.text) || {}), links: ((st.site && st.site.links) || []).map((l) => ({ t: l.t, u: l.u })) });
   /** A custom title (and its colour) given to an account from the staff page. Nobody has one by default, staff included. */
   const titleOf = (name) => { const t = st.titles && st.titles[lower(name)]; return t ? { t: t.t, c: t.c } : null; };
   /** Points-only bonus: the extra wins are spendable but must not move the leaderboard, so they are added to the account's leaderboard baseline too. */
@@ -54,7 +85,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
   const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(obj)); };
   const readBody = (req) => new Promise((resolve, reject) => {
     let n = 0; const chunks = [];
-    req.on('data', (c) => { n += c.length; if (n > 4096) { reject(new Error('too big')); req.destroy(); } else chunks.push(c); });
+    req.on('data', (c) => { n += c.length; if (n > 16384) { reject(new Error('too big')); req.destroy(); } else chunks.push(c); });
     req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch (e) { reject(new Error('bad json')); } });
     req.on('error', reject);
   });
@@ -124,6 +155,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
           rooms: o.rooms, players: o.players, humans: o.humans, banner: st.banner,
           bans: Object.entries(st.bans).map(([k, v]) => ({ name: v.name || k, reason: v.reason, by: v.by, at: v.at })),
           titles: Object.entries(st.titles || {}).map(([k, v]) => ({ name: v.name || k, t: v.t, c: v.c })),
+          site: site(), siteFields: SITE_FIELDS, siteLinksMax: SITE_LINKS_MAX,
           mutes: Object.keys(st.mutes), guestMutes: [...guestMutes], log: (st.log || []).slice(0, 80), admins: [...admins], bonus: bonus(),
         }), true;
       }
@@ -283,6 +315,22 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
         return json(res, 200, { ok: true, title: t }), true;
       }
 
+      if (act === 'site') {                                  // rewrite front-page text and set the row of links; sends the whole picture each time (empty = back to the built-in copy)
+        const text = {}, src = body.text && typeof body.text === 'object' ? body.text : {};
+        for (const f of SITE_FIELDS) { const v = clipText(src[f.k], f.max); if (v) text[f.k] = v; }
+        const links = [];
+        for (const l of Array.isArray(body.links) ? body.links.slice(0, SITE_LINKS_MAX) : []) {
+          const t = clip(l && l.t, 30), u = String((l && l.u) || '').trim();
+          if (!t && !u) continue;
+          if (!t) return json(res, 400, { error: 'Every link needs a label.' }), true;
+          if (!URL_OK.test(u)) return json(res, 400, { error: `"${t}": the address must start with https:// (or mailto:).` }), true;
+          links.push({ t, u });
+        }
+        st.site = { text, links }; await save();
+        record(me, 'front-page', `${Object.keys(text).length} text edit(s), ${links.length} link(s)`);
+        return json(res, 200, { ok: true, site: site() }), true;
+      }
+
       if (act === 'announce') {
         const m = clip(body.m, 140); if (!m) return json(res, 400, { error: 'Write a message first.' }), true;
         let n = 0; for (const ws of wss.clients) if (ws.readyState === 1) { send(ws, { t: 'announce', m }); n++; }
@@ -301,7 +349,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, bonus, lbBase, shiftLbBase, titleOf, admins };
+  return { handle, load, isAdmin, banReason, isMuted, banner, site, bonus, lbBase, shiftLbBase, titleOf, admins };
 }
 
-module.exports = { create, ADMIN_USERNAMES };
+module.exports = { create, ADMIN_USERNAMES, SITE_FIELDS };

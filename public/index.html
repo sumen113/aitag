@@ -48,12 +48,13 @@
         <div class="stickers" id="stickers" aria-hidden="true"></div>
 
         <div class="hero-copy">
-          <p class="eyebrow"><span>time waster</span><span>kinda easy</span><span>play with others</span></p>
+          <p class="eyebrow"><span data-ct="eyebrow1">time waster</span><span data-ct="eyebrow2">kinda easy</span><span data-ct="eyebrow3">play with others</span></p>
           <h1 class="display" id="h1" aria-label="Don't be IT.">
-            <span class="h1-line" id="h1a">pretty</span>
-            <span class="h1-it" id="h1b">Fun</span>
+            <span class="h1-line" id="h1a" data-ct="h1a">pretty</span>
+            <span class="h1-it" id="h1b" data-ct="h1b">Fun</span>
           </h1>
-          <p class="lede">a game of tag to play with ur friends(doubt it), make sure to make an account to unlock stuff and save progress ............. btw game is made fully ai so dont come to owner yappin</p>
+          <p class="lede" data-ct="lede">a game of tag to play with ur friends(doubt it), make sure to make an account to unlock stuff and save progress ............. btw game is made fully ai so dont come to owner yappin</p>
+          <nav class="home-links" id="homeLinks" aria-label="Links" hidden></nav>
 
           <form id="joinForm" class="join card" autocomplete="off" novalidate>
             <div class="acct-line hidden" id="acctLine">
@@ -118,9 +119,9 @@
       <!-- ---------------------------- cast ---------------------------- -->
       <section class="section" id="cast">
         <header class="section-head">
-          <p class="mono kicker">01 / Characters</p>
-          <h2 class="h2" data-split>Fourteen fighters.<br>Fourteen ways to dodge.</h2>
-          <p class="section-lede">Every character has one power on a cooldown. None is best — they trade speed, size and tricks. Everyone starts with Fox, Ghost and Bear; win rounds to unlock the others in the shop.</p>
+          <p class="mono kicker" data-ct="castKicker">01 / Characters</p>
+          <h2 class="h2" data-split data-ct="castTitle">Fourteen fighters.<br>Fourteen ways to dodge.</h2>
+          <p class="section-lede" data-ct="castLede">Every character has one power on a cooldown. None is best — they trade speed, size and tricks. Everyone starts with Fox, Ghost and Bear; win rounds to unlock the others in the shop.</p>
         </header>
         <div class="cast-grid" id="castGrid"></div>
       </section>
@@ -128,9 +129,9 @@
       <!-- ---------------------------- arenas ---------------------------- -->
       <section class="section dark" id="arenas">
         <header class="section-head">
-          <p class="mono kicker">02 / Arenas</p>
-          <h2 class="h2" data-split>Nine arenas.<br>New one every round.</h2>
-          <p class="section-lede">Mud slows you, ice won't let you stop, conveyors carry you off, whirlpools spin you round, pinball bumpers kick you across the map, teleporters drop you behind the tagger, and bushes hide you. Use the terrain.</p>
+          <p class="mono kicker" data-ct="arenaKicker">02 / Arenas</p>
+          <h2 class="h2" data-split data-ct="arenaTitle">Nine arenas.<br>New one every round.</h2>
+          <p class="section-lede" data-ct="arenaLede">Mud slows you, ice won't let you stop, conveyors carry you off, whirlpools spin you round, pinball bumpers kick you across the map, teleporters drop you behind the tagger, and bushes hide you. Use the terrain.</p>
         </header>
         <div class="arena-grid" id="arenaGrid"></div>
       </section>
@@ -138,13 +139,13 @@
       <!-- ---------------------------- how ---------------------------- -->
       <section class="section" id="how">
         <header class="section-head">
-          <p class="mono kicker">03 / How to play</p>
-          <h2 class="h2" data-split>Easy to learn.<br>Hard to stay un-IT.</h2>
+          <p class="mono kicker" data-ct="howKicker">03 / How to play</p>
+          <h2 class="h2" data-split data-ct="howTitle">Easy to learn.<br>Hard to stay un-IT.</h2>
         </header>
         <ol class="steps" id="steps">
-          <li class="step card"><span class="step-n">1</span><h3>One player is IT</h3><p>Touch someone and they become IT. The player you just tagged is protected for a moment so you can't be tagged right back.</p></li>
-          <li class="step card"><span class="step-n">2</span><h3>Every second counts</h3><p>You earn a point for every second you are <em>not</em> IT. A round lasts 90 seconds, then the next arena loads and everybody resets.</p></li>
-          <li class="step card"><span class="step-n">3</span><h3>Use your power</h3><p>Time your ability. Cooldowns are long on purpose; a good dodge is worth more than a panicked one.</p></li>
+          <li class="step card"><span class="step-n">1</span><h3 data-ct="step1t">One player is IT</h3><p data-ct="step1p">Touch someone and they become IT. The player you just tagged is protected for a moment so you can't be tagged right back.</p></li>
+          <li class="step card"><span class="step-n">2</span><h3 data-ct="step2t">Every second counts</h3><p data-ct="step2p">You earn a point for every second you are <em>not</em> IT. A round lasts 90 seconds, then the next arena loads and everybody resets.</p></li>
+          <li class="step card"><span class="step-n">3</span><h3 data-ct="step3t">Use your power</h3><p data-ct="step3p">Time your ability. Cooldowns are long on purpose; a good dodge is worth more than a panicked one.</p></li>
         </ol>
         <div class="controls card" id="controls">
           <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="keys-label">or arrow keys to move</span></div>
@@ -155,14 +156,14 @@
       </section>
 
       <section class="final" id="final">
-        <h2 class="h2">Ready? Don't be IT.</h2>
+        <h2 class="h2" data-ct="finalTitle">Ready? Don't be IT.</h2>
         <button class="btn btn-primary magnetic" id="btnTop"><span class="btn-label">Back to the lobby</span></button>
       </section>
     </main>
 
     <footer class="foot">
       <span class="brand-name">Tag Rush</span>
-      <span class="mono">Built with canvas, WebSockets &amp; GSAP</span>
+      <span class="mono" data-ct="footNote">Built with canvas, WebSockets &amp; GSAP</span>
       <span class="foot-links"><button type="button" class="link-btn" id="footNews">What's new</button><button type="button" class="link-btn" id="footBoard">Leaderboard</button></span>
     </footer>
   </div>

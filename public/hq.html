@@ -36,6 +36,7 @@
         <button type="button" data-tab="live" aria-selected="true">Live</button>
         <button type="button" data-tab="accounts" aria-selected="false">Accounts</button>
         <button type="button" data-tab="titles" aria-selected="false">Titles</button>
+        <button type="button" data-tab="site" aria-selected="false">Front page</button>
         <button type="button" data-tab="skins" aria-selected="false">Skins &amp; chests</button>
         <button type="button" data-tab="events" aria-selected="false">Events</button>
         <button type="button" data-tab="broadcast" aria-selected="false">Broadcast &amp; bans</button>
@@ -82,6 +83,24 @@
           <button class="btn btn-primary" type="submit"><span class="btn-label">Save title</span></button>
         </form>
         <h2>Players with titles</h2><div id="adTitles" class="ad-chips"></div>
+      </section>
+
+      <!-- FRONT PAGE -->
+      <section data-pane="site" class="hidden">
+        <form id="adSiteForm" class="card ad-box">
+          <h2>Front page</h2>
+          <p>Change the words on the home page. Whatever you leave empty keeps the original text (shown greyed out). Write <code>[label](https://example.com)</code> inside any text to turn part of it into a link. Changes are live for everyone as soon as you save.</p>
+          <div id="adSiteFields" class="ad-sitef"></div>
+          <h2>Links</h2>
+          <p>A row of buttons under the intro paragraph. Up to <span id="adLinkMax">8</span>. Addresses start with https://</p>
+          <div id="adSiteLinks" class="ad-sitel"></div>
+          <div class="ad-sitebtns">
+            <button type="button" class="btn btn-ghost" id="adLinkAdd"><span class="btn-label">Add a link</span></button>
+            <button type="submit" class="btn btn-primary"><span class="btn-label">Save front page</span></button>
+            <button type="button" class="btn btn-ghost" id="adSiteReset"><span class="btn-label">Put everything back</span></button>
+            <a class="btn btn-ghost" href="/" target="_blank" rel="noopener"><span class="btn-label">Open front page</span></a>
+          </div>
+        </form>
       </section>
 
       <!-- SKINS & CHESTS -->

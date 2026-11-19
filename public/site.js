@@ -411,6 +411,7 @@
       .from('.stage', { x: 80, yPercent: 4, opacity: 0, rotation: 4, duration: 1, ease: 'expo.out' }, 0.45)   // yPercent, so the scroll parallax (which owns `y`) never fights the intro
       .from('.pick', { scale: 0, rotation: -20, stagger: 0.04, duration: 0.5, ease: 'back.out(3)', onComplete: () => { gsap.set('.pick', { clearProps: 'transform' }); releasePick(); } }, 1)
       .from('.sticker', { scale: 0, rotation: '+=120', stagger: 0.08, duration: 0.8, ease: 'back.out(2)' }, 0.9);
+    if (document.querySelector('#homeLinks a')) tl.from('#homeLinks a', { y: 16, autoAlpha: 0, stagger: 0.06, duration: 0.5, clearProps: 'transform,opacity,visibility' }, 0.85);
     return tl;
   }
 
@@ -827,6 +828,34 @@
   $('footNews').addEventListener('click', openNews); $('footBoard').addEventListener('click', openBoard);
   $('navBoard').addEventListener('click', openBoard); $('acctBoard').addEventListener('click', openBoard); $('newsBoard').addEventListener('click', openBoard);
 
+  /* ====================== front page text + links (edited by staff) ====================== */
+  const LINK_OK = /^(https?:\/\/|mailto:)[^\s"'<>]{1,300}$/i;
+  /** Plain text with line breaks, plus [label](https://...) links: built from nodes, never HTML, so nothing typed can run. */
+  function richInto(node, text) {
+    const parts = [];
+    String(text).split('\n').forEach((line, i) => {
+      if (i) parts.push(document.createElement('br'));
+      const re = /\[([^\]]{1,60})\]\(([^)\s]{1,300})\)/g; let at = 0, m;
+      while ((m = re.exec(line))) {
+        if (!LINK_OK.test(m[2])) continue;
+        if (m.index > at) parts.push(document.createTextNode(line.slice(at, m.index)));
+        const a = document.createElement('a'); a.href = m[2]; a.textContent = m[1]; a.target = '_blank'; a.rel = 'noopener noreferrer'; parts.push(a); at = m.index + m[0].length;
+      }
+      if (at < line.length) parts.push(document.createTextNode(line.slice(at)));
+    });
+    node.replaceChildren(...parts);
+  }
+  function applySite(d) {
+    if (!d || typeof d !== 'object') return;
+    const text = d.text && typeof d.text === 'object' ? d.text : {};
+    document.querySelectorAll('[data-ct]').forEach((n) => { const v = text[n.dataset.ct]; if (typeof v === 'string' && v) richInto(n, v); });
+    const h1 = $('h1'); if (h1) h1.setAttribute('aria-label', ($('h1a').textContent + ' ' + $('h1b').textContent).trim());
+    const box = $('homeLinks'); if (!box) return;
+    const links = (Array.isArray(d.links) ? d.links : []).filter((l) => l && l.t && LINK_OK.test(String(l.u || ''))).slice(0, 8);
+    box.replaceChildren(...links.map((l) => { const a = document.createElement('a'); a.href = l.u; a.textContent = l.t; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; }));
+    box.hidden = !links.length;
+  }
+
   /* ================================== boot ================================== */
   function boot() {
     buildPicker(); buildCast(); buildArenas(); buildMarquee(); buildStickers();
@@ -842,5 +871,7 @@
   }
   // wait for the fonts so SplitText measures the real line breaks
   const ready = (document.fonts && document.fonts.ready) ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve();
-  ready.then(boot);
+  // the staff-edited copy goes in before boot, so SplitText measures the final words (a slow or failed request never blocks the page for long)
+  const sitePromise = Promise.race([fetch('/api/site', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)), new Promise((r) => setTimeout(() => r(null), 1500))]).catch(() => null);
+  Promise.all([ready, sitePromise]).then(([, d]) => { try { applySite(d); } catch (e) { /* keep the built-in copy */ } boot(); });
 })();

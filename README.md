@@ -61,6 +61,8 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 - **Infection**: every tag infects the victim and the tagger stays a zombie. Always plays on the big *Outbreak* arena. Ends when one survivor is left (or time runs out).
 - **Hot Potato**: the tagger holds a potato with a 10 s fuse. Every pass resets the fuse but shortens it by 0.4 s, every elimination by 0.5 s (floor 3 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
 
+**Test Server only** (anyone can vote, even alone): *Proximity*, *Points* and **Ability Hold (v7.11)**. In Ability Hold you hold your ability button (Space / Shift / E, the on-screen button, or the mouse for the avocado) and it charges a counter above you; on release the ability fires once for the first second held and then once more for every further second, up to 10 uses at a 0.14 s gap (frog 3 s = 3 jumps, owl 6 s = 6 clones). A tap is still one use, the cooldown starts after the last use, stun or tagging cancels the rest. Bat stays a single beacon, and second-press moves (cat, mole, ...) stay taps. Input bit `4` of the 7th input element carries "held"; `tools/holdtest.js` covers it.
+
 Classic tag can be joined at any time. Infection and Hot Potato can't be joined once started: new arrivals are ghosts (invisible, harmless, shown as NEXT on the scoreboard) until the next round starts. Eliminated players spectate the same way. Rules live in `src/room.js` (`startVote`, `tally`, `tag`, `explode`), tuning constants in `public/shared.js` (`MODES`, `POTATO_*`, `VOTE_TIME`). `VOTE_TIME` can be overridden by env var (tests use 0.4). `node tools/modetest.js` checks the rules.
 
 ## God, the secret character (v7.9)
@@ -138,6 +140,10 @@ What it does:
 - **Titles**: type an account username, a title (up to 16 characters) and pick a colour (or a swatch): it appears as a coloured pill next to that player's name on the field, scoreboard, results, chat and leaderboard, live in games already running. Empty text removes it. Nobody has a title by default, staff included. Stored with the other staff data (`titles`).
 Bans, mutes (accounts) and the banner are stored in the database; guest mutes last until the server restarts.
 The rest of the safety is the same as the main site: same-origin JSON only, passcode attempts are rate limited, and admin accounts cannot be banned.
+
+### Editing the front page (v7.11)
+
+Staff open **Front page** in `/hq` to rewrite the home-page text (tags, big title, intro, the three sections, steps, last heading, footer) and add up to 8 link buttons under the intro. Empty boxes keep the built-in copy, which the editor reads from the page itself and shows greyed out. Inside any text, `[label](https://...)` becomes a link and Enter makes a new line. Links must be `https://`, `http://` or `mailto:` (no `javascript:`), and everything is built from DOM nodes, never HTML. Edits are stored in the staff state (survive restarts), served publicly at `GET /api/site`, and applied before the intro animation runs. To make a new text editable, give its element `data-ct="key"` and add the key to `SITE_FIELDS` in `src/admin.js` (a test keeps the two lists in sync).
 
 ## Leaderboard, quick chat, news
 

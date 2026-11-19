@@ -64,8 +64,56 @@
     $('adTabs').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
     document.querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('hidden', p.dataset.pane !== name));
     if (name === 'accounts' && !$('adUsers').children.length) searchUsers();
+    if (name === 'site') openSite();
   }
   $('adTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) openTab(b.dataset.tab); });
+
+  /* -------------------------------- front page -------------------------------- */
+  let siteDefaults = null;
+  /** The built-in copy is read from the home page itself, so this list never goes out of date. */
+  async function loadDefaults() {
+    if (siteDefaults) return siteDefaults;
+    siteDefaults = {};
+    try {
+      const doc = new DOMParser().parseFromString(await (await fetch('/', { cache: 'no-store' })).text(), 'text/html');
+      doc.querySelectorAll('br').forEach((b) => b.replaceWith('\n'));
+      doc.querySelectorAll('[data-ct]').forEach((n) => { siteDefaults[n.dataset.ct] = n.textContent.trim(); });
+    } catch (e) { /* the placeholders just stay empty */ }
+    return siteDefaults;
+  }
+  function linkRow(t, u) {
+    const row = el('div', 'ad-linkrow');
+    const a = el('input', 'inp'); a.placeholder = 'Label (e.g. Discord)'; a.maxLength = 30; a.value = t || ''; a.autocomplete = 'off'; a.setAttribute('aria-label', 'Link label');
+    const b = el('input', 'inp'); b.placeholder = 'https://…'; b.maxLength = 300; b.value = u || ''; b.autocomplete = 'off'; b.type = 'url'; b.setAttribute('aria-label', 'Link address');
+    const x = el('button', 'ad-btn', 'Remove'); x.type = 'button'; x.onclick = () => row.remove();
+    row.append(a, b, x); return row;
+  }
+  async function openSite() {
+    const s = lastState; if (!s || !s.siteFields) return;
+    const def = await loadDefaults(), box = $('adSiteFields'); let group = '';
+    box.replaceChildren();
+    for (const f of s.siteFields) {
+      if (f.g !== group) { group = f.g; box.append(el('h3', 'ad-sitegrp', group)); }
+      const lab = el('label', 'ad-sitelab'); lab.append(el('span', 'mono', f.label));
+      const multi = f.max > 80, inp = multi ? el('textarea', 'inp') : el('input', 'inp');
+      inp.rows = f.max > 200 ? 4 : 2; inp.maxLength = f.max; inp.dataset.k = f.k; inp.value = (s.site.text || {})[f.k] || ''; inp.placeholder = def[f.k] || ''; inp.autocomplete = 'off';
+      lab.append(inp); box.append(lab);
+    }
+    $('adLinkMax').textContent = String(s.siteLinksMax || 8);
+    $('adSiteLinks').replaceChildren(...(s.site.links || []).map((l) => linkRow(l.t, l.u)));
+  }
+  $('adLinkAdd').addEventListener('click', () => { if ($('adSiteLinks').children.length >= ((lastState && lastState.siteLinksMax) || 8)) return toast('That is the most links you can have.', true); const r = linkRow('', ''); $('adSiteLinks').append(r); r.querySelector('input').focus(); });
+  async function saveSite(text, links, msg) {
+    const r = await api('site', { text, links });
+    if (r.status === 200) { lastState.site = r.j.site; toast(msg); await openSite(); } else toast(r.j.error || 'Could not save.', true);
+  }
+  $('adSiteForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = {}; $('adSiteFields').querySelectorAll('[data-k]').forEach((i) => { if (i.value.trim()) text[i.dataset.k] = i.value; });
+    const links = [...$('adSiteLinks').children].map((r) => { const [a, b] = r.querySelectorAll('input'); return { t: a.value, u: b.value }; });
+    saveSite(text, links, 'Front page saved. It is live now.');
+  });
+  $('adSiteReset').addEventListener('click', () => { if (confirm('Put the original text back and remove all links?')) saveSite({}, [], 'Front page is back to the original.'); });
 
   /* ---------------------------- live / broadcast ---------------------------- */
   function paint(s) {

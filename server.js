@@ -71,6 +71,10 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(stats()));
   }
+  if (url === '/api/site' && req.method === 'GET') {                              // front-page text and links edited from the staff page
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(admin ? admin.site() : { text: {}, links: [] }));
+  }
   if (url === '/api/servers' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ servers: serverList(), limits: T.SERVER_LIMITS, maps: T.MAPS.map((m) => ({ id: m.id, name: m.name })) }));

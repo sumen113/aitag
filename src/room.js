@@ -47,7 +47,7 @@ class Room {
     this.mapMode = opts.mapMode && T.MAP_BY_ID[opts.mapMode] ? opts.mapMode : 'rotate';
     this.map = this.mapMode !== 'rotate' ? T.MAP_BY_ID[this.mapMode] : T.MAPS[(Math.random() * T.MAPS.length) | 0];
     this.goos = [];
-    this.ctx = { map: this.map, goos: this.goos, itBoost: T.MODE_BY_ID[this.mode].boost };
+    this.ctx = { map: this.map, goos: this.goos, itBoost: T.MODE_BY_ID[this.mode].boost, hold: !!T.MODE_BY_ID[this.mode].hold };
     this.players = new Map();
     this.decoys = [];
     this.seeds = [];                                   // avocado seeds in flight
@@ -67,7 +67,9 @@ class Room {
   activeCount() { let n = 0; for (const p of this.players.values()) if (!p.wait) n++; return n; }
   aliveCount() { let n = 0; for (const p of this.players.values()) if (!p.out) n++; return n; }
   modeDef() { return T.MODE_BY_ID[this.mode]; }
-  setMode(id) { this.mode = T.MODE_BY_ID[id] ? id : 'classic'; this.ctx.itBoost = this.modeDef().boost; }
+  setMode(id) { this.mode = T.MODE_BY_ID[id] ? id : 'classic'; this.ctx.itBoost = this.modeDef().boost; this.ctx.hold = !!this.modeDef().hold; }
+  /** per-owner limit on lingering ability objects; Ability Hold lifts it so a long hold really does make that many clones / pits / clouds */
+  cap(n) { return this.ctx.hold ? Math.max(n, T.HOLD_MAX) : n; }
   roundLen() { const m = this.modeDef(); return this.customTime || !m.time ? this.roundTime : m.time; }
   itPlayer() { const p = this.players.get(this.itId); return p && p.it ? p : null; }
   itPlayers() { const a = []; for (const p of this.players.values()) if (p.it) a.push(p); return a; }
@@ -181,7 +183,7 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
@@ -256,7 +258,7 @@ class Room {
   setLook(p, ci, col, skin) {
     if (!this.canPick() || p.bot || !CHARS[ci]) return false;
     p.c = ci; p.col = col; p.skin = skin || '';
-    p.cd = 0; p.abT = 0; p.aux = 0; p.bx = 0; p.by = 0; p.z = 0; p.bm = 0; p.pitT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.vx = p.vy = 0; p.bowled = null;
+    p.cd = 0; p.abT = 0; p.aux = 0; p.bx = 0; p.by = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.vx = p.vy = 0; p.bowled = null;
     this.rosterDirty = true; return true;
   }
 
@@ -334,8 +336,8 @@ class Room {
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       x = Math.round(T.clamp(x, -1, 1) * 100) / 100; y = Math.round(T.clamp(y, -1, 1) * 100) / 100;
       const inp = { s, x, y, a: e[3] ? 1 : 0 };
-      if (e.length >= 7 && p.c === IDX.god && p.staff) inp.h = (e[6] | 0) & 3;      // held moves (God only): 1 = ascend, 2 = beam
-      if (e[3] && e.length >= 6) { const ax = +e[4], ay = +e[5]; if (Number.isFinite(ax) && Number.isFinite(ay)) { const L = Math.hypot(ax, ay); if (L > 0.05) { inp.ax = Math.round(ax / L * 100) / 100; inp.ay = Math.round(ay / L * 100) / 100; } } }
+      if (e.length >= 7) { let h = e[6] | 0; if (!(p.c === IDX.god && p.staff)) h &= 4; if (!this.ctx.hold) h &= 3; if (h) inp.h = h & 7; }      // held inputs: 1 = ascend, 2 = beam (God only, staff), 4 = ability held (Ability Hold)
+      if ((e[3] || (e.length >= 7 && (e[6] & 4))) && e.length >= 6) { const ax = +e[4], ay = +e[5]; if (Number.isFinite(ax) && Number.isFinite(ay)) { const L = Math.hypot(ax, ay); if (L > 0.05) { inp.ax = Math.round(ax / L * 100) / 100; inp.ay = Math.round(ay / L * 100) / 100; } } }
       p.queue.push(inp);
       if (e[3]) p.lastActiveAt = now;           // using an ability counts as playing; plain movement is judged by how far you actually got (see the idle check in tick)
     }
@@ -402,15 +404,15 @@ class Room {
       for (const dd of this.decoys.slice()) if (Math.hypot(dd.x - p.x, dd.y - p.y) < R) this.popDecoy(dd);
     } else if (e.n === 'seed') {
       const L = Math.hypot(e.dx, e.dy) || 1, ux = e.dx / L, uy = e.dy / L, off = CHARS[p.c].radius + 6;
-      if (this.seeds.filter((x) => x.o === p.id).length >= 2) return;
+      if (this.seeds.filter((x) => x.o === p.id).length >= this.cap(2)) return;
       this.seeds.push({ id: this.entId++, o: p.id, x: p.x + ux * off, y: p.y + uy * off, vx: ux * T.SEED_SPEED, vy: uy * T.SEED_SPEED, it: p.it ? 1 : 0, ttl: T.SEED_RANGE / T.SEED_SPEED });
     } else if (e.n === 'pit') {
       const mine = this.pits.filter((x) => x.o === p.id);
-      if (mine.length >= 3) this.pits.splice(this.pits.indexOf(mine[0]), 1);
+      if (mine.length >= this.cap(3)) this.pits.splice(this.pits.indexOf(mine[0]), 1);
       this.pits.push({ id: this.entId++, x: p.x, y: p.y + 6, r: PIT_R, o: p.id, ttl: PIT_TTL });
     } else if (e.n === 'stink') {
       const mine = this.goos.filter((g) => g.o === p.id && g.s === 2);
-      if (mine.length >= 2) this.goos.splice(this.goos.indexOf(mine[0]), 1);
+      if (mine.length >= this.cap(2)) this.goos.splice(this.goos.indexOf(mine[0]), 1);
       this.goos.push({ id: this.entId++, x: p.x, y: p.y, r: 88, o: p.id, ttl: 3.2, s: 2 });
     } else if (e.n === 'kick') {                              // both hind legs: a wide cone BEHIND the direction of travel
       const R = 150, bx = -e.dx, by = -e.dy;
@@ -439,11 +441,12 @@ class Room {
       }
     } else if (e.n === 'goo') {
       const mine = this.goos.filter((g) => g.o === p.id);
-      if (mine.length >= 3) this.goos.splice(this.goos.indexOf(mine[0]), 1);
+      if (mine.length >= this.cap(3)) this.goos.splice(this.goos.indexOf(mine[0]), 1);
       this.goos.push({ id: this.entId++, x: p.x, y: p.y, r: 80, o: p.id, ttl: 8 });
     } else if (e.n === 'decoy') {
       const mine = this.decoys.filter((d) => d.o === p.id);
-      if (mine.length >= 2) this.decoys.splice(this.decoys.indexOf(mine[0]), 1);
+      if (mine.length >= this.cap(2)) this.decoys.splice(this.decoys.indexOf(mine[0]), 1);
+      if (this.ctx.hold && p.rax === 0 && p.ray === 0) { const a = ((p.rep % 5) - 2) * 0.3, ca = Math.cos(a), sa = Math.sin(a), dx = e.dx * ca - e.dy * sa; e.dy = e.dx * sa + e.dy * ca; e.dx = dx; }       // a fan of clones, not a stack
       this.decoys.push({ id: this.entId++, x: p.x + e.dx * 30, y: p.y + e.dy * 30, vx: e.dx * 235, vy: e.dy * 235, c: p.c, k: p.col, o: p.id, ttl: 5.5 });
     }
     else if (e.n === 'swap') {

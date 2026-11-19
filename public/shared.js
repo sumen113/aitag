@@ -36,6 +36,7 @@
     { id: 'potato',    name: 'Hot Potato',  short: 'Potato',  time: 180, map: '',         boost: 1.1, blurb: 'Pass the potato before it blows up. Last one standing wins.' },
     // test-server modes (never on the Regular server, in practice or in player-made servers): classic tag with a different way to score
     { id: 'proximity', name: 'Tagger Proximity', short: 'Proximity', time: 0, map: '', boost: 1.07, testOnly: true, blurb: 'The closer you are to IT, the faster you score. Risky, but even if you get tagged you can climb back to the top.' },
+    { id: 'abilityhold', name: 'Ability Hold', short: 'Hold', time: 0, map: '', boost: 1.07, testOnly: true, hold: true, blurb: 'Hold your ability: every second you hold is one more use. Three seconds of frog is three jumps, six seconds of owl is six clones.' },
     { id: 'points',    name: 'Tagger Points',    short: 'Points',    time: 0, map: '', boost: 1.07, testOnly: true, blurb: 'Tag someone as IT and get 10 points, on top of surviving. Getting tagged is a chance to catch up.' },
   ];
   const classicLike = (id) => id === 'classic' || !!(MODE_BY_ID[id] && MODE_BY_ID[id].testOnly);     // one role that moves on a tag (not infection / potato)
@@ -126,6 +127,7 @@
       desc: 'Hold to rise as high as you like, teleport to any player from a menu, and hold a beam of light that sweeps sideways through everything and stuns anyone it touches.' },
   ];
   const PUBLIC_CHARS = CHARS.filter((c) => !c.secret).length;      // secret characters sit at the end of the list
+  const HOLD_MAX = 10, HOLD_GAP = 0.14;        // Ability Hold: most uses from one hold, and the pause between repeats (s)
   const GOD_RISE = 170, GOD_FALL = 340, GOD_ZMAX = 900, GOD_AIR = 30, GOD_BEAM_W = 46, GOD_TP_CD = 2.5;     // px/s up, px/s down, ceiling, height at which you clear walls, beam thickness, teleport cooldown (s)
   const STARTERS = CHARS.filter((c) => c.starter).map((c) => c.id);
 
@@ -582,11 +584,11 @@
 
   /* ------------------------- player simulation -------------------------- */
   // The subset of a player's state that is simulated identically client + server.
-  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by', 'z', 'bm'];
+  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by', 'z', 'bm', 'hold', 'rep', 'repT', 'rax', 'ray'];
   const rnd = (v) => Math.round(v * 1000) / 1000;
 
   function newSim(id, c, x, y) {
-    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0, z: 0, bm: 0 };
+    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0, z: 0, bm: 0, hold: 0, rep: 0, repT: 0, rax: 0, ray: 0 };
   }
   function packSim(p) { const a = new Array(SIM.length); for (let i = 0; i < SIM.length; i++) a[i] = rnd(+p[SIM[i]] || 0); return a; }
   function unpackSim(p, a) { for (let i = 0; i < SIM.length; i++) p[SIM[i]] = a[i]; }
@@ -648,7 +650,21 @@
     if (len > 1) { mx /= len; my /= len; len = 1; }
     if (len > 0.15) { p.fx = mx / len; p.fy = my / len; }
     const stunned = p.stun > 0;
-    if (inp.a && !stunned && !p.out) {                         // spectators (waiting or eliminated) can't use abilities
+    let press = !!inp.a, aimInp = inp;
+    if (ctx.hold) {                                            // Ability Hold (Test Server): hold to charge, let go and it happens once per second held (a tap is one use)
+      const special = (def.id === 'bat' && p.aux > 0) || ((def.id === 'cat' || def.id === 'mole') && p.abT > 0);      // second-press moves (recall, pounce, pop up) stay plain taps
+      const down = (inp.h & 4) !== 0 && !stunned && !p.out;
+      if (special) { p.hold = 0; }
+      else {
+        press = false;
+        if (down && p.cd <= 0 && p.rep <= 0 && p.abT <= 0) { p.hold = Math.min(HOLD_MAX + 0.99, p.hold + dt); if (inp.ax || inp.ay) { p.rax = inp.ax; p.ray = inp.ay; } }      // remember where the mouse points while charging
+        else if (p.hold > 0 && !down) {
+          press = true; p.rep = def.id === 'bat' ? 0 : Math.max(0, Math.floor(p.hold) - 1); p.hold = 0; p.repT = HOLD_GAP;
+          aimInp = { ax: p.rax, ay: p.ray };
+        } else p.hold = 0;
+      }
+    }
+    if (press && !stunned && !p.out) {                         // spectators (waiting or eliminated) can't use abilities
       if (def.id === 'bat' && p.aux > 0 && p.cd <= 0) {          // second press: snap back to the beacon
         if (ev) ev.push({ k: 'ab', n: 'recall', id: p.id, x: p.x, y: p.y, x1: p.bx, y1: p.by });
         p.x = p.bx; p.y = p.by; p.aux = 0; p.cd = def.cd; p.boostT = Math.max(p.boostT, 0.3);   // momentum carries through the snap-back (no stop), with a short burst so it isn't clamped
@@ -659,7 +675,12 @@
       } else if (def.id === 'mole' && p.abT > 0 && def.dur - p.abT > 0.35) {              // pop up early
         p.abT = 0;
         if (ev) ev.push({ k: 'ab', n: 'surface', id: p.id, x: p.x, y: p.y, dx: 0, dy: 0 });
-      } else if (p.cd <= 0) useAbility(p, def, ctx, ev, mx, my, len, inp);
+      } else if (p.cd <= 0) useAbility(p, def, ctx, ev, mx, my, len, aimInp);
+    }
+    if (ctx.hold && p.rep > 0) {                              // the remaining uses of a long hold, one after another once the last one is over
+      if (stunned || p.out) p.rep = 0;
+      else if (p.repT > 0) p.repT = Math.max(0, p.repT - dt);
+      else if (p.abT <= 0) { p.rep--; p.repT = HOLD_GAP; useAbility(p, def, ctx, ev, mx, my, len, { ax: p.rax, ay: p.ray }); }
     }
     if (wasDig && p.abT <= 0 && ev && !(ev.length && ev[ev.length - 1].n === 'surface')) ev.push({ k: 'ab', n: 'surface', id: p.id, x: p.x, y: p.y, dx: 0, dy: 0 });      // the tunnel time ran out
 
@@ -756,7 +777,7 @@
 
   return {
     TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
-    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, CHARS, PUBLIC_CHARS, SECRET_SKINS, skinPool, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
+    COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, HOLD_MAX, CHARS, PUBLIC_CHARS, SECRET_SKINS, skinPool, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };
 });

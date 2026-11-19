@@ -72,8 +72,8 @@
     G.sv = m.sv || null;
     G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; if (m.name) G.sel.name = m.name;
     G.roster.clear(); onRoster(m.roster);
-    G.me = null; G.god = { fly: false, beam: false }; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
-    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
+    G.me = null; G.abHeld = false; G.god = { fly: false, beam: false }; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
+    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.ctx.hold = false; G.abHeld = false; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
     G.inGame = true; G.camSnap = true; pollBonus();
@@ -105,7 +105,7 @@
   function onSnapshot(m) {
     const prev = G.state;
     G.state = m.s; G.tl = m.tl; G.tlAt = performance.now(); G.rd = m.rd; G.itId = m.it; G.res = m.res || null;
-    G.mode = m.md || 'classic'; G.pt = new Map((m.pt || []).map((a) => [a[0], a[1]])); G.ptAt = performance.now();
+    G.mode = m.md || 'classic'; G.ctx.hold = !!(C.MODE_BY_ID[G.mode] && C.MODE_BY_ID[G.mode].hold); G.pt = new Map((m.pt || []).map((a) => [a[0], a[1]])); G.ptAt = performance.now();
     if (!G.map || G.map.id !== m.m) setMap(C.MAP_BY_ID[m.m]);
     const now = performance.now(), o = m.ts - now;
     if (G.lastArr) {                                    // measure arrival jitter -> adaptive interpolation delay
@@ -375,24 +375,24 @@
     else if (isGod() && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) { G.god.fly = true; Sfx.unlock(); e.preventDefault(); }      // God: hold to ascend
     else if (isGod() && e.code === 'KeyE') { G.god.beam = true; Sfx.unlock(); e.preventDefault(); }                                                          // God: hold for the beam of light
     else if (isGod() && e.code === 'KeyQ') { if (!e.repeat) toggleGodMenu(); e.preventDefault(); }                                                           // God: teleport menu
-    else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; Sfx.unlock(); } e.preventDefault(); }
+    else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } e.preventDefault(); }
     else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
     else if (e.code === 'KeyM') toggleMute();
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
   window.addEventListener('keyup', (e) => {
     if (MOVE[e.code]) K[MOVE[e.code]] = false;
-    if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') G.god.fly = false;
-    else if (e.code === 'KeyE') G.god.beam = false;
+    if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') { G.god.fly = false; G.abHeld = false; }
+    else if (e.code === 'KeyE') { G.god.beam = false; G.abHeld = false; }
   });
   window.addEventListener('pagehide', () => closeWs());
-  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.god.fly = G.god.beam = false; G.joy.active = false; $('joy').classList.add('hidden'); };
+  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.god.fly = G.god.beam = false; G.abHeld = false; G.joy.active = false; $('joy').classList.add('hidden'); };
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => { G.acc = 0; if (document.hidden) releaseAll(); });
 
   const abBtn = $('abilityBtn');
-  abBtn.addEventListener('pointerdown', (e) => { if (isGod()) G.god.fly = true; else G.abilityQueued = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) abBtn.addEventListener(ev, () => { G.god.fly = false; });
+  abBtn.addEventListener('pointerdown', (e) => { if (isGod()) G.god.fly = true; else { G.abilityQueued = true; G.abHeld = true; } Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) abBtn.addEventListener(ev, () => { G.god.fly = false; G.abHeld = false; });
   /* ===== God (staff only): three moves. Ascend = hold Space / the big button, Teleport = Q / its button (opens a player menu), Beam = hold E / its button ===== */
   const isGod = () => !!G.me && CHARS[G.me.c].id === 'god';
   const godBeamBtn = $('godBeam'), godTpBtn = $('godTp'), godMenu = $('godMenu');
@@ -557,7 +557,8 @@
     const dx = G.cam.x + (mouse.x - G.W / 2) / G.zoom - G.me.x, dy = G.cam.y + (mouse.y - G.H / 2) / G.zoom - G.me.y, l = Math.hypot(dx, dy);
     return l < 8 ? null : [Math.round(dx / l * 100) / 100, Math.round(dy / l * 100) / 100];
   }
-  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; Sfx.unlock(); } });
+  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } });
+  window.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button === 0) G.abHeld = false; });
 
   /* ============================= simulation step ============================ */
   const LOCAL_FX = new Set(['beam', 'tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
@@ -567,8 +568,8 @@
     let a = G.abilityQueued ? 1 : 0; G.abilityQueued = false;
     if (G.state === STATE.COUNT) { x = y = a = 0; }
     const inp = { s: ++G.seq, x, y, a };
-    if (isGod() && G.state !== STATE.COUNT) { const h = (G.god.fly ? 1 : 0) | (G.god.beam ? 2 : 0); if (h) inp.h = h; }
-    if (a) { const aim = mouseAim(); if (aim) { inp.ax = aim[0]; inp.ay = aim[1]; } }
+    if (G.state !== STATE.COUNT) { const h = (isGod() ? (G.god.fly ? 1 : 0) | (G.god.beam ? 2 : 0) : 0) | (G.ctx.hold && G.abHeld ? 4 : 0); if (h) inp.h = h; }
+    if (a || (inp.h & 4)) { const aim = mouseAim(); if (aim) { inp.ax = aim[0]; inp.ay = aim[1]; } }
     G.pending.push(inp); G.sendBuf.push(inp);
     if (G.pending.length > 180) G.pending.shift();
     G.px = G.me.x; G.py = G.me.y;
@@ -654,6 +655,13 @@
     const color = zed ? '#7ddc4f' : C.colorFor(e.k);      // zombies turn green
     const skin = zed ? '' : e.sk || '';                   // ...and lose their skin, so everyone can tell who is infected
 
+    // Ability Hold: while you charge, a ring fills once per second around you and a counter shows how many uses you have banked
+    if (G.ctx.hold && e.isMe && !e.out && G.me.hold > 0) {
+      const n = Math.max(1, Math.floor(G.me.hold)), f = G.me.hold % 1, ry = fyPos - r * 0.9;
+      g.save(); g.lineWidth = 4; g.lineCap = 'round'; g.strokeStyle = 'rgba(20,18,43,.55)'; g.beginPath(); g.arc(x, ry, r + 9, 0, TAU); g.stroke();
+      g.strokeStyle = n >= C.HOLD_MAX ? '#ff4d5e' : '#ffd23f'; g.beginPath(); g.arc(x, ry, r + 9, -Math.PI / 2, -Math.PI / 2 + TAU * (n >= C.HOLD_MAX ? 1 : f)); g.stroke();
+      g.font = '900 16px "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#14122b'; g.fillStyle = '#fff'; g.strokeText('\u00d7' + n, x, ry - r - 16); g.fillText('\u00d7' + n, x, ry - r - 16); g.restore();
+    }
     // Tagger Proximity: a soft ring around IT shows where the points are
     if (G.mode === 'proximity' && e.it && !e.decoy && !e.out && G.state === STATE.PLAY) {
       const R = r + C.PROX_RANGE * 0.5, gr = g.createRadialGradient(x, fyPos, r, x, fyPos, R * 1.0);
@@ -1041,7 +1049,9 @@
     abBtn.classList.toggle('cd', me.cd > 0 && !bat && !pounce && !god); abBtn.classList.toggle('ready', ready); abBtn.classList.toggle('stunned', me.stun > 0);
     if (ready && !G.wasReady && st === STATE.PLAY) gsap.fromTo(abBtn, { scale: 0.85 }, { scale: 1, duration: 0.5, ease: 'back.out(3)', clearProps: 'transform' });
     G.wasReady = ready;
-    const cdText = me.cd > 0 && !bat && !pounce && !god ? String(Math.ceil(me.cd)) : '';
+    const holdN = G.ctx.hold && me.hold > 0 ? Math.max(1, Math.floor(me.hold)) : 0;
+    if (holdN) abBtn.style.setProperty('--p', (me.hold % 1 || 1).toFixed(3));              // Ability Hold: the ring fills once per second held
+    const cdText = holdN ? '\u00d7' + holdN : me.cd > 0 && !bat && !pounce && !god ? String(Math.ceil(me.cd)) : '';
     if ($('abCd').textContent !== cdText) $('abCd').textContent = cdText;
 
     const now = performance.now();
@@ -1112,6 +1122,7 @@
     potato: '<rect width="64" height="64" rx="12" fill="#ffeacc"/><ellipse cx="31" cy="40" rx="20" ry="15" fill="#c98a4b" stroke="#14122b" stroke-width="3.5" transform="rotate(-12 31 40)"/><g fill="#7a4a22" opacity=".6"><circle cx="22" cy="38" r="2.2"/><circle cx="34" cy="45" r="2.2"/><circle cx="40" cy="35" r="2.2"/><circle cx="28" cy="46" r="1.6"/></g><path d="M36 26c4-5 8-5 11-9" fill="none" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M50 8l2.6 5.4 5.4 2.6-5.4 2.6L50 24l-2.6-5.4-5.4-2.6 5.4-2.6z" fill="#ffd23f" stroke="#14122b" stroke-width="2.2" stroke-linejoin="round"/>',
   };
   MODE_ICONS.proximity = '<rect width="64" height="64" rx="12" fill="#e4ecff"/><circle cx="32" cy="32" r="26" fill="none" stroke="#4a7cff" stroke-width="3" stroke-dasharray="3 5"/><circle cx="32" cy="32" r="16" fill="none" stroke="#4a7cff" stroke-width="3.5"/><circle cx="32" cy="32" r="7" fill="#ff4d5e" stroke="#14122b" stroke-width="3"/><circle cx="48" cy="20" r="4.5" fill="#ffd23f" stroke="#14122b" stroke-width="2.5"/>';
+  MODE_ICONS.abilityhold = '<rect width="64" height="64" rx="12" fill="#e9e0ff"/><circle cx="32" cy="32" r="20" fill="#ffffff" stroke="#14122b" stroke-width="3.5"/><path d="M32 12a20 20 0 0 1 20 20" fill="none" stroke="#8a5cff" stroke-width="6" stroke-linecap="round"/><text x="32" y="40" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="22" fill="#14122b">\u00d73</text>';
   MODE_ICONS.points = '<rect width="64" height="64" rx="12" fill="#fff3c9"/><circle cx="32" cy="32" r="21" fill="#ffd23f" stroke="#14122b" stroke-width="3.5"/><text x="32" y="40" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="22" fill="#14122b">+10</text>';
   function modeIcon(id) {
     const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 64 64'); s.setAttribute('aria-hidden', 'true');

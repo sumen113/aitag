@@ -262,7 +262,7 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
 {
   const tsrv = (n) => mk('vote', n, { kind: 'test', name: T.TEST_NAME });
   let t = tsrv(3); t.tick();
-  ok(t.testServer && t.state === T.STATE.VOTE && t.vote.modes.join() === 'proximity,points', 'test server: votes between exactly Tagger Proximity and Tagger Points, even with 3 players');
+  ok(t.testServer && t.state === T.STATE.VOTE && t.vote.modes.join() === 'proximity,abilityhold,points', 'test server: votes between exactly the three test modes (Proximity, Ability Hold, Points), even with 3 players');
   ok(t.modeOpt === 'vote' && !t.regular, 'test server: always a mode vote, not the regular server');
   const rg = mk('vote', 8, { kind: 'public' }); rg.tick(); ok(!rg.vote.modes.some((m) => T.MODE_BY_ID[m].testOnly), 'regular server: never offers the test modes');
   const pr = mk('vote', 8, { kind: 'bots' }); pr.tick(); ok(!(pr.vote && pr.vote.modes.some((m) => T.MODE_BY_ID[m].testOnly)), 'practice: never offers the test modes');
@@ -299,8 +299,8 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   // any number of players can vote: even one person alone gets the mode vote every round
   for (const n of [1, 2]) {
     const t1 = tsrv(n); t1.tick();
-    ok(t1.state === T.STATE.VOTE && t1.vote.modes.join() === 'proximity,points', 'test server: ' + n + ' player(s) still get the mode vote');
-    const pp = [...t1.players.values()]; pp.forEach((p) => { t1.castVote(p, 'd', 1); t1.castVote(p, 'm', 0); });
+    ok(t1.state === T.STATE.VOTE && t1.vote.modes.join() === 'proximity,abilityhold,points', 'test server: ' + n + ' player(s) still get the mode vote');
+    const pp = [...t1.players.values()]; pp.forEach((p) => { t1.castVote(p, 'd', t1.vote.modes.indexOf('points')); t1.castVote(p, 'm', 0); });
     run(t1, 4, () => t1.state === T.STATE.COUNT); run(t1, 14, () => t1.state === T.STATE.PLAY);
     ok(t1.state === T.STATE.PLAY && t1.mode === 'points', 'test server: ' + n + ' player(s) play the voted mode');
     run(t1, t1.tl + 1, () => t1.state === T.STATE.RESULTS); run(t1, 20, () => t1.state === T.STATE.VOTE);

@@ -774,3 +774,13 @@ body.dark .chest-art, .dark .chest-art { filter: none; }
 .god-p:hover:not(:disabled), .god-p:focus-visible { background: #fff3a8; }
 .god-p:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 700px) { #godTp { bottom: 124px; } #godBeam { right: calc(max(22px, env(safe-area-inset-right)) + 112px); } .ability-btn.sub { width: 68px; height: 68px; } }
+
+/* staff-editable front page: a row of links under the intro, and links written inside the text */
+.home-links { display: flex; flex-wrap: wrap; gap: 10px; margin: -10px 0 26px; }
+.home-links[hidden] { display: none; }
+.home-links a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 2.5px solid var(--ink); border-radius: 999px; background: var(--card); color: var(--ink); font: 800 15px var(--body); text-decoration: none; box-shadow: 3px 3px 0 var(--ink); transition: transform .15s, box-shadow .15s; }
+.home-links a:hover, .home-links a:focus-visible { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--ink); }
+.home-links a:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+[data-ct] a { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
+[data-ct] a:hover { color: var(--red); }
+.dark [data-ct] a { color: inherit; }

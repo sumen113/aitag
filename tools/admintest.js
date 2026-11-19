@@ -171,6 +171,26 @@ function join(name, cookie, c = 0) {
   ck = r.headers.get('set-cookie') || ''; ok(/SameSite=Lax/.test(ck) && !/Secure/.test(ck), 'plain http cookie stays Lax');
   r = await fetch(BASE + '/'); ok(!r.headers.get('x-frame-options') && /frame-ancestors \*/.test(r.headers.get('content-security-policy')), 'the game page may be embedded');
   r = await fetch(BASE + '/hq'); ok(!r.headers.get('x-frame-options') && /frame-ancestors \*/.test(r.headers.get('content-security-policy')), 'the staff page opens inside the embedded game too (it was refused to connect in a frame)');
+  // front page: staff rewrite the text and add links; everyone reads it; bad input is refused
+  { const A = require('../src/admin.js'); const html = require('fs').readFileSync(require('path').join(__dirname, '../public/index.html'), 'utf8');
+    const tagged = [...html.matchAll(/data-ct="(\w+)"/g)].map((m) => m[1]);
+    ok(A.SITE_FIELDS.every((f) => tagged.filter((k) => k === f.k).length === 1) && tagged.length === A.SITE_FIELDS.length, 'every editable field has exactly one matching element on the front page');
+    ok(!/admin/i.test(A.SITE_FIELDS.map((f) => f.label + f.g).join(' ')), 'editor labels never say "admin"'); }
+  j = await (await fetch(BASE + '/api/site')).json(); ok(j && !Object.keys(j.text).length && j.links.length === 0, 'front page starts untouched');
+  r = await post('/api/admin/site', { text: { lede: 'hi' } }, pleb, 'sesame'); ok(r.status === 403, 'a normal account cannot edit the front page');
+  r = await post('/api/hq/site', { text: { lede: 'hi' } }, boss); ok(r.status === 401, 'editing needs the passcode too');
+  r = await post('/api/hq/site', { text: { lede: '  hello   there\nsecond [Docs](https://example.com/a) line  ', h1a: 'cool', castTitle: 'One\nTwo', nope: 'x', step1t: '   ' }, links: [{ t: 'Discord', u: 'https://discord.gg/abc' }, { t: '', u: '' }, { t: 'Mail', u: 'mailto:me@example.com' }] }, boss, 'sesame');
+  j = await r.json(); ok(r.status === 200 && j.site.text.lede === 'hello there\nsecond [Docs](https://example.com/a) line' && j.site.text.h1a === 'cool' && j.site.text.castTitle === 'One\nTwo', 'text is saved tidy, line breaks kept');
+  ok(!('nope' in j.site.text) && !('step1t' in j.site.text), 'unknown keys and blank text are dropped');
+  ok(j.site.links.length === 2 && j.site.links[0].u === 'https://discord.gg/abc' && j.site.links[1].t === 'Mail', 'links are saved (empty rows skipped)');
+  j = await (await fetch(BASE + '/api/site')).json(); ok(j.text.h1a === 'cool' && j.links.length === 2, 'everybody can read the edited front page without logging in');
+  r = await post('/api/hq/site', { text: {}, links: [{ t: 'Bad', u: 'javascript:alert(1)' }] }, boss, 'sesame'); ok(r.status === 400, 'javascript: links are refused');
+  r = await post('/api/hq/site', { text: {}, links: [{ t: '', u: 'https://x.com' }] }, boss, 'sesame'); ok(r.status === 400, 'a link needs a label');
+  j = await (await fetch(BASE + '/api/site')).json(); ok(j.links.length === 2, 'a refused save changes nothing');
+  r = await post('/api/hq/site', { text: { lede: 'x'.repeat(900) }, links: Array.from({ length: 12 }, (_, i) => ({ t: 'L' + i, u: 'https://e.com/' + i })) }, boss, 'sesame'); j = await r.json();
+  ok(r.status === 200 && j.site.text.lede.length === 500 && j.site.links.length === 8, 'text is cut to its limit and links to 8');
+  j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); ok(j.site.links.length === 8 && Array.isArray(j.siteFields) && j.siteFields.length > 10, 'the staff state carries the current edits and the field list');
+  r = await post('/api/hq/site', { text: {}, links: [] }, boss, 'sesame'); j = await (await fetch(BASE + '/api/site')).json(); ok(r.status === 200 && !Object.keys(j.text).length && !j.links.length, 'saving it empty puts the original page back');
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');
