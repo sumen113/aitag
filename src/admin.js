@@ -103,6 +103,14 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     if (a) { send(a.ws, { t: 'kick', m: message }); try { a.ws.close(); } catch (e) { /* gone */ } }
   }
 
+  /** Remove one human from a room. From the F menu in a game (`actorId` = the kicker's player id) staff can't kick staff or themselves. Returns '' or the reason it failed. */
+  function staffKick(by, roomCode, id, actorId) {
+    const fromGame = actorId != null, f = findPlayer(roomCode, id); if (!f) return 'That player already left.';
+    if (fromGame && (f.p.id === actorId || f.p.staff)) return f.p.staff && f.p.id !== actorId ? 'Staff cannot be kicked.' : 'You cannot kick yourself.';
+    send(f.p.ws, { t: 'kick', m: 'Staff removed you from the game.' }); try { f.p.ws.close(); } catch (e) { /* gone */ }
+    record(by, 'kick', f.p.name + (fromGame ? ' (in game)' : '')); return '';
+  }
+
   async function userRow(u, auth) {
     const skins = u.owned.filter((x) => x.startsWith('skin:')), c = auth ? await auth.chests.view(u.id) : null;
     return {
@@ -120,7 +128,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     for (const r of rooms.values()) {
       const hs = [...r.players.values()].filter((p) => !p.bot);
       humans += hs.length;
-      rs.push({ id: r.code, name: r.name, regular: !!r.regular, max: r.max, rt: r.roundTime, map: r.map.id, solo: !!r.solo, state: r.state, humans: hs.length, total: r.players.size, tl: Math.round(r.tl || 0) });
+      rs.push({ id: r.code, mode: r.mode, name: r.name, regular: !!r.regular, max: r.max, rt: r.roundTime, map: r.map.id, solo: !!r.solo, state: r.state, humans: hs.length, total: r.players.size, tl: Math.round(r.tl || 0) });
       for (const p of hs) ps.push({ room: r.code, id: p.id, name: p.name, acct: p.uid ? 1 : 0, char: T.CHARS[p.c] ? T.CHARS[p.c].id : '?', rtt: Math.round(p.rtt || 0), muted: !!p.muted, afk: !!p.afk, staff: !!p.staff, it: r.itId === p.id });
     }
     return { rooms: rs, players: ps, humans };
@@ -179,9 +187,20 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
       }
 
       if (act === 'kick') {
-        const f = findPlayer(String(body.room), body.id); if (!f) return json(res, 404, { error: 'That player already left.' }), true;
-        send(f.p.ws, { t: 'kick', m: 'Staff removed you from the game.' }); try { f.p.ws.close(); } catch (e) { /* gone */ }
-        record(me, 'kick', f.p.name); return json(res, 200, { ok: true }), true;
+        const err = staffKick(me, String(body.room), body.id, null); if (err) return json(res, 404, { error: err }), true;
+        return json(res, 200, { ok: true }), true;
+      }
+
+      if (act === 'roommode') {                              // switch a room to another game mode: its round restarts now in that mode
+        const r = rooms.get(String(body.room)); if (!r) return json(res, 404, { error: 'That room is gone.' }), true;
+        const mode = String(body.mode || ''), err = r.staffSetMode(mode); if (err) return json(res, 400, { error: err }), true;
+        record(me, 'room-mode', `${r.name} -> ${mode}`); return json(res, 200, { ok: true }), true;
+      }
+
+      if (act === 'endmatch') {                              // end the running match (no wins are paid for it)
+        const r = rooms.get(String(body.room)); if (!r) return json(res, 404, { error: 'That room is gone.' }), true;
+        const err = r.staffEnd(); if (err) return json(res, 400, { error: err }), true;
+        record(me, 'end-match', r.name); return json(res, 200, { ok: true }), true;
       }
 
       if (act === 'mute') {
@@ -349,7 +368,7 @@ function create({ store, rooms, activeUsers, wss, opts = {} }) {
     }
   }
 
-  return { handle, load, isAdmin, banReason, isMuted, banner, site, bonus, lbBase, shiftLbBase, titleOf, admins };
+  return { handle, staffKick, load, isAdmin, banReason, isMuted, banner, site, bonus, lbBase, shiftLbBase, titleOf, admins };
 }
 
 module.exports = { create, ADMIN_USERNAMES, SITE_FIELDS };

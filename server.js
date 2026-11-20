@@ -255,7 +255,7 @@ wss.on('connection', (ws, req) => {
     c.player.title = user && admin ? admin.titleOf(user.username) : null;
     c.player.muted = !!(admin && admin.isMuted(name, !!user));
     c.player.rtt = ws.rtt;
-    ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
+    ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), staff: !!c.player.staff, name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
   }
 
   /** Change character / colour / skin in the window before a round (after the vote). Same ownership rules as joining. */
@@ -295,6 +295,9 @@ wss.on('connection', (ws, req) => {
     }
     else if (m.t === 'vote') { if (c.player) c.room.castVote(c.player, m.k === 'm' ? 'm' : 'd', Number(m.i) | 0); }
     else if (m.t === 'god') { if (c.player && c.room && m.a === 'tp') c.room.godTeleport(c.player, Number(m.to) | 0); }          // God's teleport menu (staff only; the room re-checks everything)
+    else if (m.t === 'staffkick') {                                                                                    // the F menu in a game: staff only, only inside their own room, never staff or themselves
+      if (c.player && c.player.staff && c.room && admin) { const err = admin.staffKick(c.user ? c.user.username : c.player.name, c.room.code, Number(m.id) | 0, c.player.id); if (err) ws.send(JSON.stringify({ t: 'announce', m: err, p: 1 })); }
+    }
     else if (m.t === 'typing') { if (c.player) { c.player.lastActiveAt = now; c.player.typeAt = m.on && !c.player.muted ? now + 3000 : 0; } }     // bubble over your head while you type (3 s unless refreshed)
     else if (m.t === 'char') { if (c.player && c.room && !c.lookBusy) { c.lookBusy = true; look(m).catch(() => {}).finally(() => { c.lookBusy = false; }); } }
     else if (m.t === 'join' && !c.player && !c.joining) {

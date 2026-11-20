@@ -331,6 +331,24 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
   // wins on the test server
   const payoutT = (n) => { const r = tsrv(n); const won = []; r.onWin = (p) => won.push(p.id); let i = 1; const first = [...r.players.values()][0]; for (const p of r.players.values()) { p.uid = i++; p.score = p === first ? 60 : 5; p.lastActiveAt = clk; } r.state = T.STATE.PLAY; r.endRound(); return won.length; };
   ok(payoutT(2) === 0 && payoutT(3) === 1, 'test server: wins count, but only with 3+ players');
+  // staff controls: switch the mode of a running room, end a match early (no wins for it)
+  { const payoutS = (end) => { const r = tsrv(3); const won = []; r.onWin = (p) => won.push(p.id); let i = 1; const first = [...r.players.values()][0]; for (const p of r.players.values()) { p.uid = i++; p.score = p === first ? 60 : 5; p.lastActiveAt = clk; } r.state = T.STATE.PLAY; if (end) r.staffEnd(); else r.endRound(); return { won: won.length, state: r.state }; };
+    const a1 = payoutS(false), a2 = payoutS(true);
+    ok(a1.won === 1 && a2.won === 0 && a2.state === T.STATE.RESULTS, 'staff ending a match shows the results but pays no wins (normal end: ' + a1.won + ', staff end: ' + a2.won + ')');
+    let g = mk('classic', 3, { kind: 'public' }); g.tick(); run(g, 8, () => g.state === T.STATE.PLAY);
+    ok(g.state === T.STATE.PLAY && g.mode === 'classic', 'staff: a public room with 3 players plays classic');
+    ok(g.staffSetMode('nope') !== '' && g.mode === 'classic', 'staff: an unknown mode is refused');
+    ok(g.staffSetMode('infection') === '' && g.mode === 'infection' && g.state === T.STATE.COUNT && g.map.id === 'outbreak', 'staff: switching to Infection restarts the round in it, even with fewer than 7 players');
+    run(g, 8, () => g.state === T.STATE.PLAY); ok(g.state === T.STATE.PLAY && g.mode === 'infection' && g.itPlayers().length === 1, 'staff: the forced mode actually plays (one zombie)');
+    ok(g.staffSetMode('potato') === '' && g.mode === 'potato', 'staff: and can be switched again mid-round');
+    run(g, 8, () => g.state === T.STATE.PLAY); ok(g.itPlayers().length === 1 && g.itPlayers()[0].pot > 5.9, 'staff: Hot Potato starts with one holder and the 6 s fuse');
+    ok(g.staffEnd() === '' && g.state === T.STATE.RESULTS && g.evs.some((e) => e.k === 'redo' && /ended/i.test(e.m)), 'staff: end match goes to the results with a notice');
+    ok(g.staffEnd() !== '', 'staff: nothing to end while the results show');
+    run(g, 20, () => g.state === T.STATE.VOTE || g.state === T.STATE.COUNT); run(g, 12, () => g.state === T.STATE.PLAY);
+    ok(g.state === T.STATE.PLAY && g.mode === 'classic', 'staff: afterwards the room goes back to its normal rule (classic)');
+    g.staffSetMode('abilityhold'); ok(g.mode === 'abilityhold' && g.ctx.hold === true, 'staff: test-only modes can be forced too');
+    run(g, 6, () => g.state === T.STATE.COUNT); g.staffEnd(); ok(g.state !== T.STATE.RESULTS && g.state !== T.STATE.WAIT, 'staff: ending during the countdown starts a fresh round instead');
+    const lone = mk('classic', 1, { kind: 'public' }); ok(lone.staffSetMode('infection') !== '' && lone.staffEnd() !== '', 'staff: nothing to switch or end in a room that is only waiting for players'); }
 }
 
 console.log(fails ? '\n' + fails + ' FAILED' : '\nALL PASSED'); process.exit(fails ? 1 : 0);

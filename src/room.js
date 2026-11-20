@@ -230,7 +230,7 @@ class Room {
       this.setMode(this.vote.modes[anyMode || !this.solo ? best(t.d) : 0]);       // nobody voted in practice: classic; elsewhere a random pick
       this.nextMap = T.MAP_BY_ID[this.vote.maps[best(t.m)]];
     }
-    if (!T.classicLike(this.mode) && this.players.size < T.MODE_MIN_PLAYERS) this.setMode('classic');      // too few players (or people left during the vote)
+    if (!T.classicLike(this.mode) && this.players.size < T.MODE_MIN_PLAYERS && !this.forceMode) this.setMode('classic');      // too few players (or people left during the vote)
     let m = this.nextMap || (this.round > 0 && this.modeOpt !== 'vote' ? this.pickMap() : this.map);
     const need = this.modeDef().map;
     if (need) m = T.MAP_BY_ID[need];                    // Infection always plays on the big map
@@ -275,13 +275,14 @@ class Room {
     this.emit({ k: 'st', s: STATE.PLAY, it: its[0].id, its: its.map((p) => p.id), md: this.mode });
   }
 
-  endRound() {
-    if (!T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
+  /** `noWins`: staff ended the match early, so nobody is paid for it (and no last-standing bonus). */
+  endRound(noWins) {
+    if (!noWins && !T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
     const inMatch = [...this.players.values()].filter((p) => !p.wait);
     const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
     // wins are only paid out in the main (public) server, with at least MIN_WIN_PLAYERS real players, to registered accounts that were actually playing. Private/custom servers and practice never pay wins (anti-farming).
-    if (this.onWin && (this.regular || this.testServer) && !this.solo && list.length && this.activeHumans() >= MIN_WIN_PLAYERS) {
+    if (!noWins && this.onWin && (this.regular || this.testServer) && !this.solo && list.length && this.activeHumans() >= MIN_WIN_PLAYERS) {
       const best = Math.floor(list[0].s);                // the displayed top score: everyone who finished on it shares the win
       if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
         if (Math.floor(r.s) !== best) break;
@@ -292,6 +293,23 @@ class Room {
     for (const p of this.players.values()) { p.it = 0; p.pot = 0; }
     this.itId = 0; this.state = STATE.RESULTS; this.timer = T.RESULTS_TIME; this.tl = T.RESULTS_TIME;
     this.emit({ k: 'st', s: STATE.RESULTS, md: this.mode });
+  }
+
+  /** Staff: restart the round right now in `id`, even a mode that normally needs more players. Returns '' or the reason it can't. The room's own rule (vote / fixed mode) applies again from the next round. */
+  staffSetMode(id) {
+    if (!T.MODE_BY_ID[id]) return 'Unknown game mode.';
+    if (this.state === STATE.WAIT || this.activeCount() < this.minPlayers()) return 'There are not enough players in that room.';
+    this.emit({ k: 'redo', m: `Staff switched the game to ${T.MODE_BY_ID[id].name}. Fresh round!` });
+    this.vote = null; this.nextMap = null; this.setMode(id); this.forceMode = true;
+    try { this.startCountdown(); } finally { this.forceMode = false; }
+    return '';
+  }
+
+  /** Staff: end the running match now (scores show, but no wins are paid). A round still in its countdown is dropped and a new one starts. */
+  staffEnd() {
+    if (this.state === STATE.PLAY) { this.emit({ k: 'redo', m: 'Staff ended the match. No wins for this one.' }); this.endRound(true); return ''; }
+    if (this.state === STATE.COUNT) { this.emit({ k: 'redo', m: 'Staff ended the round before it started.' }); this.beginRound(); return ''; }
+    return 'There is no match running in that room.';
   }
 
   toWait() {

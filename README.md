@@ -132,7 +132,8 @@ For you and one other person. Two things decide who gets in, both set as environ
 
 Then log in with an admin username and open `/hq` (many school web filters block anything called "admin", so the panel and its API live under `/hq` and `/api/hq/*`; `/admin` and `/api/admin/*` keep working; an **Admin** link also appears in the menu and your account window).
 What it does:
-- **Live**: who is online (guest / account / ping / room), rooms and their state; **Kick**, **Mute** (chat) or **Ban** a player.
+- **Live**: who is online (guest / account / ping / room), rooms and their state; **Kick**, **Mute** (chat) or **Ban** a player. Each room row also has a mode picker with **Switch mode** (restarts the round now in that mode, even one that normally needs 7+ players or is test-only; the room's own rule, vote or fixed mode, applies again from the next round) and **End match** (shows the results straight away, **no wins are paid** for an early end; during a countdown it just starts a fresh round).
+- **Kick from inside a game (v7.12)**: staff accounts press **F** in a game to open a list of the other real players; tap a name, then tap again to kick them. Staff can't be kicked this way, nor can you kick yourself, and a player can only be kicked from the room you are in. The server re-checks the staff account on every kick (it does not ask for the passcode, like God's teleport). Every kick is in the log.
 - **Accounts**: search players; give or take **wins**, give or remove a **character**, **reset a password** (the fix for "I forgot mine", since there is no email reset; emails are only stored, nothing is ever sent),
   ban or unban. Takes effect next time they join; a banned account is signed out immediately and cannot log in.
 - **Broadcast & bans**: **announce** a message that pops up in every open game, set a **banner** on the home page ("Maintenance at 5pm"), see and undo bans and mutes.

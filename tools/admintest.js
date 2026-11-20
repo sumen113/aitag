@@ -191,6 +191,29 @@ function join(name, cookie, c = 0) {
   ok(r.status === 200 && j.site.text.lede.length === 500 && j.site.links.length === 8, 'text is cut to its limit and links to 8');
   j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); ok(j.site.links.length === 8 && Array.isArray(j.siteFields) && j.siteFields.length > 10, 'the staff state carries the current edits and the field list');
   r = await post('/api/hq/site', { text: {}, links: [] }, boss, 'sesame'); j = await (await fetch(BASE + '/api/site')).json(); ok(r.status === 200 && !Object.keys(j.text).length && !j.links.length, 'saving it empty puts the original page back');
+  // staff in a live game: switch a room's mode, end its match, and kick with the F menu (the 'staffkick' message)
+  { const pl2 = await reg('Plebtwo'), kk = await join('Kicky', null), bj = await join('x', boss), pj2 = await join('x', pl2); await sleep(300);
+    ok(bj.init && bj.init.staff === true && pj2.init && !pj2.init.staff && !kk.init.staff, 'only a staff account is told it may use the kick menu');
+    pj2.ws.send(JSON.stringify({ t: 'staffkick', id: kk.init.id })); await sleep(300); ok(!kk.closed, 'a normal player cannot kick with F');
+    bj.ws.send(JSON.stringify({ t: 'staffkick', id: bj.init.id })); await sleep(300); ok(!bj.closed && bj.msgs.some((m) => m.t === 'announce' && /yourself/.test(m.m)), 'staff cannot kick themselves');
+    bj.ws.send(JSON.stringify({ t: 'staffkick', id: 99999 })); await sleep(200); ok(bj.msgs.some((m) => m.t === 'announce' && /already left/.test(m.m)), 'kicking someone who is gone says so');
+    bj.ws.send(JSON.stringify({ t: 'staffkick', id: kk.init.id })); await sleep(400); ok(kk.closed && kk.msgs.some((m) => m.t === 'kick' && /Staff/.test(m.m)), 'staff kick a player mid game with F');
+    j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); ok(j.log.some((l) => l.a === 'kick' && /Kicky \(in game\)/.test(l.d)), 'the in-game kick is written to the staff log');
+    const room = (await (await post('/api/hq/state', {}, boss, 'sesame')).json()).players.find((p) => p.name === 'Boss').room;
+    r = await post('/api/hq/roommode', { room, mode: 'infection' }, pl2, 'sesame'); ok(r.status === 403, 'a normal account cannot switch modes');
+    r = await post('/api/hq/endmatch', { room }, pl2, 'sesame'); ok(r.status === 403, 'a normal account cannot end matches');
+    r = await post('/api/hq/roommode', { room, mode: 'banana' }, boss, 'sesame'); ok(r.status === 400, 'an unknown mode is refused');
+    r = await post('/api/hq/roommode', { room: 'nope', mode: 'infection' }, boss, 'sesame'); ok(r.status === 404, 'an unknown room is refused');
+    r = await post('/api/hq/roommode', { room, mode: 'potato' }, boss, 'sesame'); ok(r.status === 200, 'staff switch the room to Hot Potato');
+    j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); const rm = j.rooms.find((x) => x.id === room); ok(rm && rm.mode === 'potato' && rm.state === T.STATE.COUNT, 'the live room now runs Hot Potato in a fresh countdown');
+    await sleep(300); ok(bj.msgs.some((m) => m.t === 'ev' && m.e.some((e) => e.k === 'redo' && /Hot Potato/.test(e.m))), 'players are told the mode was switched');
+    for (let i = 0; i < 40; i++) { j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); if (j.rooms.find((x) => x.id === room).state === T.STATE.PLAY) break; await sleep(300); }
+    ok(j.rooms.find((x) => x.id === room).state === T.STATE.PLAY, 'the new round gets going');
+    r = await post('/api/hq/endmatch', { room }, boss, 'sesame'); ok(r.status === 200, 'staff end the running match');
+    j = await (await post('/api/hq/state', {}, boss, 'sesame')).json(); ok(j.rooms.find((x) => x.id === room).state === T.STATE.RESULTS, 'the room shows its results');
+    r = await post('/api/hq/endmatch', { room }, boss, 'sesame'); ok(r.status === 400, 'there is nothing to end while the results show');
+    ok(j.log.some((l) => l.a === 'room-mode') && j.log.some((l) => l.a === 'end-match'), 'switching and ending are written to the staff log');
+    for (const o of [kk, bj, pj2]) try { o.ws.close(); } catch (e) { /* done */ } }
   // no passcode configured => locked
   await srv.init({ file: null, admin: { admins: 'Boss', passcode: '' } }); const boss2 = await reg('Boss');
   r = await post('/api/admin/state', {}, boss2, 'anything'); ok(r.status === 403 && (await r.json()).setup, 'admin panel stays locked when ADMIN_PASSCODE is unset');

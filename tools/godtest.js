@@ -81,7 +81,7 @@ const room = (n, mode) => {
   for (let i = 0; i < 90; i++) { r.queueInputs(front, [[500 + i, 0, 0, 0]]); r.queueInputs(g, [[500 + i, 0, 0, 0, 0, 0, 0]]); step(r); }
   ok(front.stun === 0, 'and the stun wears off after');
   // beam follows facing
-  g.fx = -1; front.stun = 0; behind.stun = 0; g.x = 800;
+  g.fx = -1; front.stun = 0; behind.stun = 0; g.x = 800; g.y = 800; behind.x = 300; behind.y = 800; front.x = 1400; front.y = 810; for (const p of ps) { p.vx = p.vy = 0; p.it = 0; }      // arena hazards (random map) may have pushed anyone around
   for (let i = 0; i < 6; i++) { r.queueInputs(g, [[1000 + i, 0, 0, 0, 0, 0, 2]]); step(r); }
   ok(behind.stun > 0 && !front.stun, 'it fires the way God is facing');
 }

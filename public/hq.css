@@ -91,3 +91,8 @@
 .ad-sitebtns { display: flex; flex-wrap: wrap; gap: 10px; }
 .ad-box code { background: var(--paper-2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
 @media (max-width: 560px) { .ad-linkrow { grid-template-columns: 1fr; } }
+
+/* room controls (mode switch, end match) */
+.ad-ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ad-ctl select { width: auto; min-width: 120px; border: 2px solid var(--ink); border-radius: 10px; padding: 4px 8px; font: 700 13px var(--body); background: var(--paper); }
+.ad-btn:disabled { opacity: .4; cursor: not-allowed; } .ad-btn:disabled:hover { background: var(--card); } .ad-btn.danger:disabled:hover { background: var(--red); }

@@ -22,7 +22,7 @@
   }
   const fmtUp = (s) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m` : `${s}s`);
   const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`; };
-  const STATE_NAME = ['waiting', 'countdown', 'playing', 'results'];
+  const STATE_NAME = ['waiting', 'countdown', 'playing', 'results', 'voting'];
 
   /* ------------------------------ gate / boot ------------------------------ */
   function gate(title, msg, mode) {
@@ -115,6 +115,46 @@
   });
   $('adSiteReset').addEventListener('click', () => { if (confirm('Put the original text back and remove all links?')) saveSite({}, [], 'Front page is back to the original.'); });
 
+  /* ---------------------------------- rooms ---------------------------------- */
+  const roomRows = new Map();                  // room id -> { tr, cells, sel, endBtn }: kept between refreshes so a dropdown being used is not reset every 3 s
+  function roomRow(r) {
+    const tr = el('tr'), cells = [];
+    for (let i = 0; i < 7; i++) { const td = el('td'); cells.push(td); tr.append(td); }
+    const sel = el('select', 'ad-in'); sel.setAttribute('aria-label', 'Game mode');
+    for (const m of T.MODES) { const o = el('option', '', m.name + (m.testOnly ? ' (test)' : '')); o.value = m.id; sel.append(o); }
+    const go = el('button', 'ad-btn', 'Switch mode'); go.type = 'button';
+    const endBtn = el('button', 'ad-btn danger', 'End match'); endBtn.type = 'button';
+    go.onclick = async () => {
+      const name = T.MODE_BY_ID[sel.value].name;
+      if (!confirm(`Restart the round in ${name}? Everyone in the room starts a fresh round.`)) return;
+      const x = await api('roommode', { room: r.id, mode: sel.value }); toast(x.status === 200 ? `Switched to ${name}.` : x.j.error || 'Could not switch.', x.status !== 200); refresh();
+    };
+    endBtn.onclick = async () => {
+      if (!confirm('End this match now? Scores show, but no wins are paid for it.')) return;
+      const x = await api('endmatch', { room: r.id }); toast(x.status === 200 ? 'Match ended.' : x.j.error || 'Could not end it.', x.status !== 200); refresh();
+    };
+    const ctl = el('td'), box = el('div', 'ad-ctl'); box.append(sel, go, endBtn); ctl.append(box); tr.append(ctl);
+    return { tr, cells, sel, endBtn, go, synced: false };
+  }
+  function paintRooms(list) {
+    const rb = $('adRooms').tBodies[0], seen = new Set();
+    for (const r of list) {
+      seen.add(r.id);
+      let row = roomRows.get(r.id); if (!row) { row = roomRow(r); roomRows.set(r.id, row); }
+      const m = T.MODE_BY_ID[r.mode], put = (i, v) => { if (row.cells[i].textContent !== v) row.cells[i].textContent = v; };
+      put(0, r.id); put(1, r.map); put(2, r.solo ? 'practice' : r.regular ? 'Regular' : `"${r.name}" · ${r.rt}s · max ${r.max}`);
+      put(3, `${r.humans} human${r.humans === 1 ? '' : 's'}${r.total > r.humans ? ` + ${r.total - r.humans} bots` : ''}`);
+      put(4, m ? m.name : r.mode); put(5, STATE_NAME[r.state] || String(r.state)); put(6, r.tl ? r.tl + 's' : '-');
+      if (!row.synced) { row.sel.value = r.mode; row.synced = true; }                 // start on the current mode, then leave the choice alone
+      row.endBtn.disabled = !(r.state === 1 || r.state === 2); row.go.disabled = r.state === 0 || r.humans < 1;
+      if (row.tr.parentNode !== rb) rb.append(row.tr);
+    }
+    for (const [id, row] of roomRows) if (!seen.has(id)) { row.tr.remove(); roomRows.delete(id); }
+    let empty = rb.querySelector('.empty-row');
+    if (!list.length && !empty) { empty = el('tr', 'empty-row'); const td = el('td', 'empty', 'No rooms yet.'); td.colSpan = 8; empty.append(td); rb.append(empty); }
+    else if (list.length && empty) empty.remove();
+  }
+
   /* ---------------------------- live / broadcast ---------------------------- */
   function paint(s) {
     const tiles = [['Players', s.humans], ['Rooms', s.rooms.length], ['Accounts', s.accounts], ['Uptime', fmtUp(s.uptime)], ['Memory', s.mem + ' MB'], ['Storage', s.db === 'postgres' ? 'Postgres' : 'Dev file']];
@@ -147,13 +187,7 @@
       tr.append(name, el('td', '', p.room), el('td', '', p.char), el('td', '', p.rtt ? p.rtt + ' ms' : '-'), flags, act); pb.append(tr);
     }
 
-    const rb = $('adRooms').tBodies[0]; rb.replaceChildren();
-    if (!s.rooms.length) { const tr = el('tr'), td = el('td', 'empty', 'No rooms yet.'); td.colSpan = 6; tr.append(td); rb.append(tr); }
-    for (const r of s.rooms) {
-      const tr = el('tr');
-      tr.append(el('td', '', r.id), el('td', '', r.map), el('td', '', r.solo ? 'practice' : r.regular ? 'Regular' : `"${r.name}" · ${r.rt}s · max ${r.max}`), el('td', '', `${r.humans} human${r.humans === 1 ? '' : 's'}${r.total > r.humans ? ` + ${r.total - r.humans} bots` : ''}`), el('td', '', STATE_NAME[r.state] || String(r.state)), el('td', '', r.tl ? r.tl + 's' : '-'));
-      rb.append(tr);
-    }
+    paintRooms(s.rooms);
 
     // broadcast tab lists (don't clobber text being typed)
     if (document.activeElement !== $('adBanTxt') && document.activeElement !== $('adAnnTxt')) { if ($('adBanTxt').dataset.set !== '1') { $('adBanTxt').value = s.banner || ''; $('adBanTxt').dataset.set = '1'; } }

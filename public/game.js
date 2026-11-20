@@ -70,8 +70,8 @@
 
   function onInit(m) {
     G.sv = m.sv || null;
-    G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; if (m.name) G.sel.name = m.name;
-    G.roster.clear(); onRoster(m.roster);
+    G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; G.staff = !!m.staff; if (m.name) G.sel.name = m.name;
+    G.roster.clear(); onRoster(m.roster); kickMenu.classList.add('hidden');
     G.me = null; G.abHeld = false; G.god = { fly: false, beam: false }; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
     G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.ctx.hold = false; G.abHeld = false; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
@@ -369,6 +369,7 @@
   window.addEventListener('keydown', (e) => {
     if (!live()) return;
     if (e.code === 'Escape' && chatOpen) { closeChat(); e.preventDefault(); return; }
+    if (e.code === 'Escape' && !kickMenu.classList.contains('hidden')) { closeKickMenu(); e.preventDefault(); return; }
     if (typing()) return;
     if (e.code === 'Enter' || e.code === 'NumpadEnter') { if (G.uiOff) setUi(false); openChat(); e.preventDefault(); return; }
     if (MOVE[e.code]) { K[MOVE[e.code]] = true; e.preventDefault(); }
@@ -377,6 +378,7 @@
     else if (isGod() && e.code === 'KeyQ') { if (!e.repeat) toggleGodMenu(); e.preventDefault(); }                                                           // God: teleport menu
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } e.preventDefault(); }
     else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
+    else if (G.staff && e.code === 'KeyF') { if (!e.repeat) toggleKickMenu(); e.preventDefault(); }                                                           // staff: kick menu
     else if (e.code === 'KeyM') toggleMute();
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
   });
@@ -425,6 +427,33 @@
     }
   }
   $('godClose').onclick = () => closeGodMenu();
+
+  /* ===== Staff only: F opens a list of the other real players; pick one (twice, to be sure) to remove them from the game. The server checks staff status again. ===== */
+  const kickMenu = $('kickMenu'); let kickMenuAt = 0, kickArm = 0, kickArmAt = 0;
+  function closeKickMenu() { if (kickMenu.classList.contains('hidden')) return; kickArm = 0; gsap.to(kickMenu, { autoAlpha: 0, y: 14, duration: 0.18, overwrite: true, onComplete: () => kickMenu.classList.add('hidden') }); }
+  function toggleKickMenu() { if (!kickMenu.classList.contains('hidden')) closeKickMenu(); else openKickMenu(); }
+  function openKickMenu() {
+    if (!G.staff || !G.inGame) return;
+    kickMenu.classList.remove('hidden'); kickArm = 0; paintKickMenu(true);
+    gsap.fromTo(kickMenu, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out', overwrite: true });
+  }
+  function paintKickMenu(force) {
+    const now = performance.now(); if (kickArm && now - kickArmAt > 3000) { kickArm = 0; force = true; } if (!force && now - kickMenuAt < 400) return; kickMenuAt = now;
+    const list = $('kickList'), others = [...G.roster.entries()].filter(([id, r]) => id !== G.id && !r.b && !r.gone).sort((a, b) => String(a[1].n).localeCompare(String(b[1].n)));
+    $('kickNote').textContent = others.length ? (kickArm ? `Kick ${(G.roster.get(kickArm) || {}).n || 'them'}? Tap again` : 'Tap a name, then tap again') : 'No other players here';
+    const key = others.map(([id, r]) => id + ':' + r.c + ':' + (kickArm === id ? 1 : 0)).join('|');
+    if (list.dataset.key === key) return; list.dataset.key = key; list.replaceChildren();
+    for (const [id, r] of others) {
+      const sure = kickArm === id, b = el('button', 'god-p' + (sure ? ' kick-sure' : '')); b.type = 'button'; b.setAttribute('aria-label', (sure ? 'Confirm kick ' : 'Kick ') + r.n);
+      const img = new Image(); img.alt = ''; img.src = Chars.avatar(r.c, 0, 48, r.h | 0, r.sk || ''); b.append(img, el('span', '', sure ? 'Sure?' : r.n));
+      b.addEventListener('click', () => {
+        if (kickArm !== id) { kickArm = id; kickArmAt = performance.now(); paintKickMenu(true); return; }
+        send({ t: 'staffkick', id }); kickArm = 0; paintKickMenu(true);
+      });
+      list.appendChild(b);
+    }
+  }
+  $('kickClose').onclick = () => closeKickMenu();
   abBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
   /* ================================== chat =================================== */
@@ -1042,6 +1071,7 @@
       const t0 = me.cd > 0 ? String(Math.ceil(me.cd)) : ''; if ($('godTpCd').textContent !== t0) $('godTpCd').textContent = t0;
       if (!godMenu.classList.contains('hidden')) paintGodMenu(false);
     } else if (!godMenu.classList.contains('hidden')) closeGodMenu();
+    if (!kickMenu.classList.contains('hidden')) paintKickMenu(false);
     const bat = def.id === 'bat' && me.aux > 0, pounce = def.id === 'cat' && me.abT > 0 && def.dur - me.abT > 0.25;
     const label = bat ? 'Recall' : pounce ? 'Pounce' : def.ability;
     if (label !== lastAbLabel) { lastAbLabel = label; $('abName').textContent = label; if (bat || pounce) gsap.fromTo(abBtn, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', clearProps: 'transform' }); }
