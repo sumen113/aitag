@@ -59,7 +59,7 @@ Regular servers (and practice) open a 14 s vote before every round: 3 random are
 
 - **Classic**: one tagger (two at 7+ players), score for time spent untagged.
 - **Infection**: every tag infects the victim and the tagger stays a zombie. Always plays on the big *Outbreak* arena. Ends when one survivor is left (or time runs out).
-- **Hot Potato**: the tagger holds a potato with a 10 s fuse. Every pass resets the fuse but shortens it by 0.4 s, every elimination by 0.5 s (floor 3 s). When it hits zero the holder is out. Last one standing wins (two potatoes at 7+ players).
+- **Hot Potato**: the tagger holds a potato with a 6 s fuse that never changes (every pass resets it to 6 s; late rounds are already hard with few players). When it hits zero the holder is out and the potato goes to a random survivor, never straight back to whoever passed it (also when the holder leaves). Last one standing wins.
 
 **Test Server only** (anyone can vote, even alone): *Proximity*, *Points* and **Ability Hold (v7.11)**. In Ability Hold you hold your ability button (Space / Shift / E, the on-screen button, or the mouse for the avocado) and it charges a counter above you; on release the ability fires once for the first second held and then once more for every further second, up to 10 uses at a 0.14 s gap (frog 3 s = 3 jumps, owl 6 s = 6 clones). A tap is still one use, the cooldown starts after the last use, stun or tagging cancels the rest. Bat stays a single beacon, and second-press moves (cat, mole, ...) stay taps. Input bit `4` of the 7th input element carries "held"; `tools/holdtest.js` covers it.
 

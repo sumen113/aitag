@@ -121,7 +121,7 @@ class Room {
   markGone(p, on) {
     on = on ? 1 : 0; if (!!p.gone === !!on) return;
     p.gone = on;
-    if (on && p.it && this.state === STATE.PLAY && this.mode !== 'infection') { p.it = 0; p.pot = 0; if (this.itId === p.id) this.itId = 0; this.reassignIt(); }
+    if (on && p.it && this.state === STATE.PLAY && this.mode !== 'infection') { p.it = 0; p.pot = 0; if (this.itId === p.id) this.itId = 0; this.reassignIt(this.mode === 'potato' ? p.from : 0); }
     this.rosterDirty = true;
   }
   holdForNextRound(p) { if (!T.classicLike(this.mode) && (this.state === STATE.COUNT || this.state === STATE.PLAY)) { p.out = 1; p.wait = 1; } }      // classic tag can be joined any time
@@ -149,7 +149,7 @@ class Room {
     let redo = false;
     if (p.it) {
       if (this.mode === 'infection') { if (this.state === STATE.PLAY && !this.itPlayers().length) redo = true; }     // the infection is never handed to someone new
-      else this.reassignIt();
+      else this.reassignIt(this.mode === 'potato' ? p.from : 0);
     }
     if (!p.bot) { if (this.humanCount() > 0) this.rebalanceBots(); }
     if (redo) this.redoRound('The infected player left. Voting again!');
@@ -164,13 +164,15 @@ class Room {
     this.beginRound();
   }
 
-  // hand the IT role to one more random player (an IT left or went AFK); never someone who already is IT
-  reassignIt() {
-    const arr = [...this.players.values()].filter((p) => !p.it && !p.out && !p.gone);
+  // hand the IT role to one more random player (an IT left or went AFK); never someone who already is IT.
+  // Hot Potato: `notId` is whoever passed the potato to the player who just blew up or left; it never bounces straight back to them while anyone else is alive.
+  reassignIt(notId) {
+    let arr = [...this.players.values()].filter((p) => !p.it && !p.out && !p.gone);
     if (this.state !== STATE.PLAY || !arr.length || this.aliveCount() < 2) { if (!this.itPlayers().length) this.itId = 0; return; }
+    if (notId && arr.length > 1) arr = arr.filter((p) => p.id !== notId);
     const pool = arr.filter((p) => !p.afk), n = (pool.length ? pool : arr)[(Math.random() * (pool.length || arr.length)) | 0];
-    n.it = 1; n.lock = 1; this.itId = n.id;
-    if (this.mode === 'potato') n.pot = T.potatoFuse(this.passes, this.elims);
+    n.it = 1; n.lock = 1; this.itId = n.id; n.from = 0;
+    if (this.mode === 'potato') n.pot = T.potatoFuse();
     this.emit({ k: 'tag', a: 0, b: n.id, x: n.x, y: n.y });
   }
 
@@ -266,8 +268,8 @@ class Room {
     const arr = shuffle([...this.players.values()].filter((p) => !p.out));
     this.itWant = T.classicLike(this.mode) ? T.itCountFor(arr.length) : 1;      // 7+ players: two taggers in classic tag; Infection and Hot Potato always start with exactly one
     const its = arr.slice(0, this.itWant);
-    const fuse = T.potatoFuse(0, 0);
-    for (const it of its) { it.it = 1; it.stun = T.HEAD_START; if (this.mode === 'potato') it.pot = fuse + T.HEAD_START; }
+    const fuse = T.potatoFuse();
+    for (const it of its) { it.from = 0; it.it = 1; it.stun = T.HEAD_START; if (this.mode === 'potato') it.pot = fuse + T.HEAD_START; }
     this.itId = its[0].id;
     this.state = STATE.PLAY; this.tl = this.roundLen();
     this.emit({ k: 'st', s: STATE.PLAY, it: its[0].id, its: its.map((p) => p.id), md: this.mode });
@@ -310,7 +312,7 @@ class Room {
     }
     it.it = 0; it.pot = 0; it.imm = T.TAG_IMMUNITY;
     victim.it = 1; victim.lock = T.TAG_LOCK; victim.stun = 0;
-    if (this.mode === 'potato') { this.passes++; victim.pot = T.potatoFuse(this.passes, this.elims); }
+    if (this.mode === 'potato') { this.passes++; victim.pot = T.potatoFuse(); victim.from = it.id; }
     this.itId = victim.id;
     this.emit({ k: 'tag', a: it.id, b: victim.id, x: victim.x, y: victim.y, ...(this.mode === 'points' ? { pts: T.TAG_POINTS } : null) });
   }
@@ -320,7 +322,7 @@ class Room {
     this.emit({ k: 'boom', id: p.id, x: r1(p.x), y: r1(p.y) });
     p.it = 0; p.pot = 0; p.out = 1; p.vx = p.vy = 0; this.elims++;
     const want = Math.min(this.itWant, Math.max(1, this.aliveCount() - 1));
-    for (let k = 0; k < 3 && this.aliveCount() > 1 && this.itPlayers().length < want; k++) this.reassignIt();
+    for (let k = 0; k < 3 && this.aliveCount() > 1 && this.itPlayers().length < want; k++) this.reassignIt(p.from);
     if (this.itPlayers().length) this.itId = this.itPlayers()[0].id;
   }
 

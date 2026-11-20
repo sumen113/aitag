@@ -46,8 +46,8 @@
   const proxRate = (gap) => { const f = 1 - Math.min(1, Math.max(0, gap / PROX_RANGE)); return PROX_MIN + (PROX_MAX - PROX_MIN) * f * f; };
   const TEST_NAME = 'Test Server';
   const MODE_BY_ID = {}; MODES.forEach((m, i) => { m.i = i; MODE_BY_ID[m.id] = m; });
-  const POTATO_START = 10, POTATO_MIN = 3, POTATO_PASS_STEP = 0.4, POTATO_ELIM_STEP = 0.5;      // fuse seconds: every pass and every elimination shortens it
-  const potatoFuse = (passes, elims) => Math.max(POTATO_MIN, POTATO_START - POTATO_PASS_STEP * (passes || 0) - POTATO_ELIM_STEP * (elims || 0));
+  const POTATO_START = 6;                                          // fuse seconds: always the same, however many passes or eliminations (late rounds are already hard with few players left)
+  const potatoFuse = () => POTATO_START;
   const MODE_MIN_PLAYERS = 7;                                      // Infection and Hot Potato need a crowd; below this everything is classic tag
 
   /* ----------------------------- characters ----------------------------- */
@@ -776,7 +776,7 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, POTATO_MIN, POTATO_PASS_STEP, POTATO_ELIM_STEP, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, HOLD_MAX, CHARS, PUBLIC_CHARS, SECRET_SKINS, skinPool, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };

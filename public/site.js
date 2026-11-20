@@ -711,6 +711,7 @@
       ['More than 2 players needed', 'In the main server, a round only counts for wins when there are at least 3 real players. Two people taking turns to win rounds no longer works.'],
       ['New: Test Server', 'A second always-on server, right under the Regular server. Wins count here too (3+ players needed) and everyone votes on the game mode every round, whatever the player count. It has two test-only modes that are not on the Regular server.'],
       ['Tagger Proximity', 'The closer you are to IT, the faster you score (about 5 points a second right next to them, 0.3 far away; a glow shows the zone). Getting tagged does not end your chances: you can climb back to the top, but it is risky. Standing next to a tagger who is stunned or just tagged does not count.'],
+      ['Hot Potato is fairer', 'The fuse is now always 6 seconds (it used to shrink as the round went on, which made the end nearly impossible). When someone blows up or leaves, the potato goes to a random player and never straight back to the person who passed it.'],
       ['Tagger Points', 'Tag someone as IT and you get 10 points on top of the normal survival points. Being tagged is just a chance to catch up by tagging someone else.'],
     ] },
     { v: 'Update 14 · Change character, typing bubbles', items: [

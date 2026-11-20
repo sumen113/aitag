@@ -40,18 +40,37 @@ r.castVote(null, 'd', 0); ok(true, 'bad vote caller ignored');
 
 // Hot Potato
 r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY);
-ok(r.mode === 'potato' && r.itPlayers().length === 1 && r.itPlayers()[0].pot > 9, 'potato starts with exactly one holder (even at 7+ players) and a ~10 s fuse');
+ok(r.mode === 'potato' && r.itPlayers().length === 1 && r.itPlayers()[0].pot > 5.9 && r.itPlayers()[0].pot <= 6 + T.HEAD_START + 0.1, 'potato starts with exactly one holder (even at 7+ players) and a 6 s fuse (plus the head start)');
 run(r, 90, () => r.state === T.STATE.RESULTS);
 ok(r.state === T.STATE.RESULTS && r.evs.filter((e) => e.k === 'boom').length === 6, 'idle holders explode one by one until a single player is left');
 ok(r.results.length === 7 && r.results[0][1] > r.results[1][1], 'winner is the unique top scorer');
 // passing the potato resets the fuse and keeps the holder alive
 r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 6);
 let h = r.itPlayers()[0], v = [...r.players.values()].find((p) => !p.it);
-h.pot = 2; const f0 = T.potatoFuse(r.passes, r.elims); r.tag(h, v);
-ok(!h.it && v.it && r.passes === 1 && Math.abs(v.pot - T.potatoFuse(1, r.elims)) < 1e-6 && v.pot < f0, 'a pass moves the potato and the fuse gets shorter every pass');
-const vPot = v.pot; let last = v; for (let k = 0; k < 4; k++) { const a = r.itPlayers()[0], b = [...r.players.values()].find((p) => !p.it && !p.out); r.tag(a, b); last = b; }
-ok(last.pot < vPot, 'each further pass shortens it more');
-ok(T.potatoFuse(0, 0) === 10 && T.potatoFuse(5, 0) < T.potatoFuse(1, 0) && T.potatoFuse(0, 3) < T.potatoFuse(0, 1) && T.potatoFuse(99, 99) === T.POTATO_MIN, 'fuse shrinks per pass and per elimination, floored');
+h.pot = 2; r.tag(h, v);
+ok(!h.it && v.it && r.passes === 1 && v.pot === 6, 'a pass moves the potato and resets the fuse to 6 s');
+let last = v; for (let k = 0; k < 4; k++) { const a = r.itPlayers()[0], b = [...r.players.values()].find((p) => !p.it && !p.out); r.tag(a, b); last = b; }
+r.elims = 4; ok(last.pot === 6 && T.potatoFuse() === 6 && T.potatoFuse(40, 5) === 6, 'the fuse stays 6 s after many passes and eliminations');
+// after a pass-then-explosion the potato is re-dealt at random and never goes straight back to whoever passed it (even if everyone else is standing still)
+for (const idle of [false, true]) {
+  r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 6);
+  const all = [...r.players.values()]; const got = new Set(); let back = 0, trials = 0;
+  for (let k = 0; k < 300; k++) {
+    for (const p of all) { p.out = 0; p.it = 0; p.pot = 0; p.afk = false; p.gone = 0; }
+    const A = all[k % all.length], B = all[(k + 1 + (k % 5)) % all.length]; if (A === B) continue;
+    if (idle) for (const p of all) if (p !== A && p !== B) p.afk = true;                 // everyone else stands still: the passer is the only active player
+    A.it = 1; A.pot = 6; r.itId = A.id; r.tag(A, B); r.explode(B); trials++;
+    const nh = r.itPlayers(); if (nh.length !== 1) { back = -999; break; }
+    if (nh[0] === A) back++; got.add(nh[0].id);
+  }
+  ok(back === 0 && got.size >= 4, 'potato: it never goes straight back to the passer, and the new holder is random (' + (idle ? 'everyone else idle' : 'normal play') + ': ' + trials + ' explosions, ' + got.size + ' different holders, ' + back + ' bounce-backs)');
+}
+{ r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY); run(r, 6);
+  const all = [...r.players.values()]; let bad = 0;
+  for (let k = 0; k < 6; k++) { const A = all[0], B = all[1 + k % 5]; for (const p of all) { p.out = 0; p.it = 0; p.gone = 0; } A.it = 1; r.itId = A.id; r.tag(A, B); r.markGone(B, true); if (A.it) bad++; B.gone = 0; }
+  ok(bad === 0, 'potato: a holder who disconnects does not hand the potato straight back to the passer');
+  const [A, B, C] = all; for (const p of all) { p.out = 1; p.it = 0; p.gone = 0; } A.out = B.out = C.out = 0; A.it = 1; r.itId = A.id; r.tag(A, B); r.explode(B);
+  ok(C.it && !A.it, 'with three left, the potato goes to the one who did not pass it'); }
 // eliminated players never get the potato or tags
 r = mk('potato', 7); run(r, 6, () => r.state === T.STATE.PLAY);
 const first = r.itPlayers()[0]; r.explode(first);
