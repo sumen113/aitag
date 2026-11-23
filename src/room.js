@@ -185,7 +185,7 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.out = 0; p.wait = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.noScore = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
@@ -277,7 +277,8 @@ class Room {
 
   /** `noWins`: staff ended the match early, so nobody is paid for it (and no last-standing bonus). */
   endRound(noWins) {
-    if (!noWins && !T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
+    for (const p of this.players.values()) if (p.noScore) p.score = 0;                 // staff who jumped in with G never show or win points
+    if (!noWins && !T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait && !p.noScore) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
     const inMatch = [...this.players.values()].filter((p) => !p.wait);
     const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
     this.results = list.map((r) => [r.id, Math.floor(r.s), r.t]);
@@ -287,7 +288,7 @@ class Room {
       if (list[0].s >= MIN_WIN_SCORE) for (const r of list) {
         if (Math.floor(r.s) !== best) break;
         const w = this.players.get(r.id);
-        if (w && w.uid && !w.bot && !w.afk) this.onWin(w);
+        if (w && w.uid && !w.bot && !w.afk && !w.noScore) this.onWin(w);
       }
     }
     for (const p of this.players.values()) { p.it = 0; p.pot = 0; }
@@ -303,6 +304,14 @@ class Room {
     this.vote = null; this.nextMap = null; this.setMode(id); this.forceMode = true;
     try { this.startCountdown(); } finally { this.forceMode = false; }
     return '';
+  }
+
+  /** Staff pressing G while out or waiting for the next round: jump into the running round as a normal player, but with no points: the score is held at 0 and they can never win it. Returns true when they joined. */
+  staffJoin(p) {
+    if (!p || !p.staff || p.bot || p.gone || !(p.out || p.wait) || (this.state !== STATE.PLAY && this.state !== STATE.COUNT)) return false;
+    const sp = shuffle(this.map.spawns.slice())[0];
+    this.resetPlayer(p, sp); p.noScore = 1; p.imm = T.TAG_IMMUNITY;           // a moment of safety so they are not tagged the instant they land
+    this.rosterDirty = true; return true;
   }
 
   /** Staff: end the running match now (scores show, but no wins are paid). A round still in its countdown is dropped and a new one starts. */
@@ -652,6 +661,7 @@ class Room {
       const potato = this.mode === 'potato', infection = this.mode === 'infection';
       const prox = this.mode === 'proximity', hunters = prox ? this.itPlayers().filter((h) => h.stun <= 0 && h.lock <= 0 && !h.out && !h.gone) : null;      // proximity only counts a tagger who can actually tag right now (no farming a stunned one)
       for (const p of this.players.values()) if (!p.out && !p.gone && !p.afk && (potato || !p.it)) p.score += DT * (prox && !p.it ? this.proxRate(p, hunters) : 1);          // time survived (Tagger Proximity: faster the closer you are to IT)
+      for (const p of this.players.values()) if (p.noScore) p.score = 0;                                       // staff who jumped in with G never earn points (from time, tags or anything else)
       for (const it of this.itPlayers()) {
         if (!it.it || it.out || it.gone) continue;                       // already handed over by an earlier tag this tick
         if (potato) { it.pot -= DT; if (it.pot <= 0) { this.explode(it); continue; } }

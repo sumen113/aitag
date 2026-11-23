@@ -348,6 +348,25 @@ for (const m of T.MAPS.concat(T.BIG_MAPS)) {
     ok(g.state === T.STATE.PLAY && g.mode === 'classic', 'staff: afterwards the room goes back to its normal rule (classic)');
     g.staffSetMode('abilityhold'); ok(g.mode === 'abilityhold' && g.ctx.hold === true, 'staff: test-only modes can be forced too');
     run(g, 6, () => g.state === T.STATE.COUNT); g.staffEnd(); ok(g.state !== T.STATE.RESULTS && g.state !== T.STATE.WAIT, 'staff: ending during the countdown starts a fresh round instead');
+    // G while out: staff join the running round with 0 points that never grow
+    for (const mode of ['infection', 'potato']) {
+      const q = mk(mode, 7, { kind: 'public' }); q.tick(); run(q, 12, () => q.state === T.STATE.PLAY); ok(q.state === T.STATE.PLAY && q.mode === mode, 'staff join (' + mode + '): round is running');
+      const late = q.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'Late', 0, 0, 7, 0), pleb = q.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'Pleb', 0, 0, 8, 0);
+      ok(late.out === 1 && late.wait === 1 && pleb.out === 1, 'staff join (' + mode + '): late arrivals are spectators');
+      ok(q.staffJoin(late) === false && q.staffJoin(pleb) === false && late.out === 1, 'staff join: a non-staff account cannot jump in');
+      late.staff = true; ok(q.staffJoin(late) === true && !late.out && !late.wait && late.noScore === 1 && late.imm > 0, 'staff join (' + mode + '): staff jump in and are alive');
+      ok(q.staffJoin(late) === false, 'staff join: nothing to do when already playing');
+      pleb.staff = true; const lateAfk = late; run(q, 12);
+      const others = [...q.players.values()].filter((x) => x !== late && x !== pleb && !x.out);
+      ok(late.score === 0 && others.some((x) => x.score > 0), 'staff join (' + mode + '): their points stay 0 while the others score (' + late.score.toFixed(2) + ' vs ' + (others[0] ? others[0].score.toFixed(1) : '-') + ')');
+      // eliminated players can come back too
+      const dead = [...q.players.values()].find((x) => x.out && x !== pleb && !x.wait); if (dead) { dead.staff = true; ok(q.staffJoin(dead) === true && !dead.out, 'staff join (' + mode + '): an eliminated staff player can come back in'); }
+      // they never get the win or the last-standing bonus
+      late.out = 0; late.it = 0; q.endRound(); ok(late.score === 0 && q.results.find((r) => r[0] === late.id)[1] === 0, 'staff join (' + mode + '): no last-standing bonus either');
+    }
+    { const q = mk('infection', 7, { kind: 'public' }); q.tick(); run(q, 12, () => q.state === T.STATE.PLAY); const late = q.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'Late', 0, 0, 7, 0); late.staff = true; q.staffJoin(late); late.score = 77;
+      const won = []; q.onWin = (w) => won.push(w.id); for (const x of q.players.values()) { x.uid = x.uid || x.id; } q.regular = true; q.endRound(); ok(!won.includes(late.id) && late.score === 0, 'staff join: even an inflated score is cleared and they never get a win');
+      run(q, 30, () => q.state === T.STATE.COUNT); ok(!late.noScore, 'staff join: scoring is back to normal in the next round'); }
     const lone = mk('classic', 1, { kind: 'public' }); ok(lone.staffSetMode('infection') !== '' && lone.staffEnd() !== '', 'staff: nothing to switch or end in a room that is only waiting for players'); }
 }
 

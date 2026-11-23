@@ -295,6 +295,9 @@ wss.on('connection', (ws, req) => {
     }
     else if (m.t === 'vote') { if (c.player) c.room.castVote(c.player, m.k === 'm' ? 'm' : 'd', Number(m.i) | 0); }
     else if (m.t === 'god') { if (c.player && c.room && m.a === 'tp') c.room.godTeleport(c.player, Number(m.to) | 0); }          // God's teleport menu (staff only; the room re-checks everything)
+    else if (m.t === 'staffjoin') {                                                                                    // G while out / waiting: staff jump into the running round with no points
+      if (c.player && c.player.staff && c.room && c.room.staffJoin(c.player)) ws.send(JSON.stringify({ t: 'announce', m: 'You joined in. You earn no points this round.', p: 1 }));
+    }
     else if (m.t === 'staffkick') {                                                                                    // the F menu in a game: staff only, only inside their own room, never staff or themselves
       if (c.player && c.player.staff && c.room && admin) { const err = admin.staffKick(c.user ? c.user.username : c.player.name, c.room.code, Number(m.id) | 0, c.player.id); if (err) ws.send(JSON.stringify({ t: 'announce', m: err, p: 1 })); }
     }

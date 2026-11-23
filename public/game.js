@@ -378,6 +378,7 @@
     else if (isGod() && e.code === 'KeyQ') { if (!e.repeat) toggleGodMenu(); e.preventDefault(); }                                                           // God: teleport menu
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } e.preventDefault(); }
     else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
+    else if (G.staff && e.code === 'KeyG') { if (!e.repeat && G.me && G.me.out) send({ t: 'staffjoin' }); e.preventDefault(); }                                 // staff: jump into a round you are out of (no points)
     else if (G.staff && e.code === 'KeyF') { if (!e.repeat) toggleKickMenu(); e.preventDefault(); }                                                           // staff: kick menu
     else if (e.code === 'KeyM') toggleMute();
     else if (e.code === 'KeyH' && !e.repeat) setUi(!G.uiOff);
@@ -1026,7 +1027,7 @@
     for (const r of G.roster.values()) if (!(r.fl & 48)) { alive++; if (!(r.fl & 1)) surv++; }
     const myR = G.roster.get(G.id), waiting = !!(myR && (myR.fl & 32));
     if (me.out && (st === STATE.PLAY || st === STATE.COUNT)) {
-      cls = 'role ghost'; txt = waiting ? "Match in progress · you're in next round" : "You're out · spectating";
+      cls = 'role ghost'; txt = waiting ? "Match in progress · you're in next round" : "You're out · spectating"; if (G.staff) txt += ' · press G to join (0 points)';
     } else if (st === STATE.PLAY) {
       const its = [...G.roster.values()].filter((r) => r.fl & 1 && r.id !== G.id);
       if (mode === 'potato') {
