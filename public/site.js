@@ -494,7 +494,7 @@
   async function loadMe() {
     const r = await api('/api/me');
     if (!r.ok) return;
-    App.accountsEnabled = r.j.accounts !== false;
+    App.accountsEnabled = r.j.accounts !== false; App.recovery = !!r.j.recovery; setAuthMode(mode);
     setAccount(r.j.user || null, firstMe);
     firstMe = false;
   }
@@ -584,8 +584,9 @@
     aPass.autocomplete = up ? 'new-password' : 'current-password';
     $('authEmailRow').classList.toggle('hidden', !up);
     aEmail.autocomplete = up ? 'email' : 'off';
-    $('authFine').textContent = up ? 'Your username is your name in the game (3–14 letters or numbers). Your email is only seen by the people who run the game, never by other players. Keep your password safe: there is no automatic reset.' : 'Your username is your name in the game. Wins and unlocked characters are saved to it.';
+    $('authFine').textContent = up ? 'Your username is your name in the game (3–14 letters or numbers). Your email is only seen by the people who run the game, never by other players. ' + (App.recovery ? 'If you forget your password we can email you a code to get back in.' : 'Keep your password safe: there is no automatic reset.') : 'Your username is your name in the game. Wins and unlocked characters are saved to it.';
     $('authTabs').querySelectorAll('button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.t === m)));
+    $('authForgot').classList.toggle('hidden', up || !App.recovery);
     aErr.textContent = '';
   }
   function openAuth(m) { setAuthMode(m || 'login'); aPass.value = ''; openModal('authModal', aUser); }
@@ -608,6 +609,45 @@
     if (!r.ok || !r.j.user) { aErr.textContent = r.j.error || 'Something went wrong.'; Sfx.play('deny'); return; }
     aPass.value = ''; closeModal(); setAccount(r.j.user, true);
     Sfx.play('ready'); siteToast(mode === 'signup' ? `Welcome, ${r.j.user.username}! You start with Fox, Ghost and Bear.` : `Welcome back, ${r.j.user.username}!`);
+  });
+
+  /* ---- forgot password: ask for a code by username or email, then username + code + new password ---- */
+  const rAsk = $('recAsk'), rSet = $('recSet'), rWho = $('recWho'), rAskErr = $('recAskErr'), rSetErr = $('recSetErr');
+  let recBusy = false;
+  const shake = (btn) => { if (!reduce) gsap.fromTo(btn, { x: -8 }, { x: 0, duration: 0.45, ease: 'elastic.out(1.2,.3)', clearProps: 'transform' }); Sfx.play('deny'); };
+  function recStep(second) {
+    rAsk.classList.toggle('hidden', second); rSet.classList.toggle('hidden', !second);
+    $('recTitle').textContent = second ? 'Enter your code' : 'Forgot your password?'; rAskErr.textContent = rSetErr.textContent = '';
+  }
+  function openRecover() { rWho.value = aUser.value.trim(); $('recPass').value = ''; $('recCode').value = ''; recStep(false); openModal('recoverModal', rWho); }
+  $('authForgot').addEventListener('click', () => { Sfx.play('click'); openRecover(); });
+  $('recHave').addEventListener('click', () => { $('recUser').value = rWho.value.includes('@') ? '' : rWho.value.trim(); recStep(true); $('recUser').focus(); });
+  async function askCode(who, errEl, btn) {
+    recBusy = true; btn.disabled = true; errEl.textContent = '';
+    const r = await api('/api/recover/start', { who }); recBusy = false; btn.disabled = false;
+    if (!r.ok) { errEl.textContent = r.j.error || 'Something went wrong.'; shake(btn); return false; }
+    return true;
+  }
+  rAsk.addEventListener('submit', async (e) => {
+    e.preventDefault(); if (recBusy) return;
+    const who = rWho.value.trim(); if (!who) { rAskErr.textContent = 'Enter your username or the email on your account.'; shake($('recAskGo')); return; }
+    if (!(await askCode(who, rAskErr, $('recAskGo')))) return;
+    Sfx.play('click'); $('recUser').value = who.includes('@') ? '' : who; recStep(true); $('recSetNote').textContent = 'If that matches an account, a code is on its way. It works for 15 minutes. Check your spam folder too.'; ($('recUser').value ? $('recCode') : $('recUser')).focus();
+  });
+  $('recAgain').addEventListener('click', async () => {
+    if (recBusy) return; const who = $('recUser').value.trim() || rWho.value.trim();
+    if (!who) { rSetErr.textContent = 'Type your username above first.'; return; }
+    if (await askCode(who, rSetErr, $('recAgain'))) { $('recSetNote').textContent = 'Sent again (if it matches an account). Only the newest code works. Codes are limited to one a minute.'; Sfx.play('click'); }
+  });
+  rSet.addEventListener('submit', async (e) => {
+    e.preventDefault(); if (recBusy) return;
+    const username = $('recUser').value.trim(), code = $('recCode').value.replace(/\s/g, ''), password = $('recPass').value;
+    let err = ''; if (!username) err = 'Enter your username.'; else if (!/^\d{6}$/.test(code)) err = 'The code is 6 digits.'; else { const pv = C.validatePassword(password); if (!pv.ok) err = pv.err; }
+    if (err) { rSetErr.textContent = err; shake($('recSetGo')); return; }
+    await framedStorage(); recBusy = true; $('recSetGo').disabled = true; rSetErr.textContent = '';
+    const r = await api('/api/recover/finish', { username, code, password }); recBusy = false; $('recSetGo').disabled = false;
+    if (!r.ok || !r.j.user) { rSetErr.textContent = r.j.error || 'Something went wrong.'; shake($('recSetGo')); return; }
+    $('recPass').value = ''; closeModal(); setAccount(r.j.user, true); Sfx.play('ready'); siteToast(`Password changed. Welcome back, ${r.j.user.username}!`);
   });
 
   /* ---- account modal ---- */

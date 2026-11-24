@@ -36,7 +36,7 @@ Notes
 - Bandwidth: each player receives ~30 snapshots/s. A full 15-player lobby is roughly **1.7 GB per hour**. Set `SNAP_HZ=20` to cut that by a third.
 - `GET /health` and `/api/stats` return `{players, rooms, uptime, accounts}`.
 
-Environment variables: `PORT` (set by Render), `DATABASE_URL`, `ADMIN_USERS`, `ADMIN_PASSCODE`, `MIN_WIN_PLAYERS` (default and minimum 3), `SNAP_HZ` (default 30, range 10-60),
+Environment variables: `PORT` (set by Render), `DATABASE_URL`, `ADMIN_USERS`, `ADMIN_PASSCODE`, `SMTP_URL` + `MAIL_FROM` (optional, email recovery, see below), `MIN_WIN_PLAYERS` (default and minimum 3), `SNAP_HZ` (default 30, range 10-60),
 `PGSSL_STRICT=1` (verify the database certificate; off by default because several hosts use private CAs), `PGSSLMODE=disable` (local Postgres).
 
 ## Servers
@@ -146,6 +146,19 @@ The rest of the safety is the same as the main site: same-origin JSON only, pass
 ### Editing the front page (v7.11)
 
 Staff open **Front page** in `/hq` to rewrite the home-page text (tags, big title, intro, the three sections, steps, last heading, footer) and add up to 8 link buttons under the intro. Empty boxes keep the built-in copy, which the editor reads from the page itself and shows greyed out. Inside any text, `[label](https://...)` becomes a link and Enter makes a new line. Links must be `https://`, `http://` or `mailto:` (no `javascript:`), and everything is built from DOM nodes, never HTML. Edits are stored in the staff state (survive restarts), served publicly at `GET /api/site`, and applied before the intro animation runs. To make a new text editable, give its element `data-ct="key"` and add the key to `SITE_FIELDS` in `src/admin.js` (a test keeps the two lists in sync).
+
+## Email recovery (forgot password, v7.13)
+
+Every account has an email (required at sign-up), so a player who forgets their password can get back in: **Log in -> Forgot your password?**, type the username or the email, and a 6-digit code is emailed. They enter username + code + a new password and are logged in. It is **off until you add an email provider**; with no `SMTP_URL` the "Forgot" link simply never shows.
+
+**Turn it on (any SMTP provider).** The easiest free one without owning a domain is [Brevo](https://www.brevo.com) (300 emails a day): create an account, verify one sender address you own (e.g. your Gmail), then *SMTP & API -> SMTP* gives a login and an SMTP key. In the Render dashboard add two environment variables, then redeploy:
+
+- `SMTP_URL` = `smtps://LOGIN:SMTP_KEY@smtp-relay.brevo.com:465` (URL-encode odd characters in the login, e.g. `@` is `%40`)
+- `MAIL_FROM` = `Daymap <the-address-you-verified@example.com>`
+
+Gmail also works (a Google "app password", `smtps://you%40gmail.com:APPPASSWORD@smtp.gmail.com:465`), as do Resend, Mailgun and others. Check the Render logs for `recovery email failed` if mail does not arrive (usually the sender address is not verified).
+
+How it is kept safe: the page answers the same whether or not an account matches (no way to find out who has an account); codes are 6 digits, live 15 minutes, die after 5 wrong guesses, only one is emailed per account per minute, at most 3 asks per hour per name/address and 8 per visitor; only a salted hash of the code is stored; the newest code replaces older ones; using it signs every old session out and sends a "your password was changed" email. Suspended accounts and accounts without an email get nothing. Typing an email address lists every account on it, so it also recovers a forgotten username. Tests: `tools/emailtest.js`.
 
 ## Leaderboard, quick chat, news
 

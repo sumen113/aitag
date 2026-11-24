@@ -788,3 +788,8 @@ body.dark .chest-art, .dark .chest-art { filter: none; }
 .god-p.kick-sure, .god-p.kick-sure:hover:not(:disabled), .god-p.kick-sure:focus-visible { background: #ff4d6d; color: #fff; }
 #kickMenu { bottom: 210px; }
 .god-p.kick-sure img { filter: grayscale(.4); }
+
+/* small text-style button (e.g. "Forgot your password?") */
+.link-btn { align-self: flex-start; padding: 4px 0; background: none; border: 0; color: var(--blue, var(--ink)); font: 700 14px var(--body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link-btn:hover, .link-btn:focus-visible { color: var(--red); }
+.link-btn.hidden { display: none; }

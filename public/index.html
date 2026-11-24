@@ -191,6 +191,33 @@
         <p class="form-err" id="authErr" role="alert"></p>
         <button type="submit" class="btn btn-primary" id="authGo"><span class="btn-label">Log in</span></button>
         <p class="fine" id="authFine">Your username is your name in the game. Wins and unlocked characters are saved to it.</p>
+        <button type="button" class="link-btn hidden" id="authForgot">Forgot your password?</button>
+      </form>
+    </section>
+
+    <section class="modal card" id="recoverModal" role="dialog" aria-modal="true" aria-labelledby="recTitle" hidden>
+      <button type="button" class="modal-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <p class="mono kicker">Account recovery</p>
+      <h2 id="recTitle">Forgot your password?</h2>
+      <form id="recAsk" autocomplete="off" novalidate>
+        <p class="fine">Type your username or the email on your account and we will email you a 6-digit code.</p>
+        <label class="mono" for="recWho">Username or email</label>
+        <input id="recWho" class="inp" maxlength="120" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Your username or you@example.com">
+        <p class="form-err" id="recAskErr" role="alert"></p>
+        <button type="submit" class="btn btn-primary" id="recAskGo"><span class="btn-label">Email me a code</span></button>
+        <button type="button" class="link-btn" id="recHave">I already have a code</button>
+      </form>
+      <form id="recSet" class="hidden" autocomplete="off" novalidate>
+        <p class="fine" id="recSetNote">If that matches an account, a code is on its way. It works for 15 minutes. Check your spam folder too.</p>
+        <label class="mono" for="recUser">Username</label>
+        <input id="recUser" class="inp" maxlength="40" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="Your username (it is in the email)">
+        <label class="mono" for="recCode">6-digit code</label>
+        <input id="recCode" class="inp" maxlength="12" inputmode="numeric" autocomplete="one-time-code" spellcheck="false" placeholder="123456">
+        <label class="mono" for="recPass">New password</label>
+        <input id="recPass" class="inp" type="password" maxlength="72" autocomplete="new-password" placeholder="At least 8 characters">
+        <p class="form-err" id="recSetErr" role="alert"></p>
+        <button type="submit" class="btn btn-primary" id="recSetGo"><span class="btn-label">Set new password</span></button>
+        <button type="button" class="link-btn" id="recAgain">Send me a new code</button>
       </form>
     </section>
 

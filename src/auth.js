@@ -4,10 +4,12 @@
    POST must be same-origin JSON, so other websites can't make a visitor's browser act on their account. */
 const crypto = require('crypto');
 const T = require('../public/shared.js');
+const Mail = require('./mail');
 const Chests = require('./chests.js');
 
 const COOKIE = 'tr_sess';
 const SESSION_MS = 30 * 24 * 3600 * 1000;
+const RESET_MS = 15 * 60e3, RESET_TRIES = 5, RESET_GAP = 60e3;       // emailed recovery code: lives 15 min, 5 wrong guesses kill it, one email a minute per account
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 /* ------------------------------ passwords ------------------------------ */
@@ -69,7 +71,30 @@ function create(store, opts = {}) {
     buy: new Limiter(30, 60e3),
     chest: new Limiter(40, 60e3),
     email: new Limiter(10, 600e3),
+    recIp: new Limiter(opts.recoverPerIp || 8, 1800e3),        // asking for codes: per visitor,
+    recWho: new Limiter(opts.recoverPerWho || 3, 3600e3),       // per account / address (so nobody can flood one inbox)
+    recFin: new Limiter(opts.recoverTries || 12, 600e3),       // trying codes: per visitor (each code also dies after 5 wrong tries)
   };
+  const mailer = opts.mailer === undefined ? Mail.fromEnv() : opts.mailer;      // null = email recovery switched off
+  const now = opts.now || Date.now;
+  const codeHash = (code, salt) => crypto.createHash('sha256').update(salt + ':' + code).digest('hex');
+  /** A fresh 6-digit code for the account, or null if one was sent in the last minute. Only a salted hash is stored. */
+  async function issueCode(user) {
+    const key = 'reset:' + user.id, cur = await store.kvGet(key);
+    if (cur && cur.at && now() - cur.at < RESET_GAP) return null;
+    const code = String(crypto.randomInt(0, 1e6)).padStart(6, '0'), salt = crypto.randomBytes(8).toString('hex');
+    await store.kvSet(key, { h: codeHash(code, salt), s: salt, exp: now() + RESET_MS, tries: 0, at: now() });
+    return code;
+  }
+  /** Runs after the answer is already sent, so how long it takes never reveals whether an account matched. */
+  async function sendRecovery(who) {
+    let users = [], to = '';
+    if (who.includes('@')) { const ev = T.validateEmail(who); if (ev.ok) { to = ev.email; users = await store.usersByEmail(ev.email); } }
+    else { const u = await store.userByName(who); if (u && u.email) { users = [u]; to = u.email; } }
+    const list = [];
+    for (const u of users) { if (opts.isBanned && opts.isBanned(u.username)) continue; const code = await issueCode(u); if (code) list.push({ username: u.username, code }); }
+    if (list.length) await mailer.send(Object.assign({ to }, Mail.recoveryEmail(list, RESET_MS / 60e3)));
+  }
   const sweeper = setInterval(() => { for (const l of Object.values(lim)) l.sweep(); store.dropExpired().catch(() => {}); }, 600e3);
   sweeper.unref();
 
@@ -107,7 +132,7 @@ function create(store, opts = {}) {
     try {
       if (req.method === 'GET' && url === '/api/me') {
         const u = await userFromCookie(req.headers.cookie);
-        return json(res, 200, { accounts: true, user: await puFull(u), shop: T.SHOP }), true;
+        return json(res, 200, { accounts: true, user: await puFull(u), shop: T.SHOP, recovery: !!mailer }), true;
       }
       if (req.method !== 'POST') return json(res, 404, { error: 'Not found' }), true;
       if (!sameOrigin(req) || !/^application\/json\b/i.test(req.headers['content-type'] || '')) return json(res, 403, { error: 'Forbidden' }), true;
@@ -136,6 +161,37 @@ function create(store, opts = {}) {
         if (why) return json(res, 403, { error: `This account is suspended: ${why}` }), true;
         const h = await startSession(req, res, user);
         return json(res, 200, { ok: true, user: await puFull(user) }, h), true;
+      }
+
+      if (url === '/api/recover/start') {                     // "forgot password": email a one-time code. Same answer whether or not an account matches.
+        if (!mailer) return json(res, 503, { error: 'Email recovery is not set up on this server yet.' }), true;
+        const who = String(body.who || '').trim().toLowerCase().slice(0, 120);
+        if (!who) return json(res, 400, { error: 'Enter your username or the email on your account.' }), true;
+        if (!lim.recIp.hit(ip) || !lim.recWho.hit(who)) return json(res, 429, { error: 'Too many requests. Try again in a little while.' }), true;
+        json(res, 200, { ok: true, minutes: RESET_MS / 60e3 });
+        sendRecovery(who).catch((e) => console.error('recovery email failed:', e && e.message));
+        return true;
+      }
+
+      if (url === '/api/recover/finish') {                    // username + emailed code + new password: sets it, signs everything else out, logs you in
+        if (!mailer) return json(res, 503, { error: 'Email recovery is not set up on this server yet.' }), true;
+        if (!lim.recFin.hit(ip)) return json(res, 429, { error: 'Too many attempts. Wait a few minutes.' }), true;
+        const name = String(body.username || '').trim().slice(0, 40), code = String(body.code || '').replace(/\s/g, '').slice(0, 12), pw = String(body.password || '');
+        const pv = T.validatePassword(pw); if (!pv.ok) return json(res, 400, { error: pv.err }), true;          // checked first, so a typo here never burns a guess
+        const BAD = 'That code is wrong or has expired. Ask for a new one.', user = name ? await store.userByName(name) : null, key = user && 'reset:' + user.id;
+        const rec = user && await store.kvGet(key);
+        if (!rec || !rec.h || rec.exp < now()) return json(res, 400, { error: BAD }), true;
+        const a = Buffer.from(codeHash(code, rec.s), 'hex'), b = Buffer.from(rec.h, 'hex');
+        if (!(a.length === b.length && crypto.timingSafeEqual(a, b))) {
+          rec.tries = (rec.tries || 0) + 1; await store.kvSet(key, rec.tries >= RESET_TRIES ? null : rec);
+          return json(res, 400, { error: BAD }), true;
+        }
+        const why = opts.isBanned && opts.isBanned(user.username);
+        if (why) return json(res, 403, { error: `This account is suspended: ${why}` }), true;
+        await store.setPassword(user.id, await hashPassword(pw)); await store.kvSet(key, null);               // setPassword also ends every old session
+        const h = await startSession(req, res, user);
+        if (user.email) mailer.send(Object.assign({ to: user.email }, Mail.changedEmail(user.username))).catch((e) => console.error('notice email failed:', e && e.message));
+        return json(res, 200, { ok: true, user: await puFull(await store.userById(user.id)) }, h), true;
       }
 
       if (url === '/api/logout') {

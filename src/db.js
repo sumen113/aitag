@@ -78,6 +78,7 @@ async function openPg(url, opts = {}) {
     async touch(id) { await pool.query('UPDATE users SET last_seen = $2 WHERE id = $1', [id, Date.now()]); },
     async setEmail(id, email) { await pool.query('UPDATE users SET email = $2 WHERE id = $1', [id, email || null]); return this.userById(id); },
     /** Every account with its email ('' when none yet). Staff only. */
+    async usersByEmail(email) { const rows = (await pool.query('SELECT * FROM users WHERE lower(email) = $1 ORDER BY id ASC LIMIT 6', [String(email || '').toLowerCase()])).rows; return Promise.all(rows.map(toUser)); },
     async listEmails() { return (await pool.query('SELECT id, username, email FROM users ORDER BY id ASC')).rows.map((r) => ({ id: +r.id, username: r.username, email: r.email || '' })); },
     /** Atomic: charge the price and grant the item in one transaction, or do neither. */
     async buy(id, item, price) {
@@ -191,6 +192,7 @@ async function openFile(file) {
     async saveSettings(id, s) { if (db.users[id]) { db.users[id].settings = s; save(); } },
     async touch() {},
     async setEmail(id, email) { const u = db.users[id]; if (!u) return null; u.email = email || ''; save(); return view(u); },
+    async usersByEmail(email) { const e = String(email || '').toLowerCase(); return Object.values(db.users).filter((u) => e && String(u.email || '').toLowerCase() === e).sort((a, b) => a.id - b.id).slice(0, 6).map(view); },
     async listEmails() { return Object.values(db.users).sort((a, b) => a.id - b.id).map((u) => ({ id: u.id, username: u.username, email: u.email || '' })); },
     async buy(id, item, price) {
       const u = db.users[id]; if (!u) return { ok: false, err: 'Account not found.' };

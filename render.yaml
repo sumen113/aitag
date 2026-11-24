@@ -19,5 +19,9 @@ services:
         sync: false
       - key: ADMIN_PASSCODE
         sync: false
+      - key: SMTP_URL                # optional: turns on "forgot password" emails (see README)
+        sync: false
+      - key: MAIL_FROM
+        sync: false
       - key: MIN_WIN_PLAYERS
         value: 3
