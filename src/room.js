@@ -3,6 +3,7 @@
    tagging rules, abilities with world effects (stomp / goo / decoy) and snapshots. */
 const T = require('../public/shared.js');
 const { thinkBot, DIFFS } = require('./bots');
+const { PropHunt } = require('./prophunt');
 
 const { CHARS, DT, STATE } = T;
 const IDX = {}; CHARS.forEach((c, i) => (IDX[c.id] = i));
@@ -47,7 +48,8 @@ class Room {
     this.mapMode = opts.mapMode && T.MAP_BY_ID[opts.mapMode] ? opts.mapMode : 'rotate';
     this.map = this.mapMode !== 'rotate' ? T.MAP_BY_ID[this.mapMode] : T.MAPS[(Math.random() * T.MAPS.length) | 0];
     this.goos = [];
-    this.ctx = { map: this.map, goos: this.goos, itBoost: T.MODE_BY_ID[this.mode].boost, hold: !!T.MODE_BY_ID[this.mode].hold };
+    this.ctx = { map: this.map, goos: this.goos, itBoost: T.MODE_BY_ID[this.mode].boost, hold: !!T.MODE_BY_ID[this.mode].hold, prop: !!T.MODE_BY_ID[this.mode].prop };
+    this.ph = null; this.phWin = '';                    // Prop Hunt: per-round state (clutter, hide timer) and who won the last round
     this.players = new Map();
     this.decoys = [];
     this.seeds = [];                                   // avocado seeds in flight
@@ -67,7 +69,7 @@ class Room {
   activeCount() { let n = 0; for (const p of this.players.values()) if (!p.wait) n++; return n; }
   aliveCount() { let n = 0; for (const p of this.players.values()) if (!p.out) n++; return n; }
   modeDef() { return T.MODE_BY_ID[this.mode]; }
-  setMode(id) { this.mode = T.MODE_BY_ID[id] ? id : 'classic'; this.ctx.itBoost = this.modeDef().boost; this.ctx.hold = !!this.modeDef().hold; }
+  setMode(id) { this.mode = T.MODE_BY_ID[id] ? id : 'classic'; this.ctx.itBoost = this.modeDef().boost; this.ctx.hold = !!this.modeDef().hold; this.ctx.prop = !!this.modeDef().prop; }
   /** per-owner limit on lingering ability objects; Ability Hold lifts it so a long hold really does make that many clones / pits / clouds */
   cap(n) { return this.ctx.hold ? Math.max(n, T.HOLD_MAX) : n; }
   roundLen() { const m = this.modeDef(); return this.customTime || !m.time ? this.roundTime : m.time; }
@@ -121,7 +123,7 @@ class Room {
   markGone(p, on) {
     on = on ? 1 : 0; if (!!p.gone === !!on) return;
     p.gone = on;
-    if (on && p.it && this.state === STATE.PLAY && this.mode !== 'infection') { p.it = 0; p.pot = 0; if (this.itId === p.id) this.itId = 0; this.reassignIt(this.mode === 'potato' ? p.from : 0); }
+    if (on && p.it && this.state === STATE.PLAY && this.mode !== 'infection' && this.mode !== 'prophunt') { p.it = 0; p.pot = 0; if (this.itId === p.id) this.itId = 0; this.reassignIt(this.mode === 'potato' ? p.from : 0); }
     this.rosterDirty = true;
   }
   holdForNextRound(p) { if (!T.classicLike(this.mode) && (this.state === STATE.COUNT || this.state === STATE.PLAY)) { p.out = 1; p.wait = 1; } }      // classic tag can be joined any time
@@ -149,6 +151,7 @@ class Room {
     let redo = false;
     if (p.it) {
       if (this.mode === 'infection') { if (this.state === STATE.PLAY && !this.itPlayers().length) redo = true; }     // the infection is never handed to someone new
+      else if (this.mode === 'prophunt') { /* the tick drafts a new seeker if none are left */ }
       else this.reassignIt(this.mode === 'potato' ? p.from : 0);
     }
     if (!p.bot) { if (this.humanCount() > 0) this.rebalanceBots(); }
@@ -185,14 +188,14 @@ class Room {
 
   resetPlayer(p, s) {
     p.x = s[0]; p.y = s[1]; p.vx = p.vy = 0; p.cd = 0; p.abT = 0; p.stun = 0; p.boostT = 0; p.tp = 0; p.imm = 0; p.lock = 0; p.it = 0;
-    p.out = 0; p.wait = 0; p.noScore = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
+    p.out = 0; p.wait = 0; p.noScore = 0; p.pot = 0; p.score = 0; p.tags = 0; p.aux = 0; p.z = 0; p.bm = 0; p.hold = 0; p.rep = 0; p.repT = 0; p.pitT = 0; p.pr = 0; p.pv = 0; p.mt = 0; p.tt = 0; p.swT = 0; p.hPrev = 0; p.bowled = null; p.lastActiveAt = Date.now(); this.resetHist(p);
     if (p.ai) { p.ai.tgt = -1; p.ai.wp = null; }
   }
 
   /** Everything between rounds starts here: a vote (regular servers, practice, "vote" custom servers) or straight into the countdown. */
   beginRound() {
     if (this.modeOpt === 'vote') {
-      const choice = this.testServer || this.mapMode === 'rotate' || this.players.size >= T.MODE_MIN_PLAYERS;      // nothing to vote on (fixed arena, too few players for special modes): skip the vote. The Test Server always votes on its mode.
+      const choice = this.testServer || this.mapMode === 'rotate' || this.players.size >= T.MIN_SPECIAL;      // nothing to vote on (fixed arena, too few players for special modes): skip the vote. The Test Server always votes on its mode.
       if (choice) this.startVote(); else { this.setMode('classic'); this.startCountdown(); }
     } else { this.setMode(this.modeOpt); this.startCountdown(); }
   }
@@ -201,8 +204,8 @@ class Room {
     for (const p of this.players.values()) { p.out = 0; p.wait = 0; p.pot = 0; p.it = 0; p.vm = -1; p.vd = -1; }     // spectators and eliminated players are back in
     this.itId = 0; this.results = null;
     const maps = this.mapMode !== 'rotate' ? [this.map.id] : shuffle(T.MAPS.filter((m) => m !== this.map)).slice(0, 3).map((m) => m.id);
-    const crowd = this.players.size >= T.MODE_MIN_PLAYERS;               // Infection and Hot Potato only make sense with a crowd
-    this.vote = { maps, modes: T.MODES.filter((m) => this.testServer ? m.testOnly : !m.testOnly && (crowd || m.id === 'classic')).map((m) => m.id) };      // Test Server: only its two modes; everywhere else: never the test modes
+    const n = this.players.size;                                         // each special mode has its own minimum: Prop Hunt works with a small group, Infection and Hot Potato want a crowd
+    this.vote = { maps, modes: T.MODES.filter((m) => this.testServer ? m.testOnly : !m.testOnly && (m.id === 'classic' || n >= T.modeMin(m.id))).map((m) => m.id) };      // Test Server: only its two modes; everywhere else: never the test modes
     this.state = STATE.VOTE; this.timer = this.voteTime; this.tl = this.voteTime;
     this.emit({ k: 'st', s: STATE.VOTE, vc: { m: this.vote.maps, d: this.vote.modes } });
   }
@@ -230,7 +233,7 @@ class Room {
       this.setMode(this.vote.modes[anyMode || !this.solo ? best(t.d) : 0]);       // nobody voted in practice: classic; elsewhere a random pick
       this.nextMap = T.MAP_BY_ID[this.vote.maps[best(t.m)]];
     }
-    if (!T.classicLike(this.mode) && this.players.size < T.MODE_MIN_PLAYERS && !this.forceMode) this.setMode('classic');      // too few players (or people left during the vote)
+    if (!T.classicLike(this.mode) && this.players.size < T.modeMin(this.mode) && !this.forceMode) this.setMode('classic');      // too few players (or people left during the vote)
     let m = this.nextMap || (this.round > 0 && this.modeOpt !== 'vote' ? this.pickMap() : this.map);
     const need = this.modeDef().map;
     if (need) m = T.MAP_BY_ID[need];                    // Infection always plays on the big map
@@ -242,6 +245,7 @@ class Room {
     const sp = shuffle(this.map.spawns.slice()); let i = 0;
     for (const p of this.players.values()) this.resetPlayer(p, sp[i++ % sp.length]);
     this.itId = 0; this.state = STATE.COUNT; this.timer = T.COUNTDOWN + this.pickTime; this.tl = this.timer;
+    if (this.mode === 'prophunt') PropHunt.reset(this); else { this.ph = null; this.phWin = ''; }
     this.emit({ k: 'st', s: STATE.COUNT, m: this.map.id, rd: this.round, md: this.mode });
   }
 
@@ -265,6 +269,14 @@ class Room {
   }
 
   startPlay() {
+    if (this.mode === 'prophunt') {
+      const seekers = PropHunt.start(this);
+      this.itWant = seekers.length; this.itId = seekers[0].id;
+      this.state = STATE.PLAY; this.tl = this.roundLen();
+      this.emit({ k: 'st', s: STATE.PLAY, it: seekers[0].id, its: seekers.map((p) => p.id), md: this.mode });
+      this.rosterDirty = true;
+      return;
+    }
     const arr = shuffle([...this.players.values()].filter((p) => !p.out));
     this.itWant = T.classicLike(this.mode) ? T.itCountFor(arr.length) : 1;      // 7+ players: two taggers in classic tag; Infection and Hot Potato always start with exactly one
     const its = arr.slice(0, this.itWant);
@@ -278,6 +290,7 @@ class Room {
   /** `noWins`: staff ended the match early, so nobody is paid for it (and no last-standing bonus). */
   endRound(noWins) {
     for (const p of this.players.values()) if (p.noScore) p.score = 0;                 // staff who jumped in with G never show or win points
+    if (this.mode === 'prophunt') this.phWin = PropHunt.hidersLeft(this) > 0 ? 'h' : 's';      // hiders win if any survived the clock
     if (!noWins && !T.classicLike(this.mode)) for (const p of this.players.values()) if (!p.out && !p.it && !p.wait && !p.noScore) p.score += 10;      // last ones standing get a bonus (and break the tie with whoever went out just before)
     const inMatch = [...this.players.values()].filter((p) => !p.wait);
     const list = inMatch.map((p) => ({ id: p.id, s: p.score, t: p.tags })).map((r) => ({ ...r, tie: Math.random() })).sort((a, b) => b.s - a.s || b.t - a.t || a.tie - b.tie);   // display ord
@@ -291,7 +304,7 @@ class Room {
         if (w && w.uid && !w.bot && !w.afk && !w.noScore) this.onWin(w);
       }
     }
-    for (const p of this.players.values()) { p.it = 0; p.pot = 0; }
+    for (const p of this.players.values()) { p.it = 0; p.pot = 0; p.pr = 0; }
     this.itId = 0; this.state = STATE.RESULTS; this.timer = T.RESULTS_TIME; this.tl = T.RESULTS_TIME;
     this.emit({ k: 'st', s: STATE.RESULTS, md: this.mode });
   }
@@ -311,6 +324,7 @@ class Room {
     if (!p || !p.staff || p.bot || p.gone || !(p.out || p.wait) || (this.state !== STATE.PLAY && this.state !== STATE.COUNT)) return false;
     const sp = shuffle(this.map.spawns.slice())[0];
     this.resetPlayer(p, sp); p.noScore = 1; p.imm = T.TAG_IMMUNITY;           // a moment of safety so they are not tagged the instant they land
+    if (this.mode === 'prophunt' && this.state === STATE.PLAY) PropHunt.makeHider(p);      // in Prop Hunt they hide like everyone else
     this.rosterDirty = true; return true;
   }
 
@@ -322,13 +336,15 @@ class Room {
   }
 
   toWait() {
-    for (const p of this.players.values()) { p.it = 0; p.pot = 0; p.out = 0; p.wait = 0; }
+    for (const p of this.players.values()) { p.it = 0; p.pot = 0; p.out = 0; p.wait = 0; p.pr = 0; }
+    this.ph = null; this.phWin = '';
     this.itId = 0; this.state = STATE.WAIT; this.tl = 0; this.results = null; this.vote = null; this.nextMap = null;
     this.emit({ k: 'st', s: STATE.WAIT });
   }
 
   /** IT touched `victim`. Classic: the role moves. Infection: the victim joins the infected. Potato: the potato moves and its fuse restarts. */
   tag(it, victim) {
+    if (this.mode === 'prophunt') { PropHunt.find(this, it, victim); return; }          // a seed that hits a hider counts as finding them
     this.tagCount++; it.tags++;
     if (this.mode === 'points') it.score += T.TAG_POINTS;                    // Tagger Points: a tag is worth 10
     if (this.mode === 'infection') {
@@ -365,7 +381,7 @@ class Room {
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       x = Math.round(T.clamp(x, -1, 1) * 100) / 100; y = Math.round(T.clamp(y, -1, 1) * 100) / 100;
       const inp = { s, x, y, a: e[3] ? 1 : 0 };
-      if (e.length >= 7) { let h = e[6] | 0; if (!(p.c === IDX.god && p.staff)) h &= 4; if (!this.ctx.hold) h &= 3; if (h) inp.h = h & 7; }      // held inputs: 1 = ascend, 2 = beam (God only, staff), 4 = ability held (Ability Hold)
+      if (e.length >= 7) { let h = e[6] | 0, keep = 0; if (p.c === IDX.god && p.staff) keep |= 3; if (this.ctx.hold) keep |= 4; if (this.ctx.prop) keep |= 56; h &= keep; if (h) inp.h = h; }      // held inputs: 1 = ascend, 2 = beam (God only, staff), 4 = ability held (Ability Hold), 8 = swing / freeze, 16 = taunt, 32 = change prop (Prop Hunt)
       if ((e[3] || (e.length >= 7 && (e[6] & 4))) && e.length >= 6) { const ax = +e[4], ay = +e[5]; if (Number.isFinite(ax) && Number.isFinite(ay)) { const L = Math.hypot(ax, ay); if (L > 0.05) { inp.ax = Math.round(ax / L * 100) / 100; inp.ay = Math.round(ay / L * 100) / 100; } } }
       p.queue.push(inp);
       if (e[3]) p.lastActiveAt = now;           // using an ability counts as playing; plain movement is judged by how far you actually got (see the idle check in tick)
@@ -390,7 +406,8 @@ class Room {
   /* ------------------------------- the tick ----------------------------- */
   runStep(p, inp) {
     let i = inp;
-    if (this.state === STATE.COUNT) i = { s: inp.s, x: 0, y: 0, a: 0, h: 0 };
+    if (this.state === STATE.COUNT || (this.ctx.prop && this.ph && this.ph.hide > 0 && p.it)) i = { s: inp.s, x: 0, y: 0, a: 0, h: 0 };      // the countdown, and the seekers' blindfold while the hiders scatter
+    else if (this.ctx.prop && !p.bot) PropHunt.input(this, p, inp);
     const ev = [], wasLeap = p.c === IDX.frog && p.abT > 0;
     T.stepPlayer(p, i, this.ctx, ev);
     if (!p.bot) p.ack = inp.s;
@@ -657,7 +674,12 @@ class Room {
     this.stepBeams();
 
     // ---- tagging & scoring
-    if (this.state === STATE.PLAY) {
+    if (this.state === STATE.PLAY && this.mode === 'prophunt') {
+      const ph = this.ph;
+      if (ph && ph.hide <= 0) for (const p of this.players.values()) if (!p.out && !p.gone && !p.afk && !p.it && !p.wait) p.score += DT;      // a point for every second a hider stays hidden
+      for (const p of this.players.values()) if (p.noScore) p.score = 0;
+      PropHunt.tick(this);
+    } else if (this.state === STATE.PLAY) {
       const potato = this.mode === 'potato', infection = this.mode === 'infection';
       const prox = this.mode === 'proximity', hunters = prox ? this.itPlayers().filter((h) => h.stun <= 0 && h.lock <= 0 && !h.out && !h.gone) : null;      // proximity only counts a tagger who can actually tag right now (no farming a stunned one)
       for (const p of this.players.values()) if (!p.out && !p.gone && !p.afk && (potato || !p.it)) p.score += DT * (prox && !p.it ? this.proxRate(p, hunters) : 1);          // time survived (Tagger Proximity: faster the closer you are to IT)
@@ -716,7 +738,7 @@ class Room {
       const now = Date.now();
       for (const p of this.players.values()) {
         if (p.bot) continue;
-        if (this.state !== STATE.PLAY || p.out) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }
+        if (this.state !== STATE.PLAY || p.out || (this.mode === 'prophunt' && ((this.ph && this.ph.hide > 0) || !p.it))) { p.lastActiveAt = now; p.afk = false; p.ax0 = p.x; p.ay0 = p.y; continue; }      // Prop Hunt hiders are supposed to stand still (and seekers are held during the hide phase)
         if (p.ax0 === undefined || Math.hypot(p.x - p.ax0, p.y - p.ay0) > IDLE_MOVE || p.stun > 0.5) { p.ax0 = p.x; p.ay0 = p.y; p.lastActiveAt = now; }
         p.afk = now - p.lastActiveAt > AFK_AFTER;
       }
@@ -743,7 +765,9 @@ class Room {
     const tnow = Date.now();
     for (const p of this.players.values()) {
       const flags = (p.it ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.imm > 0 ? 4 : 0) | (p.afk ? 8 : 0) | (p.out || p.gone ? 16 : 0) | (p.wait ? 32 : 0) | (p.typeAt > tnow ? 64 : 0) | (p.bm ? 128 : 0);
-      ps.push([p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags, r1(p.z || 0)]);
+      const row = [p.id, r1(p.x), r1(p.y), r1(p.vx), r1(p.vy), r2(p.fx), r2(p.fy), flags, r2(p.abT), Math.floor(p.score), p.tags, r1(p.z || 0)];
+      if (this.ctx.prop) row.push(p.pr | 0, p.pv | 0);       // Prop Hunt: which prop a hider is disguised as, and its turn
+      ps.push(row);
     }
     const head = {
       t: 's', n: this.tickN, ts: performance.now(), s: this.state, tl: r1(this.tl), m: this.map.id, rd: this.round, it: this.itId, md: this.mode, p: ps,
@@ -752,7 +776,8 @@ class Room {
       sd: this.seeds.map((x) => [x.id, r1(x.x), r1(x.y), r1(x.vx), r1(x.vy), x.o]),
       pi: this.pits.map((x) => [x.id, r1(x.x), r1(x.y), x.r, x.o, r1(x.ttl)]),
     };
-    if (this.state === STATE.RESULTS) head.res = this.results;
+    if (this.state === STATE.RESULTS) { head.res = this.results; if (this.phWin) head.pw = this.phWin; }
+    if (this.ctx.prop && this.ph && this.state === STATE.PLAY && this.ph.hide > 0) head.hd = r1(this.ph.hide);
     if (this.mode === 'potato' && this.state === STATE.PLAY) head.pt = this.itPlayers().map((p) => [p.id, r1(Math.max(0, p.pot))]);
     if (this.state === STATE.VOTE && this.vote) { head.vc = { m: this.vote.maps, d: this.vote.modes }; head.vt = this.tally(); }
     const base = JSON.stringify(head).slice(0, -1);

@@ -98,6 +98,13 @@ const Sfx = (() => {
     equip() { tone(600, 0.08, 'triangle', 0.14); tone(900, 0.12, 'triangle', 0.14, null, 0.07); tone(1200, 0.18, 'sine', 0.1, null, 0.14); },
     craft() { tone(300, 0.15, 'square', 0.12, 150); noise(0.15, 0.25, 2000, 0.1, 800); [880, 1175, 1568].forEach((f, i) => tone(f, 0.18, 'triangle', 0.16, null, 0.25 + i * 0.07)); },
     deny() { tone(200, 0.16, 'square', 0.12, 130); },
+    // Prop Hunt
+    swing() { noise(0.16, 0.22, 1400, 0, 4200); tone(420, 0.12, 'sawtooth', 0.06, 900); },
+    found() { tone(784, 0.1, 'square', 0.16); tone(1046, 0.1, 'square', 0.16, null, 0.08); tone(1568, 0.28, 'triangle', 0.18, null, 0.16); noise(0.18, 0.2, 2600, 0.12, 900); },
+    dud() { tone(180, 0.2, 'square', 0.16, 90); tone(120, 0.26, 'sawtooth', 0.1, 60, 0.05); noise(0.12, 0.2, 500, 0, 150); [0, 0.1, 0.2].forEach((d, i) => tone(900 - i * 120, 0.08, 'triangle', 0.07, null, 0.2 + d)); },
+    taunt(n) { const v = (n | 0) & 3; if (v === 0) { tone(500, 0.14, 'square', 0.14, 900); tone(900, 0.18, 'square', 0.14, 500, 0.12); } else if (v === 1) { tone(180, 0.35, 'sawtooth', 0.16, 120); tone(190, 0.35, 'sawtooth', 0.1, 130, 0.02); } else if (v === 2) { [880, 660, 880, 1100].forEach((f, i) => tone(f, 0.09, 'triangle', 0.14, null, i * 0.09)); } else { tone(1200, 0.08, 'sine', 0.12); tone(1500, 0.08, 'sine', 0.12, null, 0.09); tone(1200, 0.14, 'sine', 0.12, 900, 0.18); } },
+    morph() { tone(300, 0.2, 'sine', 0.14, 900); noise(0.18, 0.14, 1800, 0, 600); tone(1200, 0.12, 'triangle', 0.1, null, 0.18); },
+    ping() { tone(880, 0.5, 'sine', 0.16, 880); tone(1320, 0.6, 'sine', 0.08, 1320, 0.02); noise(0.2, 0.06, 3000, 0.05); },
   };
 
   return {

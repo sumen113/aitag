@@ -33,6 +33,9 @@ const MapRender = (() => {
       for (let i = 0; i < 40; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 20)) items.push({ k: 'stain', x, y, s: 16 + R() * 28 }); }
     } else if (map.theme === 'pinball') {
       for (let i = 0; i < 110; i++) items.push({ k: 'spark', x: R() * map.w, y: R() * map.h, p: R() * TAU, s: 1 + R() * 2.4 });
+    } else if (map.theme === 'storehouse') {
+      for (let i = 0; i < 90; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 18)) items.push({ k: 'stain', x, y, s: 14 + R() * 34 }); }
+      for (let i = 0; i < 110; i++) { const x = R() * map.w, y = R() * map.h; if (free(x, y, 12)) items.push({ k: 'crack', pts: [[x, y], [x + (R() - 0.5) * 70, y + (R() - 0.5) * 70], [x + (R() - 0.5) * 120, y + (R() - 0.5) * 120]] }); }
     } else if (map.theme === 'neon') {
       for (let i = 0; i < 60; i++) items.push({ k: 'spark', x: R() * map.w, y: R() * map.h, p: R() * TAU, s: 1 + R() * 2 });
     }
@@ -126,6 +129,21 @@ const MapRender = (() => {
       for (let i = 1; i < 6; i++) { g.beginPath(); g.arc(W / 2, H * 0.5, i * 170, 0, TAU); g.stroke(); }
       for (const d of decorFor(map)) { g.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(t * 1.6 + d.p)); g.fillStyle = '#ffd666'; g.fillRect(d.x - d.s, d.y - 0.6, d.s * 2, 1.2); g.fillRect(d.x - 0.6, d.y - d.s, 1.2, d.s * 2); }
       g.globalAlpha = 1;
+    } else if (th === 'storehouse') {
+      g.fillStyle = '#8b8f98'; g.fillRect(0, 0, W, H);
+      const sl = 200;                                                   // concrete slabs
+      g.lineWidth = 3; g.strokeStyle = 'rgba(40,44,56,.28)';
+      for (let x = Math.floor(x0 / sl) * sl; x <= x1; x += sl) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); }
+      for (let y = Math.floor(y0 / sl) * sl; y <= y1; y += sl) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.035)'; for (let x = Math.floor(x0 / sl) * sl; x < x1; x += sl) for (let y = Math.floor(y0 / sl) * sl; y < y1; y += sl) if (((x / sl) + (y / sl)) % 2 === 0) g.fillRect(x, y, sl, sl);
+      g.fillStyle = 'rgba(255,205,64,.75)';                              // painted forklift lanes
+      for (const y of [215, 535, 855, 1175, 1495]) if (y > y0 - 12 && y < y1 + 12) for (let x = 100; x < W - 100; x += 90) g.fillRect(x, y - 3, 50, 6);
+      g.strokeStyle = '#ffd23f'; g.lineWidth = 6; g.setLineDash([26, 18]); g.strokeRect(40, 40, W - 80, H - 80); g.setLineDash([]);
+      for (const d of decorFor(map)) {
+        if (d.x !== undefined && (d.x < x0 - 60 || d.x > x1 + 60 || d.y < y0 - 60 || d.y > y1 + 60)) continue;
+        if (d.k === 'stain') { g.fillStyle = 'rgba(30,34,46,.12)'; g.beginPath(); g.ellipse(d.x, d.y, d.s, d.s * 0.7, 0.4, 0, TAU); g.fill(); }
+        else if (d.k === 'crack') { g.strokeStyle = 'rgba(30,34,46,.35)'; g.lineWidth = 2; g.lineJoin = 'round'; g.beginPath(); d.pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke(); }
+      }
     } else {                                                          // station
       g.fillStyle = '#1b2340'; g.fillRect(0, 0, W, H);
       const s = 160;
@@ -140,7 +158,7 @@ const MapRender = (() => {
   }
 
   function drawBorder(g, map) {
-    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'], city: ['#ffb64d', '#6b4a1a'], reef: ['#ff9d6b', '#9c4a2c'], factory: ['#ffcf4d', '#6b5a10'], pinball: ['#ff4d8d', '#7a1a4a'] }[map.theme];
+    const col = { park: ['#8a5a2e', '#5a3a1c'], neon: ['#ff3df2', '#7a1a8a'], frost: ['#7fb5d6', '#4a7d9c'], candy: ['#ff7eb6', '#c24886'], station: ['#8fa0d6', '#4b5a8c'], city: ['#ffb64d', '#6b4a1a'], reef: ['#ff9d6b', '#9c4a2c'], factory: ['#ffcf4d', '#6b5a10'], pinball: ['#ff4d8d', '#7a1a4a'], storehouse: ['#c9ccd6', '#4a4f5e'] }[map.theme];
     g.lineJoin = 'round';
     g.strokeStyle = col[1]; g.lineWidth = 40; g.strokeRect(-14, -14, map.w + 28, map.h + 28);
     g.strokeStyle = col[0]; g.lineWidth = 14; g.strokeRect(-4, -4, map.w + 8, map.h + 8);
@@ -253,6 +271,33 @@ const MapRender = (() => {
             block(g, o, '#eefaff', '#a4d6ee', '#70b5d8', 14, 10);
             g.fillStyle = 'rgba(255,255,255,.85)'; rr(g, o.x + 6, o.y + 5, Math.max(8, o.w * 0.4), 7, 4); g.fill();
             break;
+          case 'shelf': {
+            block(g, o, '#c9ccd8', '#6a7088', '#3a4054', 26, 3);
+            g.fillStyle = '#e65f3b'; g.fillRect(o.x + 6, o.y + o.h + 4, o.w - 12, 5);                   // the orange beam
+            for (let i = 14; i < o.w - 24; i += 46) {                                                  // boxes on the top shelf
+              const bw = 30 + ((i * 7 + o.x) % 3) * 6, bh = 12 + ((i * 3 + o.y) % 3) * 3;
+              g.fillStyle = ['#caa066', '#b98a55', '#d8b27a'][((i + o.x) / 46 | 0) % 3]; rr(g, o.x + i, o.y + 6 - 2 + (14 - bh) * 0.2, bw, bh + 4, 3); g.fill(); g.lineWidth = 2; g.strokeStyle = '#6e4d26'; g.stroke();
+            }
+            g.fillStyle = '#4a5066'; for (const px of [o.x + 3, o.x + o.w - 10]) g.fillRect(px, o.y + 2, 7, o.h + 24);
+            break; }
+          case 'pallet': {
+            block(g, o, '#d1a566', '#8a6330', '#5c3f17', 16, 3);
+            g.strokeStyle = 'rgba(90,60,25,.55)'; g.lineWidth = 3; g.beginPath(); for (let i = 1; i < 5; i++) { g.moveTo(o.x + (o.w * i) / 5, o.y + 3); g.lineTo(o.x + (o.w * i) / 5, o.y + o.h - 3); } g.stroke();
+            g.fillStyle = '#e8dcc0'; rr(g, o.x + 14, o.y + 12, o.w - 28, o.h - 24, 4); g.fill(); g.lineWidth = 2; g.strokeStyle = '#8a7a58'; g.stroke();       // shrink-wrapped load
+            g.strokeStyle = 'rgba(138,122,88,.6)'; g.beginPath(); g.moveTo(o.x + 14, o.y + o.h * 0.5); g.lineTo(o.x + o.w - 14, o.y + o.h * 0.5); g.stroke();
+            break; }
+          case 'bigcrate':
+            block(g, o, '#c9a063', '#7e5a2c', '#4f3515', 14, 4);
+            g.strokeStyle = 'rgba(70,40,15,.6)'; g.lineWidth = 3; g.strokeRect(o.x + 7, o.y + 7, o.w - 14, o.h - 14);
+            g.beginPath(); g.moveTo(o.x + 7, o.y + 7); g.lineTo(o.x + o.w - 7, o.y + o.h - 7); g.moveTo(o.x + o.w - 7, o.y + 7); g.lineTo(o.x + 7, o.y + o.h - 7); g.stroke();
+            break;
+          case 'container': {
+            const col = ['#2f7fc9', '#d1503b', '#3aa56b'][(((o.x / 100) | 0) + ((o.y / 100) | 0)) % 3];
+            block(g, o, col, '#1f2a3a', '#101722', 34, 4);
+            g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 3; g.beginPath(); for (let x = o.x + 16; x < o.x + o.w - 8; x += 22) { g.moveTo(x, o.y + 4); g.lineTo(x, o.y + o.h - 4); } g.stroke();
+            g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '800 15px Arial, sans-serif'; g.textAlign = 'left'; g.fillText('STOREHOUSE', o.x + 14, o.y + 24);
+            g.fillStyle = '#e8edf5'; g.fillRect(o.x + o.w - 20, o.y + 6, 7, o.h + 24); g.fillStyle = '#c4ccdc'; g.fillRect(o.x + o.w - 11, o.y + 6, 4, o.h + 24);
+            break; }
           case 'crate':
             block(g, o, '#c4934f', '#7e5629', '#59391a', 12, 4);
             g.strokeStyle = 'rgba(70,40,15,.6)'; g.lineWidth = 3; g.beginPath(); g.moveTo(o.x + 6, o.y + 6); g.lineTo(o.x + o.w - 6, o.y + o.h - 6); g.moveTo(o.x + o.w - 6, o.y + 6); g.lineTo(o.x + 6, o.y + o.h - 6); g.stroke();
@@ -335,6 +380,11 @@ const MapRender = (() => {
           g.closePath(); g.fillStyle = '#8da3bb'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#4b6178'; g.lineJoin = 'round'; g.stroke();
           g.fillStyle = '#a9bdd2'; g.beginPath(); g.ellipse(o.x + 12, o.y + 4, o.r * 0.45, o.r * 0.3, 0.3, 0, TAU); g.fill();
           g.beginPath(); g.ellipse(o.x - 6, o.y - 18, o.r * 0.7, o.r * 0.42, -0.2, 0, TAU); g.fillStyle = '#fff'; g.fill();
+        } else if (o.k === 'column') {
+          g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(o.x + 8, o.y + 12, o.r * 1.05, o.r * 0.78, 0, 0, TAU); g.fill();
+          g.beginPath(); g.arc(o.x, o.y + 8, o.r, 0, TAU); g.fillStyle = '#6b7186'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#3a4054'; g.stroke();
+          g.fillRect(o.x - o.r, o.y - 6, o.r * 2, 14); g.beginPath(); g.arc(o.x, o.y - 6, o.r, 0, TAU); g.fillStyle = '#a9afc2'; g.fill(); g.stroke();
+          g.strokeStyle = '#ffd23f'; g.lineWidth = 6; g.setLineDash([9, 9]); g.beginPath(); g.arc(o.x, o.y - 6, o.r - 7, 0, TAU); g.stroke(); g.setLineDash([]);
         } else if (o.k === 'barrel') {
           g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.ellipse(o.x + 5, o.y + 11, o.r, o.r * 0.7, 0, 0, TAU); g.fill();
           g.beginPath(); g.ellipse(o.x, o.y + 6, o.r, o.r * 0.8, 0, 0, TAU); g.fillStyle = '#7a2a2a'; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#2a0e0e'; g.stroke();

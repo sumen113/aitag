@@ -150,6 +150,7 @@
         <div class="controls card" id="controls">
           <div><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="keys-label">or arrow keys to move</span></div>
           <div><span class="keys"><kbd class="wide">Space</kbd></span><span class="keys-label">use your ability</span></div>
+          <div><span class="keys"><kbd>X</kbd><kbd>Q</kbd><kbd>R</kbd></span><span class="keys-label">Prop Hunt: swing or freeze · change prop · taunt</span></div>
           <div><span class="keys"><kbd class="wide">Enter</kbd></span><span class="keys-label">chat with the lobby</span></div>
           <div><span class="keys"><kbd class="wide">Touch</kbd></span><span class="keys-label">drag left to move, tap the button</span></div>
         </div>
@@ -318,7 +319,7 @@
         <label class="mono" for="svPassNew">Password (optional)</label>
         <input id="svPassNew" class="inp" type="text" maxlength="24" placeholder="leave empty for an open server" autocomplete="off" spellcheck="false">
         <label class="mono" for="svMode">Game mode</label>
-        <select id="svMode" class="inp"><option value="vote" selected>Vote every round</option><option value="classic">Classic tag</option><option value="infection">Infection (zombies)</option><option value="potato">Hot Potato</option></select>
+        <select id="svMode" class="inp"><option value="vote" selected>Vote every round</option><option value="classic">Classic tag</option><option value="infection">Infection (zombies)</option><option value="potato">Hot Potato</option><option value="prophunt">Prop Hunt (4+ players)</option></select>
         <label class="mono" for="svMap">Arena</label>
         <select id="svMap" class="inp"><option value="random">Random (rotates)</option></select>
         <p class="shop-note">Min 60 seconds. Bots use player slots and make room when humans join. Custom servers never give wins (wins only count in the main server). The server closes when everyone leaves.</p>
@@ -373,6 +374,8 @@
       <div id="toasts"></div>
       <div id="banner"></div>
       <div id="countdown"></div>
+      <div id="propChip" class="card hidden" aria-live="off"><span id="propIcon" class="prop-ico"></span><span class="prop-txt"><b id="propName">Barrel</b><span class="mono" id="propHint"></span></span></div>
+      <div id="blind" class="hidden" aria-live="polite"><b id="blindNum">20</b><span id="blindMsg">The hiders are hiding…</span></div>
       <div id="waiting" class="card hidden"></div>
 
       <canvas id="mini"></canvas>
@@ -391,6 +394,23 @@
           <span class="ring"></span>
           <span class="ab-body"><span class="ico-wrap"></span><span class="nm">Beam</span></span>
           <span class="key">HOLD E</span>
+        </button>
+        <button id="phAct" class="ability-btn sub hidden" type="button" aria-label="Swing at a suspect / hold to freeze">
+          <span class="ring"></span>
+          <span class="ab-body"><span class="ico-wrap"></span><span class="nm" id="phActNm">Swing</span></span>
+          <span class="key" id="phActKey">X</span>
+        </button>
+        <button id="phMorph" class="ability-btn sub hidden" type="button" aria-label="Change prop (copy the nearest one)">
+          <span class="ring"></span>
+          <span class="ab-body"><span class="ico-wrap"></span><span class="nm">Change</span></span>
+          <span class="cdn" id="phMorphCd"></span>
+          <span class="key">Q</span>
+        </button>
+        <button id="phTaunt" class="ability-btn sub hidden" type="button" aria-label="Taunt">
+          <span class="ring"></span>
+          <span class="ab-body"><span class="ico-wrap"></span><span class="nm">Taunt</span></span>
+          <span class="cdn" id="phTauntCd"></span>
+          <span class="key">R</span>
         </button>
         <button id="godTp" class="ability-btn sub hidden" type="button" aria-label="Teleport to a player">
           <span class="ring"></span>
@@ -463,6 +483,7 @@
   <script src="vendor/SplitText.min.js"></script>
   <script src="shared.js"></script>
   <script src="chars.js"></script>
+  <script src="props.js"></script>
   <script src="render.js"></script>
   <script src="audio.js"></script>
   <script src="site.js"></script>

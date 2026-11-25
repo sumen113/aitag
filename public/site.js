@@ -115,7 +115,7 @@
 
   /* ---- server browser ---- */
   const svList = $('svList'), svErr = $('svErr'), svForm = $('svForm'), svPick = $('svPick'), svFormErr = $('svFormErr');
-  const modeLbl = (m) => ({ classic: 'Classic', infection: 'Infection', potato: 'Hot Potato' }[m] || 'Vote each round');
+  const modeLbl = (m) => ({ classic: 'Classic', infection: 'Infection', potato: 'Hot Potato', prophunt: 'Prop Hunt' }[m] || 'Vote each round');
   const fmtTime = (s) => (s % 60 ? s + 's' : (s / 60) + ' min');
   let svTimer = 0, svMapsDone = false;
   const svPassForm = $('svPassForm');
@@ -744,9 +744,15 @@
 
 
   /* ============================== news + leaderboard ============================== */
-  const NEWS_VERSION = 'update-15';
+  const NEWS_VERSION = 'update-16';
   const NEWS = [
-    { v: 'Update 15 · Fair wins', tag: 'Newest', items: [
+    { v: 'Update 16 · Prop Hunt', tag: 'Newest', items: [
+      ['New mode: Prop Hunt', 'Hiders vs Seekers on a brand new arena, the Storehouse. Hiders disguise themselves as props and freeze among the clutter. Seekers are freed after a 20 second hide phase and have to find them. Needs just 4 players and is a normal vote option on the Regular server.'],
+      ['Swing at suspects', 'Seekers swing (click, X, J or the on-screen button) at anything that looks suspicious. Hit a real hider and they are found and join the hunt. Hit a harmless prop and you are stunned for a moment, so no wild swinging.'],
+      ['Hider powers', 'Hold X to freeze (perfectly still, no wobble), Q to copy a nearby prop, R to taunt for bonus points (it makes noise, so use it wisely), and Space to dash away. Hiders earn a point every second they stay hidden.'],
+      ['Last hider wins', 'Every hider that is found becomes a seeker, so the hunt snowballs. Seekers also get radar pings now and then that circle the area where a hider is. Hiders who survive the whole round get the end bonus.'],
+    ] },
+    { v: 'Update 15 · Fair wins', tag: '', items: [
       ['No wins in private servers', 'Custom (private) servers and practice no longer give wins. Wins only count in the main server, so the leaderboard stays fair.'],
       ['More than 2 players needed', 'In the main server, a round only counts for wins when there are at least 3 real players. Two people taking turns to win rounds no longer works.'],
       ['New: Test Server', 'A second always-on server, right under the Regular server. Wins count here too (3+ players needed) and everyone votes on the game mode every round, whatever the player count. It has two test-only modes that are not on the Regular server.'],

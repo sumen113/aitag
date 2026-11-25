@@ -9,6 +9,7 @@ const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 const T = require('./public/shared.js');
 const { Room } = require('./src/room');
+const { PropHunt } = require('./src/prophunt');
 const db = require('./src/db');
 const authLib = require('./src/auth');
 const adminLib = require('./src/admin');
@@ -256,6 +257,7 @@ wss.on('connection', (ws, req) => {
     c.player.muted = !!(admin && admin.isMuted(name, !!user));
     c.player.rtt = ws.rtt;
     ws.send(JSON.stringify({ t: 'init', id: c.player.id, solo: room.solo, map: room.map.id, roster: room.roster(), staff: !!c.player.staff, name, acct: !!user, sv: { name: room.name, regular: room.regular, max: room.max, time: room.roundTime, bots: room.botTarget, lock: !!room.lock, mode: room.modeOpt } }));
+    if (room.ph) ws.send(JSON.stringify(PropHunt.propsMsg(room)));        // Prop Hunt: the clutter already on the map
   }
 
   /** Change character / colour / skin in the window before a round (after the vote). Same ownership rules as joining. */

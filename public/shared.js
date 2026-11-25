@@ -34,6 +34,7 @@
     { id: 'classic',   name: 'Classic Tag', short: 'Classic', time: 0,   map: '',         boost: 1.07, blurb: 'One tagger. Stay untagged the longest to win.' },
     { id: 'infection', name: 'Infection',   short: 'Infection', time: 150, map: 'outbreak', boost: 1.0, blurb: 'Every tag infects. Be the last survivor. Plays on the big Outbreak map.' },
     { id: 'potato',    name: 'Hot Potato',  short: 'Potato',  time: 180, map: '',         boost: 1.1, blurb: 'Pass the potato before it blows up. Last one standing wins.' },
+    { id: 'prophunt',  name: 'Prop Hunt',   short: 'Prop Hunt', time: 210, map: 'storehouse', boost: 1.06, prop: true, min: 4, blurb: 'Hiders disguise as props and freeze. Seekers swing at suspects, and every hider found joins the hunt. Last hider standing wins.' },
     // test-server modes (never on the Regular server, in practice or in player-made servers): classic tag with a different way to score
     { id: 'proximity', name: 'Tagger Proximity', short: 'Proximity', time: 0, map: '', boost: 1.07, testOnly: true, blurb: 'The closer you are to IT, the faster you score. Risky, but even if you get tagged you can climb back to the top.' },
     { id: 'abilityhold', name: 'Ability Hold', short: 'Hold', time: 0, map: '', boost: 1.07, testOnly: true, hold: true, blurb: 'Hold your ability: every second you hold is one more use. Three seconds of frog is three jumps, six seconds of owl is six clones.' },
@@ -49,6 +50,33 @@
   const POTATO_START = 6;                                          // fuse seconds: always the same, however many passes or eliminations (late rounds are already hard with few players left)
   const potatoFuse = () => POTATO_START;
   const MODE_MIN_PLAYERS = 7;                                      // Infection and Hot Potato need a crowd; below this everything is classic tag
+  /** Players a mode needs before it is offered / allowed (Prop Hunt works with a small group, Infection and Hot Potato want a crowd). */
+  const modeMin = (id) => { const m = MODE_BY_ID[id]; return m && m.min ? m.min : MODE_MIN_PLAYERS; };
+  const MIN_SPECIAL = Math.min(...MODES.filter((m) => m.id !== 'classic' && !m.testOnly).map((m) => modeMin(m.id)));      // below this nothing but classic tag is on offer
+
+  /* ------------------------------- Prop Hunt ------------------------------ */
+  // Hiders are disguised as one of these props; the same props are scattered around the arena as harmless clutter (identical art), so a seeker can never be sure.
+  // p.pr = 1 + index (0 = not a hider), p.pv = which of 16 turns it is drawn at (a hider copies a nearby prop's turn too, so it matches exactly).
+  const PROPS = [
+    { id: 'barrel', name: 'Barrel', r: 19 }, { id: 'crate', name: 'Crate', r: 20 }, { id: 'sack', name: 'Sack', r: 18 }, { id: 'plant', name: 'Potted plant', r: 17 },
+    { id: 'chair', name: 'Chair', r: 17 }, { id: 'bucket', name: 'Bucket', r: 15 }, { id: 'cone', name: 'Cone', r: 14 }, { id: 'lamp', name: 'Floor lamp', r: 15 },
+    { id: 'toolbox', name: 'Toolbox', r: 17 }, { id: 'globe', name: 'Globe', r: 18 },
+  ];
+  const PH = {
+    HIDE: 20,                    // seconds the seekers are blindfolded and held at the start while hiders scatter
+    SWING_CD: 0.8, SWING_R: 74, SWING_DOT: 0.5, SWING_NEAR: 26,      // seeker swing: cooldown, reach beyond the body, cone (cos of half-angle), and "anything this close is hit whichever way you face"
+    MISS_STUN: 1.25,             // swinging at harmless clutter leaves the seeker dizzy
+    FIND_LOCK: 1.1, FIND_PTS: 30,// a found hider joins the seekers after a moment; the seeker who found them scores this
+    DASH_CD: 7, DASH_T: 0.22, DASH_SP: 640,            // hider dash
+    MORPH_CD: 3, MORPH_R: 120,   // hider: copy the nearest prop within this distance
+    TAUNT_CD: 12, TAUNT_PTS: 5,  // hider: taunt (a noise that tells everyone roughly where, worth points)
+    PING_FIRST: 55, PING_EVERY: 40, PING_R: 270,      // radar ping: after this long, then repeatedly, a circle shows roughly where one hider is
+    HIDER_SPEED: 0.94,           // hiders are a touch slower than seekers (who also get the mode's speed boost)
+    CLUTTER_MIN: 80, CLUTTER_PER: 12, CLUTTER_MAX: 190,
+  };
+  const PROP_DEFS = PROPS.map((p) => ({ id: 'prop', fx: 'pdash', name: p.name, species: p.name, ability: 'Dash', cd: PH.DASH_CD, dur: PH.DASH_T, speed: PH.HIDER_SPEED, radius: p.r }));
+  /** A hider's body: the prop's collision size (and the dash as its one ability). */
+  const hiderDef = (p) => PROP_DEFS[(p.pr | 0) - 1] || null;
 
   /* ----------------------------- characters ----------------------------- */
   // color index 0 = the character's natural color
@@ -445,6 +473,18 @@
     return { id: 'pinball', name: 'Pinball Palace', blurb: 'Bumpers kick you around, flipper pads fire you back.', w: 2000, h: 1300, theme: 'pinball', baseIce: false, obs, zones };
   }
 
+  /* Storehouse: the Prop Hunt arena. Long shelf aisles, pallet stacks, columns and shipping containers: plenty of corners, and room for clutter in every one. */
+  function buildStorehouse() {
+    const obs = [], zones = [];
+    const rows = [[300, [260, 800, 1460, 2000]], [620, [420, 960, 1620, 2160]], [940, [260, 800, 1460, 2000]], [1260, [420, 960, 1620, 2160]]];
+    for (const [y, xs] of rows) for (const x of xs) obs.push({ t: 'r', x, y, w: 340, h: 44, k: 'shelf' });
+    for (const [x, y] of [[1300, 470], [1300, 1130], [130, 790], [2470, 790]]) obs.push({ t: 'c', x, y, r: 30, k: 'column' });
+    for (const [x, y, w, h] of [[1220, 740, 160, 110], [150, 120, 80, 80], [250, 120, 80, 80], [150, 220, 80, 80], [2270, 1500, 80, 80], [2370, 1500, 80, 80], [2370, 1400, 80, 80], [2370, 120, 80, 80], [2270, 120, 80, 80], [150, 1500, 80, 80]])
+      obs.push({ t: 'r', x, y, w, h, k: w === 160 ? 'pallet' : 'bigcrate' });
+    obs.push({ t: 'r', x: 620, y: 1500, w: 320, h: 110, k: 'container' }, { t: 'r', x: 1660, y: 1500, w: 320, h: 110, k: 'container' }, { t: 'r', x: 1040, y: 110, w: 520, h: 40, k: 'shelf' });
+    return { id: 'storehouse', name: 'Storehouse', blurb: 'A warehouse full of aisles, crates and clutter. Made for Prop Hunt.', w: 2600, h: 1700, theme: 'storehouse', baseIce: false, obs, zones, big: true };
+  }
+
   /* Outbreak: a big city for Infection. Streets 240 px wide, blocks with alleys, parked cars, barrels and a central plaza. */
   function buildCity() {
     const obs = [], W = 3600, H = 2400, M = 200, ST = 240, cols = 5, rows = 3;
@@ -574,7 +614,7 @@
   }
 
   const MAPS = [buildPark(), buildNeon(), buildFrost(), buildCandy(), buildStation(), buildReef(), buildFactory(), buildPinball()];       // the vote / rotation pool
-  const BIG_MAPS = [buildCity()];                                                         // only used by Infection
+  const BIG_MAPS = [buildCity(), buildStorehouse()];                                      // only used by Infection (Outbreak) and Prop Hunt (Storehouse)
   const MAP_BY_ID = {};
   for (const m of MAPS.concat(BIG_MAPS)) {
     MAP_BY_ID[m.id] = m;
@@ -584,11 +624,11 @@
 
   /* ------------------------- player simulation -------------------------- */
   // The subset of a player's state that is simulated identically client + server.
-  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by', 'z', 'bm', 'hold', 'rep', 'repT', 'rax', 'ray'];
+  const SIM = ['x', 'y', 'vx', 'vy', 'fx', 'fy', 'cd', 'abT', 'adx', 'ady', 'stun', 'boostT', 'tp', 'imm', 'lock', 'it', 'out', 'aux', 'bx', 'by', 'z', 'bm', 'hold', 'rep', 'repT', 'rax', 'ray', 'pr', 'mt', 'tt'];
   const rnd = (v) => Math.round(v * 1000) / 1000;
 
   function newSim(id, c, x, y) {
-    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0, z: 0, bm: 0, hold: 0, rep: 0, repT: 0, rax: 0, ray: 0 };
+    return { id, c, x, y, vx: 0, vy: 0, fx: 1, fy: 0, cd: 0, abT: 0, adx: 1, ady: 0, stun: 0, boostT: 0, tp: 0, imm: 0, lock: 0, it: 0, out: 0, aux: 0, bx: 0, by: 0, z: 0, bm: 0, hold: 0, rep: 0, repT: 0, rax: 0, ray: 0, pr: 0, mt: 0, tt: 0 };
   }
   function packSim(p) { const a = new Array(SIM.length); for (let i = 0; i < SIM.length; i++) a[i] = rnd(+p[SIM[i]] || 0); return a; }
   function unpackSim(p, a) { for (let i = 0; i < SIM.length; i++) p[SIM[i]] = a[i]; }
@@ -604,6 +644,7 @@
       case 'ghost': case 'cat': case 'robot': p.abT = def.dur; break;
       case 'penguin': p.abT = def.dur; p.vx = dx * 420; p.vy = dy * 420; break;
       case 'star': p.abT = def.dur; p.adx = dx; p.ady = dy; break;
+      case 'prop': p.abT = def.dur; p.adx = dx; p.ady = dy; break;      // a hider's dash
       case 'mole': p.abT = def.dur; break;           // underground: untaggable until the dirt flies (see stepPlayer / server)
       case 'donkey': p.boostT = 0.45; break;         // the kick itself is resolved by the server; recoil lunges the donkey forward
       case 'bird': p.boostT = 0.8; break;           // the gale itself is resolved by the server; the bird glides off in a burst
@@ -626,9 +667,11 @@
    * ctx = {map, goos}. ev (optional) collects events for the caller.
    */
   function stepPlayer(p, inp, ctx, ev) {
-    const map = ctx.map, def = CHARS[p.c], dt = DT, r = def.radius;
+    const map = ctx.map, hid = ctx.prop && p.pr > 0 && !p.it ? hiderDef(p) : null, def = hid || CHARS[p.c], dt = DT, r = def.radius;      // Prop Hunt: a hider moves like their prop, not their character
     const wasDig = def.id === 'mole' && p.abT > 0;
     if (p.cd > 0) p.cd = Math.max(0, p.cd - dt);
+    if (p.mt > 0) p.mt = Math.max(0, p.mt - dt);
+    if (p.tt > 0) p.tt = Math.max(0, p.tt - dt);
     if (p.abT > 0) p.abT = Math.max(0, p.abT - dt);
     if (p.stun > 0) p.stun = Math.max(0, p.stun - dt);
     if (p.boostT > 0) p.boostT = Math.max(0, p.boostT - dt);
@@ -651,6 +694,8 @@
     if (len > 0.15) { p.fx = mx / len; p.fy = my / len; }
     const stunned = p.stun > 0;
     let press = !!inp.a, aimInp = inp;
+    const frz = !!hid && !p.out && !stunned && !press && p.abT <= 0 && ((inp.h | 0) & 8) !== 0;     // Prop Hunt: hold to freeze. A frozen hider is scenery: no movement, no shoving
+    if (frz) { mx = my = 0; len = 0; p.vx = p.vy = 0; }
     if (ctx.hold) {                                            // Ability Hold (Test Server): hold to charge, let go and it happens once per second held (a tap is one use)
       const special = (def.id === 'bat' && p.aux > 0) || ((def.id === 'cat' || def.id === 'mole') && p.abT > 0);      // second-press moves (recall, pounce, pop up) stay plain taps
       const down = (inp.h & 4) !== 0 && !stunned && !p.out;
@@ -697,6 +742,7 @@
     const inLeap = p.abT > 0 && id === 'frog';
     const inPhase = p.abT > 0 && id === 'ghost';
     const inPounce = id === 'cat' && p.aux > 0;
+    const inPDash = id === 'prop' && p.abT > 0;
     const inSlide = id === 'penguin' && p.abT > 0;
     const under = id === 'mole' && p.abT > 0;
     if (id === 'star' && p.abT > 0 && stunned) p.abT = 0;      // a stun uncurls Andy
@@ -732,8 +778,8 @@
     if (p.boostT > 0) maxSp *= 1.75;
     if (id === 'god') { if (godAir) maxSp *= 1.18; if (p.bm) maxSp *= 0.6; }
 
-    if (inDash || inLeap || inPounce) {
-      const sp = inDash ? 800 : inPounce ? 700 : 520;
+    if (inDash || inLeap || inPounce || inPDash) {
+      const sp = inDash ? 800 : inPounce ? 700 : inPDash ? PH.DASH_SP : 520;
       p.vx = p.adx * sp; p.vy = p.ady * sp;
     } else if (inRoll) {
       if (len > 0.15) {                                            // gentle steering: bend the roll toward the stick
@@ -776,7 +822,7 @@
   }
 
   return {
-    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, potatoFuse, MODE_MIN_PLAYERS, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
+    TICK, DT, MAX_PLAYERS, BASE_SPEED, IT_BOOST, ROUND_TIME, COUNTDOWN, PICK_TIME, RESULTS_TIME, HEAD_START, TWO_IT_AT, itCountFor, VOTE_TIME, MODES, MODE_BY_ID, classicLike, PROX_MIN, PROX_MAX, PROX_RANGE, TAG_POINTS, proxRate, TEST_NAME, POTATO_START, potatoFuse, MODE_MIN_PLAYERS, modeMin, MIN_SPECIAL, PROPS, PH, PROP_DEFS, hiderDef, SEED_SPEED, SEED_RANGE, SEED_R, TAG_IMMUNITY, TAG_LOCK, TAG_REACH, LAG_COMP_MAX, STATE,
     COLORS, COLOR_NAMES, CUSTOM_BASE, CUSTOM_MAX, CUSTOM_TONES, cleanColor, cleanColorList, colorFor, customK, colorName, hslHex, HATS, cleanHat, HOLD_MAX, CHARS, PUBLIC_CHARS, SECRET_SKINS, skinPool, GOD_RISE, GOD_FALL, GOD_ZMAX, GOD_AIR, GOD_BEAM_W, GOD_TP_CD, canUseChar, STARTERS, SHOP, SHOP_BY_ID, titleColor, titleInk, STARTER_ITEMS, ownsChar, RARITIES, SKIN_THEMES, SKIN_THEME_BY_ID, SKINS, SKIN_BY_ID, skinId, parseSkin, cleanSkin, ownsSkin, skinName, CHEST_TIERS, CHEST_ORDER, PITY, GLITTER_DUP, GLITTER_CRAFT, DAILY, dailyTier, MAPS, BIG_MAPS, MAP_BY_ID, SIM,
     SERVER_LIMITS, REGULAR_NAME, validateServer, validateName, validateUsername, validatePassword, validateEmail, cleanChat, clamp, mulberry32, circleFree, collide, clampBounds, inZone, newSim, packSim, unpackSim, stepPlayer,
   };

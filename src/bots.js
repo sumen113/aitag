@@ -3,6 +3,7 @@
    Chasers follow a path field toward their target; runners pick a "safe" cell
    they can reach before the tagger does. Bots use their characters' abilities. */
 const T = require('../public/shared.js');
+const { PropHunt } = require('./prophunt');
 
 const CS = 40;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -171,7 +172,115 @@ function botAbility(room, p, itp, d, los, target) {
   if (use && Math.random() < DIFFS[room.diff || 'normal'].abil) { p.input.a = 1; if (aim) setDir(p, aim.x + aim.vx * 0.15, aim.y + aim.vy * 0.15, 0); }
 }
 
+
+/* ------------------------------- Prop Hunt bots ------------------------------- */
+// Bots play fair: a seeker bot can't tell a hider from clutter. It sweeps the clutter, goes for anything that moves, and checks around noises and radar pings.
+// A hider bot picks a spot among the clutter, copies a nearby prop, freezes, and runs for a better spot when a seeker gets close.
+const FEAR = { easy: 230, normal: 170, hard: 130 };
+function walkTo(room, p, ai, x, y, wob) {
+  const nav = getNav(room.map);
+  if (!ai.dist || ai.dist.length !== nav.n) { ai.dist = new Int16Array(nav.n); ai.par = new Int32Array(nav.n); }
+  const r = T.hiderDef(p) ? T.hiderDef(p).radius : T.CHARS[p.c].radius;
+  if (lineClear(room.map, p.x, p.y, x, y, r)) { setDir(p, x, y, wob); return; }
+  nav.bfs(nav.idx(x, y), ai.dist, ai.par, 9999);
+  const wp = nav.follow(ai.dist, nav.idx(p.x, p.y), 3);
+  if (wp) setDir(p, wp[0], wp[1], wob); else setDir(p, x, y, wob);
+}
+
+function thinkHider(room, p, ai) {
+  const ph = room.ph, st = ai.hs || (ai.hs = { spot: null, mode: 'pick', until: 0 }), df = DIFFS[room.diff || 'normal'];
+  const seekers = room.itPlayers().filter((q) => !q.out && !q.gone);
+  let near = null, nd = 1e9;
+  for (const q of seekers) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < nd) { nd = d; near = q; } }
+  const clutter = ph.clutter;
+  const pickSpot = () => {
+    let best = null, bs = -1e9;
+    for (let k = 0; k < 10; k++) {
+      const c = clutter[(Math.random() * clutter.length) | 0]; if (!c) continue;
+      let dens = 0; for (const o of clutter) if (Math.hypot(o.x - c.x, o.y - c.y) < 130) dens++;
+      let sd = 1e9; for (const q of seekers) sd = Math.min(sd, Math.hypot(q.x - c.x, q.y - c.y));
+      const s = dens * 2 + Math.min(sd, 900) / 40 - Math.hypot(c.x - p.x, c.y - p.y) / 120 + Math.random() * 4;
+      if (s > bs) { bs = s; best = c; }
+    }
+    return best;
+  };
+  const fleeing = st.mode === 'flee';
+  if (near && nd < FEAR[room.diff || 'normal'] && !fleeing && lineClear(room.map, p.x, p.y, near.x, near.y, 10)) {      // a seeker is right here: bolt
+    st.mode = 'flee'; st.spot = null; st.until = room.tickN + 150;
+    p.input.h = 0; if (p.cd <= 0 && nd < 130) p.input.a = 1;
+    const a = Math.atan2(p.y - near.y, p.x - near.x); setDir(p, p.x + Math.cos(a) * 200, p.y + Math.sin(a) * 200, 0.2);
+    return;
+  }
+  if (st.mode === 'pick' || (fleeing && (room.tickN > st.until || !st.spot))) {
+    const c = pickSpot(); st.spot = c ? { x: c.x + (Math.random() - 0.5) * 30, y: c.y + (Math.random() - 0.5) * 30 } : null; st.mode = 'go'; st.until = room.tickN + 900;
+  }
+  if (st.mode === 'go') {
+    p.input.h = 0;
+    if (!st.spot) { p.input.x = p.input.y = 0; return; }
+    if (fleeing || near && nd < 260) { /* keep moving */ }
+    const d = Math.hypot(st.spot.x - p.x, st.spot.y - p.y);
+    if (d < 70 && p.mt <= 0) PropHunt.morph(room, p);                                  // blend in with whatever is next to us
+    if (d < 26 || room.tickN > st.until) { st.mode = 'hold'; st.until = room.tickN + 400 + ((Math.random() * 900) | 0); p.input.x = p.input.y = 0; p.input.h = 8; return; }
+    walkTo(room, p, ai, st.spot.x, st.spot.y, 0.1);
+    if (near && nd < 300 && p.cd <= 0 && nd < 120) p.input.a = 1;
+    return;
+  }
+  if (st.mode === 'flee') {
+    p.input.h = 0;
+    if (near && nd < 200) { const a = Math.atan2(p.y - near.y, p.x - near.x); setDir(p, p.x + Math.cos(a) * 220, p.y + Math.sin(a) * 220, 0.3); if (p.cd <= 0 && nd < 110) p.input.a = 1; }
+    else { st.mode = 'pick'; }
+    return;
+  }
+  // hold: scenery. An occasional taunt when nobody is anywhere near; relocate now and then so a long round isn't just standing still
+  p.input.x = p.input.y = 0; p.input.h = 8;
+  if (ph.hide <= 0 && p.tt <= 0 && (!near || nd > 520) && Math.random() < 0.012 * df.abil) { p.input.h = 0; PropHunt.taunt(room, p); p.input.h = 8; }
+  if (room.tickN > st.until && (!near || nd > 600)) { st.mode = 'pick'; p.input.h = 0; }
+}
+
+function thinkSeeker(room, p, ai) {
+  const ph = room.ph, st = ai.ss || (ai.ss = { tgt: null, until: 0, cool: 0 });
+  if (ph.hide > 0 || p.stun > 0 || p.lock > 0) { p.input.x = p.input.y = 0; return; }
+  const hiders = [...room.players.values()].filter((q) => PropHunt.isHider(q) && !q.wait);
+  const pickTarget = () => {
+    for (const q of hiders) {                                               // anything that moves gets a closer look
+      const sp = Math.hypot(q.vx, q.vy), d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (sp > 70 && d < 480 && lineClear(room.map, p.x, p.y, q.x, q.y, 10)) return { x: q.x, y: q.y, live: q };
+    }
+    const cl = ph.clutter; if (!cl.length) return null;
+    const noise = ph.noise && room.tickN - ph.noise.at < 900 ? ph.noise : null;
+    let best = null, bs = 1e9;
+    for (let k = 0; k < 8; k++) {
+      const c = cl[(Math.random() * cl.length) | 0];
+      let s = Math.hypot(c.x - p.x, c.y - p.y);
+      if (noise) s = Math.hypot(c.x - noise.x, c.y - noise.y) * 0.5 + (Math.hypot(c.x - noise.x, c.y - noise.y) > noise.r ? 600 : 0) + s * 0.2;
+      if (s < bs) { bs = s; best = c; }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  };
+  if (!st.tgt || room.tickN > st.until) { st.tgt = pickTarget(); st.until = room.tickN + 420; }
+  if (!st.tgt) { p.input.x = p.input.y = 0; return; }
+  if (st.tgt.live) { st.tgt.x = st.tgt.live.x; st.tgt.y = st.tgt.live.y; }
+  const d = Math.hypot(st.tgt.x - p.x, st.tgt.y - p.y);
+  if (d < 70) {                                                             // close enough: turn and swing
+    p.fx = (st.tgt.x - p.x) / (d || 1); p.fy = (st.tgt.y - p.y) / (d || 1);
+    p.input.x = p.input.y = 0;
+    PropHunt.swing(room, p); st.tgt = null;
+    return;
+  }
+  walkTo(room, p, ai, st.tgt.x, st.tgt.y, 0.12);
+}
+
+function thinkPropBot(room, p) {
+  if (room.state !== T.STATE.PLAY || p.out || !room.ph) { p.input.x = p.input.y = 0; p.input.a = 0; p.input.h = 0; return; }
+  const ai = p.ai || (p.ai = { next: 0, tgt: -1, wp: null, wpUntil: 0 });
+  if (room.tickN < ai.next) return;
+  const df = DIFFS[room.diff || 'normal']; WOB = df.wobble;
+  ai.next = room.tickN + df.think[0] + ((Math.random() * (df.think[1] - df.think[0])) | 0);
+  if (p.it) { p.input.h = 0; thinkSeeker(room, p, ai); } else thinkHider(room, p, ai);
+}
+
 function thinkBot(room, p) {
+  if (room.mode === 'prophunt') { thinkPropBot(room, p); return; }
   if (room.state !== T.STATE.PLAY || p.out) { p.input.x = 0; p.input.y = 0; p.input.a = 0; return; }
   const ai = p.ai || (p.ai = { next: 0, tgt: -1, wp: null, wpUntil: 0 });
   if (room.tickN < ai.next) return;

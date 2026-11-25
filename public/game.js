@@ -8,7 +8,7 @@
   const clamp = C.clamp, TAU = Math.PI * 2;
   const q2 = (v) => Math.round(v * 100) / 100;
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8', city: '#b9bcc6', reef: '#e8fdff', factory: '#b9bcc6', pinball: '#ffd666' };
+  const DUST = { park: '#d9c58e', neon: '#5cf2ff', frost: '#ffffff', candy: '#ff9cc8', station: '#aab4d8', city: '#b9bcc6', reef: '#e8fdff', factory: '#b9bcc6', pinball: '#ffd666', storehouse: '#c9ccd6' };
   const FONT = "'Bricolage Grotesque', system-ui, sans-serif";
   const touchy = window.matchMedia && matchMedia('(pointer: coarse)').matches;
 
@@ -23,6 +23,7 @@
     vis: new Map(), bubbles: new Map(), muted: new Set(), acct: false, t: 0, ping: 0, jit: 0, snapInt: 33, lastArr: 0, lastTs: 0, delay: 100, lastSend: 0,
     W: 0, H: 0, dpr: 1, g: null,
     abilityQueued: false, keys: {}, joy: { active: false, id: -1, x: 0, y: 0, ox: 0, oy: 0 },
+    props: [], propsSeq: -1, hide: 0, hideAt: 0, pings: [], fx: [], wob: new Map(), phWin: '', myPv: 0, swingQ: false, tauntQ: false, morphQ: false, actHeld: false, swT: 0,
     lastBoard: 0, lastCount: -1, lastSecTick: -1, sendTimer: 0, boardOrder: '', wasReady: true, kicked: null, joinResolve: null,
   };
   const Game = (window.Game = {});
@@ -56,6 +57,7 @@
     switch (m.t) {
       case 'init': onInit(m); if (G.joinResolve) G.joinResolve({ ok: true }); break;
       case 'roster': onRoster(m.ps); break;
+      case 'props': G.props = m.c.map((a) => ({ t: a[0], x: a[1], y: a[2], v: a[3] })); G.propsSeq = m.seq; G.wob.clear(); G.pings = []; G.fx = []; break;
       case 's': onSnapshot(m); break;
       case 'ev': for (const e of m.e) onEvent(e); break;
       case 'pg': { const rtt = performance.now() - m.ts; G.ping = G.ping ? G.ping * 0.7 + rtt * 0.3 : rtt; $('ping').textContent = Math.round(G.ping); break; }
@@ -73,7 +75,7 @@
     G.id = m.id; G.solo = !!m.solo; G.acct = !!m.acct; G.staff = !!m.staff; if (m.name) G.sel.name = m.name;
     G.roster.clear(); onRoster(m.roster); kickMenu.classList.add('hidden');
     G.me = null; G.abHeld = false; G.god = { fly: false, beam: false }; G.pending = []; G.seq = 0; G.sendBuf = []; G.snaps = []; G.offset = null; G.err.x = G.err.y = 0; G.acc = 0;
-    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.ctx.hold = false; G.abHeld = false; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
+    G.vis.clear(); G.bubbles.clear(); G.muted.clear(); G.res = null; G.jit = 0; G.snapInt = 33; G.lastArr = 0; G.delay = 100; G.lastSend = 0; G.state = STATE.WAIT; G.lastCount = -1; G.boardOrder = ''; G.mode = 'classic'; G.ctx.hold = false; G.ctx.prop = false; G.props = []; G.hide = 0; G.pings = []; G.fx = []; G.wob.clear(); G.phWin = ''; G.myPv = 0; G.swT = 0; G.swingQ = G.tauntQ = G.morphQ = G.actHeld = false; lastAbFx = ''; lastPropKey = ''; G.abHeld = false; G.pt = new Map(); hideVote(true); hidePick(true); G.goos = []; G.decoys = []; G.ctx.goos = G.goos;
     rowEls.forEach((e) => e.remove()); rowEls.clear();
     setMap(C.MAP_BY_ID[m.map]);
     G.inGame = true; G.camSnap = true; pollBonus();
@@ -106,6 +108,8 @@
     const prev = G.state;
     G.state = m.s; G.tl = m.tl; G.tlAt = performance.now(); G.rd = m.rd; G.itId = m.it; G.res = m.res || null;
     G.mode = m.md || 'classic'; G.ctx.hold = !!(C.MODE_BY_ID[G.mode] && C.MODE_BY_ID[G.mode].hold); G.pt = new Map((m.pt || []).map((a) => [a[0], a[1]])); G.ptAt = performance.now();
+    G.ctx.prop = !!(C.MODE_BY_ID[G.mode] && C.MODE_BY_ID[G.mode].prop); G.hide = m.hd || 0; G.hideAt = performance.now(); G.phWin = m.pw || '';
+    if (!G.ctx.prop && (G.props.length || G.pings.length)) { G.props = []; G.pings = []; G.fx = []; }
     if (!G.map || G.map.id !== m.m) setMap(C.MAP_BY_ID[m.m]);
     const now = performance.now(), o = m.ts - now;
     if (G.lastArr) {                                    // measure arrival jitter -> adaptive interpolation delay
@@ -117,7 +121,7 @@
     G.offset = G.offset === null ? o : (o > G.offset ? o : G.offset + (o - G.offset) * 0.03);
     const by = new Map(); for (const e of m.p) by.set(e[0], e);
     G.snaps.push({ ts: m.ts, by }); if (G.snaps.length > 24) G.snaps.shift();
-    for (const e of m.p) { const r = G.roster.get(e[0]); if (r) { r.sc = e[9]; r.tg = e[10]; r.fl = e[7]; } }
+    for (const e of m.p) { const r = G.roster.get(e[0]); if (r) { r.sc = e[9]; r.tg = e[10]; r.fl = e[7]; } if (e[0] === G.id) G.myPv = e[13] | 0; }
     G.goos = m.g.map((a) => ({ id: a[0], x: a[1], y: a[2], r: a[3], o: a[4], ttl: a[5], s: a[6] }));
     G.ctx.goos = G.goos;
     G.pits = (m.pi || []).map((a) => ({ id: a[0], x: a[1], y: a[2], r: a[3], o: a[4], ttl: a[5] }));
@@ -152,11 +156,11 @@
     const sa = S[i], sb = S[i + 1], a = sa.by.get(id), b = sb ? sb.by.get(id) : null;
     if (a && b) {
       const t = clamp((rt - sa.ts) / (sb.ts - sa.ts || 1), 0, 1);
-      return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, vx: a[3] + (b[3] - a[3]) * t, vy: a[4] + (b[4] - a[4]) * t, fx: b[5], fy: b[6], fl: b[7], abT: b[8], alt: (a[11] || 0) + ((b[11] || 0) - (a[11] || 0)) * t };
+      return { x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, vx: a[3] + (b[3] - a[3]) * t, vy: a[4] + (b[4] - a[4]) * t, fx: b[5], fy: b[6], fl: b[7], abT: b[8], alt: (a[11] || 0) + ((b[11] || 0) - (a[11] || 0)) * t, pr: b[12] | 0, pv: b[13] | 0 };
     }
     const e = a || b; if (!e) return null;
     const dt = a && !b ? clamp((rt - sa.ts) / 1000, 0, 0.15) : 0;
-    return { x: e[1] + e[3] * dt, y: e[2] + e[4] * dt, vx: e[3], vy: e[4], fx: e[5], fy: e[6], fl: e[7], abT: e[8], alt: e[11] || 0 };
+    return { x: e[1] + e[3] * dt, y: e[2] + e[4] * dt, vx: e[3], vy: e[4], fx: e[5], fy: e[6], fl: e[7], abT: e[8], alt: e[11] || 0, pr: e[12] | 0, pv: e[13] | 0 };
   }
 
   /* ============================ HUD feedback (GSAP) ========================== */
@@ -206,6 +210,8 @@
     for (const e of G.ents || []) { if (!e.it || e.decoy || e.out || e.isMe) continue; gap = Math.min(gap, Math.hypot(e.x - me.x, e.y - me.y) - (CHARS[e.c].radius + CHARS[me.c].radius + C.TAG_REACH)); }
     return gap === Infinity ? C.PROX_MIN : C.proxRate(Math.max(0, gap));
   }
+  const PH_COL = ['#b07a4a', '#d3a35f', '#dcc89c', '#4fbf62', '#bf8650', '#9aaabc', '#ff7a21', '#f7e6b0', '#e0453f', '#4a95e6'];
+  let lastAbFx = '', lastPropKey = '';
   function onEvent(e) {
     switch (e.k) {
       case 'tag': {
@@ -224,7 +230,7 @@
         if (e.s === STATE.VOTE) { Sfx.play('voteOpen'); }
         else if (e.s === STATE.COUNT) {
           const md = C.MODE_BY_ID[e.md];
-          banner(md && md.id !== 'classic' ? md.name + '!' : `Round ${e.rd}`, md && md.id === 'infection' ? 'green' : md && md.id === 'potato' ? 'orange' : ''); Sfx.play('ready');
+          banner(md && md.id !== 'classic' ? md.name + '!' : `Round ${e.rd}`, md && (md.id === 'infection' || md.id === 'prophunt') ? 'green' : md && md.id === 'potato' ? 'orange' : ''); Sfx.play('ready');
         } else if (e.s === STATE.PLAY) {
           const its = e.its || [e.it], mine = its.includes(G.id);
           if (e.md === 'potato') {
@@ -233,6 +239,9 @@
           } else if (e.md === 'infection') {
             if (mine) { banner("YOU'RE PATIENT ZERO!", 'green'); flash(); Sfx.play('infect'); }
             else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} are infected!` : `${rname(its[0])} is infected!`, 'green'); Sfx.play('go'); }
+          } else if (e.md === 'prophunt') {
+            if (mine) { banner("YOU'RE A SEEKER!", 'red'); flash(); Sfx.play('youreIt'); toast(`Blindfolded for ${C.PH.HIDE}s while the hiders hide. Swing with X or click.`); }
+            else { banner('HIDE!', 'green'); Sfx.play('go'); toast(`Find a spot, copy a prop (Q) and freeze (hold X). Seekers are freed in ${C.PH.HIDE}s.`); }
           } else if (mine) { banner(its.length > 1 ? "YOU'RE IT! (two taggers)" : "YOU'RE IT!", 'red'); flash(); Sfx.play('youreIt'); }
           else { banner(its.length > 1 ? `${its.map(rname).join(' & ')} are IT!` : `${rname(its[0])} is IT!`, 'red'); Sfx.play('go'); }
         } else if (e.s === STATE.RESULTS) Sfx.play('win');
@@ -246,6 +255,35 @@
         feed([el('b', '', rname(e.id)), el('span', '', ' blew up!')], mineE);
         break; }
       case 'ab': if (SERVER_FX.has(e.n) || e.id !== G.id) abilityFx(e, e.id === G.id); break;
+      case 'swing': if (e.id !== G.id) { G.fx.push({ k: 'swing', x: e.x, y: e.y, dx: e.dx, dy: e.dy, t: G.t }); if (near(e.x, e.y)) Sfx.play('swing'); } break;
+      case 'found': {
+        const rb = G.roster.get(e.b), mineA = e.a === G.id, mineB = e.b === G.id, col = PH_COL[(e.pr - 1 + 10) % 10] || '#ffd23f';
+        Particles.burst(e.x, e.y, col, 24, 440, 8, 0.75); Particles.ring(e.x, e.y, 10, 120, '#ffd23f', 0.5, 8); Particles.puff(e.x, e.y + 6, '#fff', 20, 0.5);
+        for (let i = 0; i < 5; i++) Particles.star(e.x, e.y - 18, '#ffd23f', 12, 0.7, (Math.random() - 0.5) * 380, -120 - Math.random() * 220);
+        Particles.text(e.x, e.y - 34, 'FOUND!', '#fff', 22);
+        if (e.a) feed([el('span', '', rname(e.a)), el('span', '', ' found '), el('b', '', rb ? rb.n : '???')], mineA || mineB);
+        else feed([el('b', '', rb ? rb.n : '???'), el('span', '', ' joined the seekers')], mineB);
+        if (mineB) { banner('YOU WERE FOUND!', 'red'); flash(); G.shake = 14; Sfx.play('found'); toast('You are a seeker now. Help find the rest!'); }
+        else if (mineA) { banner(`Found ${rb ? rb.n : ''}! +${C.PH.FIND_PTS}`, ''); G.shake = 9; Sfx.play('found'); }
+        else if (near(e.x, e.y)) { G.shake = Math.max(G.shake, 4); Sfx.play('found'); }
+        break; }
+      case 'dud': {
+        G.wob.set(e.ci, G.t);
+        Particles.puff(e.x, e.y + 8, '#d9dbe6', 12, 0.4); for (let i = 0; i < 4; i++) Particles.star(e.x, e.y - 20, '#ffe27a', 8, 0.6, (Math.random() - 0.5) * 240, -80 - Math.random() * 100);
+        if (e.id === G.id) { toast('Just a prop! You are dizzy.'); G.shake = Math.max(G.shake, 8); Sfx.play('dud'); } else if (near(e.x, e.y)) Sfx.play('dud');
+        break; }
+      case 'taunt': {
+        for (let i = 0; i < 3; i++) Particles.ring(e.x, e.y, 8, 90 + i * 55, i % 2 ? '#ffd23f' : '#fff', 0.55 + i * 0.12, 5);
+        Particles.text(e.x, e.y - 46, ['HEY!', 'Boo!', 'Over here!', 'Tee hee!'][e.n & 3], '#ffd23f', 22);
+        if (e.id === G.id) toast(`Taunt! +${C.PH.TAUNT_PTS} points. They know roughly where you are.`);
+        Sfx.play('taunt', e.n); break; }
+      case 'morph':
+        Particles.puff(e.x, e.y + 8, '#fff', 16, 0.5); Particles.ring(e.x, e.y, 8, 60, '#7fe3d0', 0.4, 5);
+        for (let i = 0; i < 5; i++) Particles.star(e.x, e.y - 10, '#9ff0e0', 8, 0.6, (Math.random() - 0.5) * 260, -60 - Math.random() * 120);
+        if (e.id === G.id || near(e.x, e.y)) Sfx.play('morph'); break;
+      case 'nomorph': if (e.id === G.id) { toast('No prop close enough to copy. Get right next to one.'); Sfx.play('deny'); } break;
+      case 'ping': G.pings.push({ x: e.x, y: e.y, r: e.r, t: G.t }); toast('Radar ping! One hider is somewhere inside the circle.'); Sfx.play('ping'); break;
+      case 'seek': banner('SEEKERS RELEASED!', 'red'); Sfx.play('go'); if (G.me && !G.me.it) flash(); break;
       case 'pop': Particles.burst(e.x, e.y, '#fff', 14, 300, 6, 0.5); Particles.puff(e.x, e.y, '#ddd', 18, 0.5); if (near(e.x, e.y)) Sfx.play('pop'); break;
       case 'chat': onChat(e); break;
       case 'join': toast(`${e.n} joined`); Sfx.play('join'); break;
@@ -262,6 +300,9 @@
     const loud = local || near(x, y);
     if (POSE_FX.has(id)) { const v = visOf(e.id); Chars.pose(v, id, v.face || 1); }
     switch (id) {
+      case 'pdash':
+        Particles.puff(x, y + 12, '#d9dbe6', 12, 0.4); for (let i = 0; i < 4; i++) Particles.streak(x, y + 6, -e.dx, -e.dy, '#ffffff', 60 + Math.random() * 40, 0.3);
+        if (loud) Sfx.play('dash'); break;
       case 'spin':
         Particles.puff(x, y + 10, '#ffd9c7', 14, 0.45); Particles.ring(x, y + 8, 6, 62, '#ff9a7a', 0.4, 6);
         for (let i = 0; i < 6; i++) Particles.star(x, y, '#ffb199', 9, 0.6, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300);
@@ -376,8 +417,11 @@
     else if (isGod() && (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) { G.god.fly = true; Sfx.unlock(); e.preventDefault(); }      // God: hold to ascend
     else if (isGod() && e.code === 'KeyE') { G.god.beam = true; Sfx.unlock(); e.preventDefault(); }                                                          // God: hold for the beam of light
     else if (isGod() && e.code === 'KeyQ') { if (!e.repeat) toggleGodMenu(); e.preventDefault(); }                                                           // God: teleport menu
+    else if (G.ctx.prop && (e.code === 'KeyX' || e.code === 'KeyJ' || e.code === 'KeyZ')) { if (!e.repeat) G.swingQ = true; G.actHeld = true; Sfx.unlock(); e.preventDefault(); }      // Prop Hunt: swing (seeker) / hold to freeze (hider)
+    else if (G.ctx.prop && e.code === 'KeyQ') { if (!e.repeat) G.morphQ = true; Sfx.unlock(); e.preventDefault(); }                                         // Prop Hunt: change prop
+    else if (G.ctx.prop && e.code === 'KeyR') { if (!e.repeat) G.tauntQ = true; Sfx.unlock(); e.preventDefault(); }                                         // Prop Hunt: taunt
     else if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') { if (!e.repeat) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } e.preventDefault(); }
-    else if (/^Digit[1-6]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
+    else if (/^Digit[1-7]$/.test(e.code) && !voteEl.classList.contains('hidden')) { const n = +e.code.slice(5) - 1; voteBtns[n < 3 ? 'm' : 'd'][n < 3 ? n : n - 3]?.click(); e.preventDefault(); }
     else if (G.staff && e.code === 'KeyG') { if (!e.repeat && G.me && G.me.out) send({ t: 'staffjoin' }); e.preventDefault(); }                                 // staff: jump into a round you are out of (no points)
     else if (G.staff && e.code === 'KeyF') { if (!e.repeat) toggleKickMenu(); e.preventDefault(); }                                                           // staff: kick menu
     else if (e.code === 'KeyM') toggleMute();
@@ -387,9 +431,10 @@
     if (MOVE[e.code]) K[MOVE[e.code]] = false;
     if (e.code === 'Space' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') { G.god.fly = false; G.abHeld = false; }
     else if (e.code === 'KeyE') { G.god.beam = false; G.abHeld = false; }
+    if (e.code === 'KeyX' || e.code === 'KeyJ' || e.code === 'KeyZ') G.actHeld = false;
   });
   window.addEventListener('pagehide', () => closeWs());
-  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.god.fly = G.god.beam = false; G.abHeld = false; G.joy.active = false; $('joy').classList.add('hidden'); };
+  const releaseAll = () => { for (const k of Object.keys(K)) K[k] = false; G.god.fly = G.god.beam = false; G.abHeld = false; G.actHeld = false; G.joy.active = false; $('joy').classList.add('hidden'); };
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', () => { G.acc = 0; if (document.hidden) releaseAll(); });
 
@@ -397,7 +442,7 @@
   abBtn.addEventListener('pointerdown', (e) => { if (isGod()) G.god.fly = true; else { G.abilityQueued = true; G.abHeld = true; } Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
   for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) abBtn.addEventListener(ev, () => { G.god.fly = false; G.abHeld = false; });
   /* ===== God (staff only): three moves. Ascend = hold Space / the big button, Teleport = Q / its button (opens a player menu), Beam = hold E / its button ===== */
-  const isGod = () => !!G.me && CHARS[G.me.c].id === 'god';
+  const isGod = () => !!G.me && CHARS[G.me.c].id === 'god' && !(G.ctx.prop && G.me.pr > 0 && !G.me.it);      // a hider is a prop, not God
   const godBeamBtn = $('godBeam'), godTpBtn = $('godTp'), godMenu = $('godMenu');
   godBeamBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('beam'); godTpBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('tp');
   godBeamBtn.addEventListener('pointerdown', (e) => { G.god.beam = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
@@ -587,18 +632,36 @@
     const dx = G.cam.x + (mouse.x - G.W / 2) / G.zoom - G.me.x, dy = G.cam.y + (mouse.y - G.H / 2) / G.zoom - G.me.y, l = Math.hypot(dx, dy);
     return l < 8 ? null : [Math.round(dx / l * 100) / 100, Math.round(dy / l * 100) / 100];
   }
-  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !typing()) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } });
-  window.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button === 0) G.abHeld = false; });
+  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && isAvocado() && !G.ctx.prop && !typing()) { G.abilityQueued = true; G.abHeld = true; Sfx.unlock(); } });
+  window.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse' && e.button === 0) { G.abHeld = false; G.actHeld = false; } });
+  $('game').addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' && e.button === 0 && live() && G.ctx.prop && !typing()) { G.swingQ = true; G.actHeld = true; Sfx.unlock(); } });      // Prop Hunt: a click swings / freezes too
+  /* Prop Hunt touch buttons */
+  const phActBtn = $('phAct'), phMorphBtn = $('phMorph'), phTauntBtn = $('phTaunt');
+  phActBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('swing'); phMorphBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('morph'); phTauntBtn.querySelector('.ico-wrap').innerHTML = Chars.icon('taunt');
+  phActBtn.addEventListener('pointerdown', (e) => { G.swingQ = true; G.actHeld = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) phActBtn.addEventListener(ev, () => { G.actHeld = false; });
+  phMorphBtn.addEventListener('pointerdown', (e) => { G.morphQ = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
+  phTauntBtn.addEventListener('pointerdown', (e) => { G.tauntQ = true; Sfx.unlock(); e.preventDefault(); e.stopPropagation(); });
 
   /* ============================= simulation step ============================ */
-  const LOCAL_FX = new Set(['beam', 'tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
+  const LOCAL_FX = new Set(['pdash', 'beam', 'tele', 'dash', 'leap', 'phase', 'cloak', 'stomp', 'goo', 'decoy', 'shield', 'slide', 'echo', 'recall', 'pounce', 'spin', 'bounce', 'gust', 'seed', 'pit', 'burrow', 'surface', 'kick', 'stink']);
+  const hideLeft = () => Math.max(0, G.hide - (performance.now() - G.hideAt) / 1000);
   function simStep() {
     let x = (K.r ? 1 : 0) - (K.l ? 1 : 0), y = (K.d ? 1 : 0) - (K.u ? 1 : 0);
     if (G.joy.active) { const m = Math.hypot(G.joy.x, G.joy.y); if (m > 0.18) { x = q2(G.joy.x); y = q2(G.joy.y); } }
     let a = G.abilityQueued ? 1 : 0; G.abilityQueued = false;
     if (G.state === STATE.COUNT) { x = y = a = 0; }
+    const prop = G.ctx.prop && G.state === STATE.PLAY && !G.me.out;
+    if (prop && G.me.it && hideLeft() > 0.03) { x = y = a = 0; G.swingQ = G.tauntQ = G.morphQ = false; }      // seekers are blindfolded and held while the hiders scatter
+    G.swT = Math.max(0, G.swT - DT);
+    let ph = 0;                                                                                              // Prop Hunt buttons: 8 = swing (seeker, one frame) / freeze (hider, held), 16 = taunt, 32 = change prop
+    if (prop) {
+      if (G.me.it) { if (G.swingQ) { ph |= 8; if (G.swT <= 0 && G.me.stun <= 0 && G.me.lock <= 0) { G.swT = C.PH.SWING_CD; G.fx.push({ k: 'swing', x: G.me.x, y: G.me.y, dx: G.me.fx, dy: G.me.fy, t: G.t }); Sfx.play('swing'); } } }
+      else { if (G.actHeld) ph |= 8; if (G.tauntQ) ph |= 16; if (G.morphQ) ph |= 32; }
+    }
+    G.swingQ = G.tauntQ = G.morphQ = false;
     const inp = { s: ++G.seq, x, y, a };
-    if (G.state !== STATE.COUNT) { const h = (isGod() ? (G.god.fly ? 1 : 0) | (G.god.beam ? 2 : 0) : 0) | (G.ctx.hold && G.abHeld ? 4 : 0); if (h) inp.h = h; }
+    if (G.state !== STATE.COUNT) { const h = (isGod() ? (G.god.fly ? 1 : 0) | (G.god.beam ? 2 : 0) : 0) | (G.ctx.hold && G.abHeld ? 4 : 0) | ph; if (h) inp.h = h; }
     if (a || (inp.h & 4)) { const aim = mouseAim(); if (aim) { inp.ax = aim[0]; inp.ay = aim[1]; } }
     G.pending.push(inp); G.sendBuf.push(inp);
     if (G.pending.length > 180) G.pending.shift();
@@ -659,6 +722,7 @@
   }
 
   function drawEnt(g, e, t, dt, labels) {
+    if (e.pr > 0) { drawHider(g, e, t, dt, labels); return; }
     const def = CHARS[e.c], id = def.id, r = def.radius, s = r / 18, v = visOf(e.key);
     const sp = Math.hypot(e.vx, e.vy), spd = clamp(sp / 250, 0, 1);
     if (Math.abs(e.fx) > 0.3) v.face = e.fx > 0 ? 1 : -1;
@@ -796,6 +860,46 @@
     g.restore();
   }
 
+
+  /* ---------------------------------- Prop Hunt drawing ---------------------------------- */
+  const hiderSeen = (e) => e.isMe || (G.me && G.me.pr > 0 && !G.me.it);                      // hiders can see each other (and themselves); seekers and spectators only see props
+  function drawClutter(g, e, t) {
+    const c = e.clutter, w = G.wob.get(e.i); let rock = 0, sq = 0;
+    if (w !== undefined) { const age = G.t - w; if (age < 0.6) { const d = 1 - age / 0.6; rock = Math.sin(age * 34) * 0.28 * d; sq = Math.sin(age * 34) * 0.06 * d; } else G.wob.delete(e.i); }
+    Props.draw(g, c.t, c.x, c.y, c.v, rock || sq ? { rock, sq } : null);
+  }
+  /* A hider is drawn with exactly the same routine as the clutter. The one tell: a prop that is walking rocks from side to side. Frozen = perfectly still. */
+  function drawHider(g, e, t, dt, labels) {
+    const sp = Math.hypot(e.vx, e.vy), mv = clamp((sp - 25) / 150, 0, 1), v = visOf(e.key);
+    const rock = mv > 0 ? Math.sin(t * 15 + (v.ph || 0)) * 0.13 * mv : 0, sq = mv > 0 ? Math.sin(t * 30) * 0.035 * mv : 0;
+    const P = C.PROPS[e.pr - 1]; if (!P) return;
+    const seen = hiderSeen(e);
+    if (seen) { g.beginPath(); g.ellipse(e.x, e.y + P.r + 1, P.r * 1.3, P.r * 0.5, 0, 0, TAU); g.lineWidth = 3; g.strokeStyle = e.isMe ? 'rgba(255,255,255,.9)' : 'rgba(127,227,208,.85)'; g.setLineDash(e.isMe ? [] : [6, 5]); g.stroke(); g.setLineDash([]); }
+    Props.draw(g, e.pr - 1, e.x, e.y, e.pv, mv > 0 ? { rock, sq } : null);
+    if (seen && !e.out) labels.push({ e, x: e.x, y: e.y - P.r - 16, alpha: 1 });
+  }
+  function drawPings(g, t) {
+    G.pings = G.pings.filter((p) => G.t - p.t < 8);
+    for (const p of G.pings) {
+      const age = G.t - p.t, fade = clamp(1 - Math.max(0, age - 6) / 2, 0, 1), pul = 0.5 + 0.5 * Math.sin(t * 5);
+      g.save(); g.globalAlpha = fade;
+      g.beginPath(); g.arc(p.x, p.y, p.r, 0, TAU); g.fillStyle = 'rgba(255,210,63,' + (0.08 + 0.05 * pul) + ')'; g.fill();
+      g.lineWidth = 5; g.strokeStyle = 'rgba(255,210,63,.85)'; g.setLineDash([18, 12]); g.lineDashOffset = -t * 40; g.stroke(); g.setLineDash([]);
+      const rr = ((age * 0.8) % 1) * p.r; g.globalAlpha = fade * (1 - rr / p.r); g.lineWidth = 4; g.strokeStyle = '#fff'; g.beginPath(); g.arc(p.x, p.y, rr, 0, TAU); g.stroke();
+      g.restore();
+    }
+  }
+  function drawSwings(g, t) {
+    G.fx = G.fx.filter((f) => G.t - f.t < 0.26);
+    for (const f of G.fx) {
+      const age = (G.t - f.t) / 0.26, a0 = Math.atan2(f.dy, f.dx), half = Math.acos(C.PH.SWING_DOT), R = C.PH.SWING_R + 34;
+      g.save(); g.translate(f.x, f.y + 6); g.globalAlpha = 1 - age;
+      g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, R * (0.7 + 0.3 * age), a0 - half, a0 + half); g.closePath(); g.fillStyle = 'rgba(255,255,255,.22)'; g.fill();
+      g.lineWidth = 9 * (1 - age) + 2; g.lineCap = 'round'; g.strokeStyle = '#fff'; g.beginPath(); g.arc(0, 0, R * (0.7 + 0.3 * age), a0 - half * (1 - age * 0.3), a0 + half * (1 - age * 0.3)); g.stroke();
+      g.restore();
+    }
+  }
+
   function drawLabels(g, labels, t) {
     g.setTransform(G.dpr, 0, 0, G.dpr, 0, 0);
     g.textAlign = 'center'; g.lineJoin = 'round';
@@ -815,7 +919,7 @@
           g.font = `800 15px ${FONT}`; g.lineWidth = 4; g.strokeStyle = '#14122b'; const ft = f.toFixed(1); g.strokeText(ft, cx, sy - 54 + bob); g.fillStyle = danger ? '#ff6b6b' : '#fff'; g.fillText(ft, cx, sy - 54 + bob);
           lift = 32;
         } else {
-          const bob = Math.sin(t * 7) * 3, zed = G.mode === 'infection', txt = zed ? 'ZOMBIE' : 'IT';
+          const bob = Math.sin(t * 7) * 3, zed = G.mode === 'infection', txt = zed ? 'ZOMBIE' : G.mode === 'prophunt' ? 'SEEKER' : 'IT';
           g.fillStyle = zed ? '#3fbf5f' : '#ff4d5e'; g.strokeStyle = '#14122b'; g.lineWidth = 3;
           g.beginPath(); g.moveTo(sx - 9, sy - 26 + bob); g.lineTo(sx + 9, sy - 26 + bob); g.lineTo(sx, sy - 14 + bob); g.closePath(); g.stroke(); g.fill();
           g.font = `800 ${zed ? 12 : 14}px ${FONT}`; g.strokeText(txt, sx, sy - 31 + bob); g.fillStyle = '#fff'; g.fillText(txt, sx, sy - 31 + bob);
@@ -872,10 +976,11 @@
 
   function drawArrows(g, ents, t) {
     const me = ents[0]; if (!me || G.state !== STATE.PLAY) return;
+    if (G.ctx.prop && !(me.pr > 0)) return;                                                // Prop Hunt: seekers get no arrows to anyone
     let target = null, col = '#ff4d5e';
     if (!me.it || me.out) { let bd = 1e9; for (const e of ents) { if (!e.it || e.decoy || e === me || isCloaked(e)) continue; const d = Math.hypot(e.x - me.x, e.y - me.y); if (d < bd) { bd = d; target = e; } } }
     else { let bd = 1e9; for (const e of ents) { if (e === me || e.decoy || e.it || isCloaked(e)) continue; const d = Math.hypot(e.x - me.x, e.y - me.y); if (d < bd) { bd = d; target = e; } } col = '#2fd18b'; }
-    if (!target) return;
+    if (!target || (G.ctx.prop && Math.hypot(target.x - me.x, target.y - me.y) > 900)) return;       // hiders are only warned about seekers that are fairly close
     const [sx, sy] = project(target.x, target.y), pad = 54;
     if (sx > pad && sx < G.W - pad && sy > pad && sy < G.H - pad) return;
     const cx = G.W / 2, cy = G.H / 2, dx = sx - cx, dy = sy - cy, k = Math.min((cx - pad) / Math.abs(dx || 1e-6), (cy - pad) / Math.abs(dy || 1e-6));
@@ -886,7 +991,7 @@
 
   /* Anyone standing under an on-screen panel (scoreboard, chat, timer, minimap, buttons...) used to be impossible to see,
      so people hid behind the interface. Now a panel fades out while a player is behind it, so they stay visible and taggable. */
-  const HUD_FADE = '.hud-tools, #timerBox, #role, #bonusChip, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #godBeam, #godTp, #godMenu, #joy';
+  const HUD_FADE = '.hud-tools, #timerBox, #role, #bonusChip, #fuse, #boardWrap, #feed, #chatLog, #chatOpen, #chatForm, #quickChat, #waiting, #mini, #abilityBtn, #godBeam, #godTp, #godMenu, #phAct, #phMorph, #phTaunt, #propChip, #joy';
   let hudEls = null, hudRects = [], hudAt = 0, hudRectsAt = 0;
   function seeThrough(ents, dt) {
     hudAt -= dt; if (hudAt > 0) return; hudAt = 0.08;
@@ -898,7 +1003,7 @@
       if (r.width < 4 || r.height < 4 || !el.offsetParent) { el.classList.remove('hud-fade'); continue; }
       let under = false;
       for (const e of ents) {
-        if (isCloaked(e)) continue;
+        if (isCloaked(e) || (e.pr > 0 && !hiderSeen(e))) continue;
         const sx = (e.x - G.cam.x) * z + G.W / 2, sy = (e.y - G.cam.y) * z + G.H / 2;
         if (sx + 28 * z > r.left && sx - 28 * z < r.right && sy + 14 * z > r.top && sy - 56 * z < r.bottom) { under = true; break; }
       }
@@ -928,16 +1033,17 @@
     for (const goo of G.goos) MapRender.drawGoo(g, goo, t);
     for (const pit of G.pits) MapRender.drawPit(g, pit, t, pit.o === G.id);
     MapRender.drawObstacles(g, map, v, t);
+    drawPings(g, t);
 
     const ents = [], rt = srvNow() - G.delay;
-    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true, typing: iTyping(), alt: me.z || 0, beam: !!me.bm });
+    ents.push({ key: G.id, id: G.id, c: me.c, k: G.sel.k, h: G.sel.h, sk: G.sel.sk, name: G.sel.name, x: mx, y: my, vx: me.vx, vy: me.vy, fx: me.fx, fy: me.fy, it: !!me.it, out: !!me.out, stun: me.stun > 0, imm: me.imm > 0, abT: me.abT, boost: me.boostT > 0, isMe: true, typing: iTyping(), alt: me.z || 0, beam: !!me.bm, pr: G.ctx.prop ? me.pr | 0 : 0, pv: G.myPv });
     const last = G.snaps[G.snaps.length - 1];
     if (last) for (const id of last.by.keys()) {
       if (id === G.id) continue;
       const r = G.roster.get(id); if (!r) continue;
       const s = interp(id, rt); if (!s || (s.fl & 16)) continue;               // eliminated players and ones waiting for the next round are invisible ghosts
       if (inHide(s.x, s.y) && Math.hypot(s.x - mx, s.y - my) > HIDE_SEE) continue;      // in a bush and not close: out of sight
-      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), typing: !!(s.fl & 64), abT: s.abT, boost: false, alt: s.alt || 0, beam: !!(s.fl & 128) });
+      ents.push({ key: id, id, c: r.c, k: r.k, h: r.h, sk: r.sk, name: r.n, x: s.x, y: s.y, vx: s.vx, vy: s.vy, fx: s.fx, fy: s.fy, it: !!(s.fl & 1), stun: !!(s.fl & 2), imm: !!(s.fl & 4), afk: !!(s.fl & 8), typing: !!(s.fl & 64), abT: s.abT, boost: false, alt: s.alt || 0, beam: !!(s.fl & 128), pr: G.ctx.prop ? s.pr | 0 : 0, pv: s.pv | 0 });
     }
     const since = clamp((performance.now() - G.decoysAt) / 1000, 0, 0.2);
     for (const d of G.decoys) {
@@ -945,11 +1051,14 @@
       ents.push({ key: 'd' + d.id, id: d.o, decoy: true, c: d.c, k: d.k, sk: o && o.sk, name: o ? o.n : '', x: d.x + d.vx * since, y: d.y + d.vy * since, vx: d.vx, vy: d.vy, fx: d.vx / 215, fy: d.vy / 215, it: false, stun: false, imm: false, abT: 0, boost: false });
     }
     for (const e of ents) if (e.beam && !e.decoy) drawBeam(g, e, t, v);
-    const order = ents.slice().sort((p, q) => p.y - q.y), labels = [];
+    const order = ents.slice(), labels = [];
+    if (G.ctx.prop && G.props.length) for (let i = 0; i < G.props.length; i++) { const c = G.props[i]; if (c.x >= v.x0 - 60 && c.x <= v.x1 + 60 && c.y >= v.y0 - 80 && c.y <= v.y1 + 60) order.push({ clutter: c, i, x: c.x, y: c.y }); }
+    order.sort((p, q) => p.y - q.y);                                                       // clutter and disguised hiders are sorted together, so nothing gives a hider away
     for (const e of order) {
       if (e.x < v.x0 - 60 || e.x > v.x1 + 60 || e.y < v.y0 - 80 || e.y > v.y1 + 60) continue;
-      drawEnt(g, e, t, dt, labels);
+      if (e.clutter) drawClutter(g, e, t); else drawEnt(g, e, t, dt, labels);
     }
+    drawSwings(g, t);
     G.ents = ents; seeThrough(ents, dt);
     MapRender.drawCanopy(g, map, v, t, { x: mx, y: my });
     if (CHARS[me.c].id === 'bat' && me.aux > 0 && G.state !== STATE.RESULTS) drawBeacon(g, me, t);
@@ -987,8 +1096,9 @@
     const mc = $('mini'); if (!mc.width || !G.map) return;
     const g = mc.getContext('2d'), w = mc.width, h = mc.height, s = w / G.map.w;
     g.clearRect(0, 0, w, h); g.drawImage(MapRender.miniBase(G.map, 220), 0, 0, w, h);
+    for (const p of G.pings) { const fade = clamp(1 - Math.max(0, G.t - p.t - 6) / 2, 0, 1); if (G.t - p.t > 8) continue; g.beginPath(); g.arc(p.x * s, p.y * s, p.r * s, 0, TAU); g.fillStyle = 'rgba(255,210,63,' + 0.18 * fade + ')'; g.fill(); g.lineWidth = 1.6 * G.dpr; g.strokeStyle = 'rgba(255,210,63,' + 0.9 * fade + ')'; g.stroke(); }
     for (const e of ents) {
-      if (e.decoy || isCloaked(e)) continue;
+      if (e.decoy || isCloaked(e) || (e.pr > 0 && !hiderSeen(e))) continue;                      // seekers never see hiders on the map
       const x = e.x * s, y = e.y * s, col = Chars.colorOf(e.c, e.k);
       if (e.it) { g.beginPath(); g.arc(x, y, (6 + Math.sin(t * 6) * 1.5) * G.dpr, 0, TAU); g.fillStyle = 'rgba(255,60,90,.55)'; g.fill(); }
       g.beginPath(); g.arc(x, y, (e.isMe ? 4.6 : 3.6) * G.dpr, 0, TAU); g.fillStyle = col; g.fill(); g.lineWidth = (e.isMe ? 2 : 1.2) * G.dpr; g.strokeStyle = e.isMe ? '#fff' : '#14122b'; g.stroke();
@@ -1005,8 +1115,9 @@
   function updateHud() {
     const st = G.state, left = Math.max(0, G.tl - (performance.now() - G.tlAt) / 1000), me = G.me;
     const tb = $('timerBox');
-    $('stateLbl').textContent = ['Waiting', 'Get ready', 'Time left', 'Results', 'Voting'][st];
-    $('timer').textContent = st === STATE.PLAY ? fmt(left) : st === STATE.COUNT ? '•••' : st === STATE.RESULTS ? 'GG' : st === STATE.VOTE ? Math.ceil(left) : '--';
+    const hl = G.ctx.prop && st === STATE.PLAY ? hideLeft() : 0;
+    $('stateLbl').textContent = hl > 0 ? 'Seekers freed in' : ['Waiting', 'Get ready', 'Time left', 'Results', 'Voting'][st];
+    $('timer').textContent = hl > 0 ? Math.ceil(hl) : st === STATE.PLAY ? fmt(left) : st === STATE.COUNT ? '•••' : st === STATE.RESULTS ? 'GG' : st === STATE.VOTE ? Math.ceil(left) : '--';
     tb.classList.toggle('warn', st === STATE.PLAY && left <= 10);
     if (st === STATE.PLAY && left <= 10 && Math.ceil(left) !== G.lastSecTick) {
       G.lastSecTick = Math.ceil(left); Sfx.play('tick');
@@ -1030,7 +1141,12 @@
       cls = 'role ghost'; txt = waiting ? "Match in progress · you're in next round" : "You're out · spectating"; if (G.staff) txt += ' · press G to join (0 points)';
     } else if (st === STATE.PLAY) {
       const its = [...G.roster.values()].filter((r) => r.fl & 1 && r.id !== G.id);
-      if (mode === 'potato') {
+      if (mode === 'prophunt') {
+        const hid = [...G.roster.values()].filter((r) => !(r.fl & 49)).length;
+        if (isIt) { cls = 'role seeker'; txt = hl > 0 ? 'Blindfolded: the hiders are scattering' : me.stun > 0 ? 'Dizzy! That was only a prop…' : `Seek! Swing at suspects · ${hid} hider${hid === 1 ? '' : 's'} left`; }
+        else txt = me.pr > 0 ? (hl > 0 ? 'Find a spot, copy a prop, then freeze!' : hid <= 1 ? 'Last hider standing!' : `Stay hidden · ${hid} hiders left`) : `${hid} hider${hid === 1 ? '' : 's'} left`;
+        if (!isIt && me.pr > 0) cls = 'role hider';
+      } else if (mode === 'potato') {
         if (isIt) { cls = 'role potato'; txt = me.stun > 0 ? 'You have the potato · hold on…' : 'POTATO! Tag someone fast!'; }
         else txt = `Avoid the potato · ${alive} left`;
       } else if (mode === 'infection') {
@@ -1058,12 +1174,33 @@
       gsap.fromTo(role, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
     }
 
+    // Prop Hunt: blindfold, prop chip, extra buttons
+    const phOn = G.ctx.prop && st === STATE.PLAY && !me.out, isSeek = phOn && !!me.it, isHid = phOn && !me.it && me.pr > 0;
+    const blind = isSeek && hl > 0; $('blind').classList.toggle('hidden', !blind); if (blind) { const n = String(Math.ceil(hl)); if ($('blindNum').textContent !== n) $('blindNum').textContent = n; }
+    phActBtn.classList.toggle('hidden', !(isSeek || isHid)); phMorphBtn.classList.toggle('hidden', !isHid); phTauntBtn.classList.toggle('hidden', !isHid);
+    if (isSeek || isHid) {
+      const act = isSeek ? 'Swing' : 'Freeze', ico = isSeek ? 'swing' : 'freeze';
+      if ($('phActNm').textContent !== act) { $('phActNm').textContent = act; phActBtn.querySelector('.ico-wrap').innerHTML = Chars.icon(ico); }
+      phActBtn.classList.toggle('seek', isSeek); phActBtn.classList.toggle('on', isHid && G.actHeld);
+      const sp = isSeek ? (me.stun > 0 || hl > 0 ? 0 : 1 - G.swT / C.PH.SWING_CD) : 1; phActBtn.style.setProperty('--p', clamp(sp, 0, 1).toFixed(3)); phActBtn.classList.toggle('ready', isSeek ? sp >= 1 : !G.actHeld); phActBtn.classList.toggle('cd', isSeek && sp < 1);
+    }
+    if (isHid) {
+      phMorphBtn.style.setProperty('--p', (me.mt > 0 ? 1 - me.mt / C.PH.MORPH_CD : 1).toFixed(3)); phMorphBtn.classList.toggle('cd', me.mt > 0); phMorphBtn.classList.toggle('ready', me.mt <= 0);
+      const tauntWait = me.tt > 0 || hl > 0; phTauntBtn.style.setProperty('--p', (me.tt > 0 ? 1 - me.tt / C.PH.TAUNT_CD : hl > 0 ? 0 : 1).toFixed(3)); phTauntBtn.classList.toggle('cd', tauntWait); phTauntBtn.classList.toggle('ready', !tauntWait);
+      const mc = me.mt > 0 ? String(Math.ceil(me.mt)) : '', tc = me.tt > 0 ? String(Math.ceil(me.tt)) : ''; if ($('phMorphCd').textContent !== mc) $('phMorphCd').textContent = mc; if ($('phTauntCd').textContent !== tc) $('phTauntCd').textContent = tc;
+    }
+    const chip = $('propChip'); chip.classList.toggle('hidden', !isHid);
+    if (isHid) {
+      const key = me.pr + ':' + G.myPv;
+      if (key !== lastPropKey) { lastPropKey = key; $('propIcon').replaceChildren(Props.icon(me.pr - 1, 40)); $('propName').textContent = C.PROPS[me.pr - 1].name; $('propHint').textContent = touchy ? 'Hold Freeze to blend in' : 'Hold X freeze · Q change · R taunt'; }
+    } else lastPropKey = '';
+
     const w = $('waiting');
     if (st === STATE.WAIT && !G.solo) { if (w.classList.contains('hidden')) { w.classList.remove('hidden'); w.textContent = 'Waiting for one more player…'; gsap.fromTo(w, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }); } }
     else w.classList.add('hidden');
 
     // ability button
-    const def = CHARS[me.c], god = def.id === 'god', p = me.cd > 0 && !god ? 1 - me.cd / def.cd : 1;
+    const def = (G.ctx.prop && me.pr > 0 && !me.it && C.hiderDef(me)) || CHARS[me.c], god = def.id === 'god', p = me.cd > 0 && !god ? 1 - me.cd / def.cd : 1;
     abBtn.style.setProperty('--p', p.toFixed(3));
     godBeamBtn.classList.toggle('hidden', !god); godTpBtn.classList.toggle('hidden', !god);
     if (god) {                                                    // three moves: the big button is Ascend (hold); Teleport and Beam sit beside it
@@ -1074,6 +1211,7 @@
     } else if (!godMenu.classList.contains('hidden')) closeGodMenu();
     if (!kickMenu.classList.contains('hidden')) paintKickMenu(false);
     const bat = def.id === 'bat' && me.aux > 0, pounce = def.id === 'cat' && me.abT > 0 && def.dur - me.abT > 0.25;
+    if (def.fx !== lastAbFx) { lastAbFx = def.fx; $('abIcon').innerHTML = Chars.icon(def.fx); }
     const label = bat ? 'Recall' : pounce ? 'Pounce' : def.ability;
     if (label !== lastAbLabel) { lastAbLabel = label; $('abName').textContent = label; if (bat || pounce) gsap.fromTo(abBtn, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', clearProps: 'transform' }); }
     const ready = (me.cd <= 0 || bat || pounce || god) && me.stun <= 0;
@@ -1112,8 +1250,8 @@
       if (!e) { e = makeRow(r); rowEls.set(r.id, e); box.appendChild(e); fresh.push(e); }
       const isIt = G.state === STATE.PLAY && !!(r.fl & 1), live = G.state === STATE.PLAY || G.state === STATE.COUNT, outR = live && !!(r.fl & 16), waitR = live && !!(r.fl & 32);
       e.classList.toggle('me', r.id === G.id); e.classList.toggle('it', isIt); e.classList.toggle('out', outR || waitR);
-      const tg = e.querySelector('.tg'), lbl = isIt ? (G.mode === 'potato' ? 'POTATO' : G.mode === 'infection' ? 'ZOMBIE' : 'IT') : waitR ? 'NEXT' : outR ? 'OUT' : '';
-      const tcls = 'tg' + (isIt ? (G.mode === 'potato' ? ' pt' : G.mode === 'infection' ? ' zb' : '') : lbl ? ' gh' : '');
+      const tg = e.querySelector('.tg'), lbl = isIt ? (G.mode === 'potato' ? 'POTATO' : G.mode === 'infection' ? 'ZOMBIE' : G.mode === 'prophunt' ? 'SEEKER' : 'IT') : waitR ? 'NEXT' : outR ? 'OUT' : '';
+      const tcls = 'tg' + (isIt ? (G.mode === 'potato' ? ' pt' : G.mode === 'infection' ? ' zb' : G.mode === 'prophunt' ? ' sk' : '') : lbl ? ' gh' : '');
       if (tg.textContent !== lbl) tg.textContent = lbl; if (tg.className !== tcls) tg.className = tcls; tg.style.display = lbl ? '' : 'none';
       const look = r.c + '|' + r.k + '|' + (r.sk || '') + '|' + (r.h | 0);      // someone changed character in the pick window: new portrait
       if (e.dataset.look !== look) { if (e.dataset.look) e.querySelector('img').src = Chars.avatar(r.c, r.k, 48, r.h, r.sk); e.dataset.look = look; }
@@ -1152,6 +1290,7 @@
     infection: '<rect width="64" height="64" rx="12" fill="#dff7e3"/><g stroke="#14122b" stroke-width="3" stroke-linecap="round"><path d="M32 8v8M32 48v8M8 32h8M48 32h8M15 15l6 6M43 43l6 6M49 15l-6 6M21 43l-6 6"/></g><circle cx="32" cy="32" r="17" fill="#4fcf6a" stroke="#14122b" stroke-width="3.5"/><circle cx="26" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="38" cy="29" r="4" fill="#fff" stroke="#14122b" stroke-width="2"/><circle cx="26.5" cy="29.5" r="1.6" fill="#14122b"/><circle cx="37.5" cy="29.5" r="1.6" fill="#14122b"/><path d="M25 39h14" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M28 39v3M32 39v3M36 39v3" stroke="#14122b" stroke-width="2"/>',
     potato: '<rect width="64" height="64" rx="12" fill="#ffeacc"/><ellipse cx="31" cy="40" rx="20" ry="15" fill="#c98a4b" stroke="#14122b" stroke-width="3.5" transform="rotate(-12 31 40)"/><g fill="#7a4a22" opacity=".6"><circle cx="22" cy="38" r="2.2"/><circle cx="34" cy="45" r="2.2"/><circle cx="40" cy="35" r="2.2"/><circle cx="28" cy="46" r="1.6"/></g><path d="M36 26c4-5 8-5 11-9" fill="none" stroke="#14122b" stroke-width="3" stroke-linecap="round"/><path d="M50 8l2.6 5.4 5.4 2.6-5.4 2.6L50 24l-2.6-5.4-5.4-2.6 5.4-2.6z" fill="#ffd23f" stroke="#14122b" stroke-width="2.2" stroke-linejoin="round"/>',
   };
+  MODE_ICONS.prophunt = '<rect width="64" height="64" rx="12" fill="#d9f3ef"/><rect x="16" y="26" width="32" height="26" rx="3" fill="#d3a35f" stroke="#14122b" stroke-width="3.5"/><path d="M18 28l28 22M46 28L18 50" stroke="#9a6f36" stroke-width="3"/><circle cx="26" cy="20" r="7" fill="#fff" stroke="#14122b" stroke-width="3"/><circle cx="39" cy="20" r="7" fill="#fff" stroke="#14122b" stroke-width="3"/><circle cx="27.5" cy="21" r="2.6" fill="#14122b"/><circle cx="40.5" cy="21" r="2.6" fill="#14122b"/>';
   MODE_ICONS.proximity = '<rect width="64" height="64" rx="12" fill="#e4ecff"/><circle cx="32" cy="32" r="26" fill="none" stroke="#4a7cff" stroke-width="3" stroke-dasharray="3 5"/><circle cx="32" cy="32" r="16" fill="none" stroke="#4a7cff" stroke-width="3.5"/><circle cx="32" cy="32" r="7" fill="#ff4d5e" stroke="#14122b" stroke-width="3"/><circle cx="48" cy="20" r="4.5" fill="#ffd23f" stroke="#14122b" stroke-width="2.5"/>';
   MODE_ICONS.abilityhold = '<rect width="64" height="64" rx="12" fill="#e9e0ff"/><circle cx="32" cy="32" r="20" fill="#ffffff" stroke="#14122b" stroke-width="3.5"/><path d="M32 12a20 20 0 0 1 20 20" fill="none" stroke="#8a5cff" stroke-width="6" stroke-linecap="round"/><text x="32" y="40" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="22" fill="#14122b">\u00d73</text>';
   MODE_ICONS.points = '<rect width="64" height="64" rx="12" fill="#fff3c9"/><circle cx="32" cy="32" r="21" fill="#ffd23f" stroke="#14122b" stroke-width="3.5"/><text x="32" y="40" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="22" fill="#14122b">+10</text>';
@@ -1172,8 +1311,8 @@
     vc.m.forEach((id, i) => { const m = C.MAP_BY_ID[id]; if (!m) return; const b = mk('m', i, m.name, m.blurb || '', i + 1, '', mapThumb(m)); voteBtns.m.push(b); maps.appendChild(b); });
     vc.d.forEach((id, i) => { const m = C.MODE_BY_ID[id]; if (!m) return; const b = mk('d', i, m.name, m.blurb, i + 4, id, modeIcon(id)); voteBtns.d.push(b); modes.appendChild(b); });
     const few = vc.d.length < 2;       // under 7 players: only classic tag, so there is nothing to vote on
-    modes.classList.toggle('hidden', few); $('voteModesLbl').textContent = few ? `Infection & Hot Potato unlock at ${C.MODE_MIN_PLAYERS}+ players` : 'Game mode';
-    $('voteHint').textContent = few ? 'Tap an arena to vote · keys 1-3' : 'Tap to vote · keys 1-3 arena, 4-6 mode';
+    modes.classList.toggle('four', vc.d.length >= 4); modes.classList.toggle('hidden', few); $('voteModesLbl').textContent = few ? `Prop Hunt unlocks at ${C.modeMin('prophunt')}+ players; Infection & Hot Potato at ${C.MODE_MIN_PLAYERS}+` : 'Game mode';
+    $('voteHint').textContent = few ? 'Tap an arena to vote · keys 1-3' : `Tap to vote · keys 1-3 arena, 4-${3 + vc.d.length} mode`;
     const wasHidden = voteEl.classList.contains('hidden');
     voteEl.classList.remove('hidden');
     if (voteTween) voteTween.kill();
@@ -1269,7 +1408,7 @@
     // ranks: equal scores share a rank (1,1,3...), and everyone tied for first shares the win
     res.forEach((x, i) => { x.rank = i && x.s === res[i - 1].s ? res[i - 1].rank : i + 1; });
     const winners = res.filter((x) => x.rank === 1), mine = winners.some((x) => x.r.id === G.id);
-    const md = C.MODE_BY_ID[G.mode]; document.querySelector('.results-card .kicker').textContent = 'Round over' + (md && md.id !== 'classic' ? ' · ' + md.name : '');
+    const md = C.MODE_BY_ID[G.mode]; document.querySelector('.results-card .kicker').textContent = 'Round over' + (md && md.id !== 'classic' ? ' · ' + md.name : '') + (G.phWin === 'h' ? ' · hiders survived' : G.phWin === 's' ? ' · every hider was found' : '');
     const rw = $('resWin'); rw.className = 'res-win hidden'; rw.textContent = '';
     if (mine) {
       if (G.solo) { rw.className = 'res-win guest'; rw.textContent = 'Practice rounds don\u2019t earn wins. Play online to collect them.'; }

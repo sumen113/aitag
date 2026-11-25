@@ -793,3 +793,29 @@ body.dark .chest-art, .dark .chest-art { filter: none; }
 .link-btn { align-self: flex-start; padding: 4px 0; background: none; border: 0; color: var(--blue, var(--ink)); font: 700 14px var(--body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .link-btn:hover, .link-btn:focus-visible { color: var(--red); }
 .link-btn.hidden { display: none; }
+
+/* ---- Prop Hunt ---- */
+#phAct { right: calc(max(18px, env(safe-area-inset-right)) + 126px); bottom: 4px; }
+#phMorph { right: max(30px, env(safe-area-inset-right)); bottom: 132px; }
+#phTaunt { right: calc(max(30px, env(safe-area-inset-right)) + 96px); bottom: 132px; }
+#phAct.ready, #phMorph.ready, #phTaunt.ready { background: var(--yellow); }
+#phAct.on { background: #bfe9ff; box-shadow: 0 0 0 4px rgba(120, 200, 255, .55), 4px 4px 0 var(--ink); }
+#phAct.seek.ready { background: #ff8a9a; }
+@media (max-width: 700px) { #phMorph { bottom: 124px; } #phTaunt { right: calc(max(22px, env(safe-area-inset-right)) + 80px); bottom: 124px; } #phAct { right: calc(max(22px, env(safe-area-inset-right)) + 112px); } }
+.role.seeker { background: var(--red); color: #fff; }
+.role.hider { background: #2fb3a0; color: #fff; }
+.tg.sk { background: #ff4d5e; color: #fff; }
+#propChip { position: absolute; left: 14px; bottom: 150px; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 8px; pointer-events: none; z-index: 5; }
+#propChip.hidden { display: none; }
+#propChip .prop-ico { width: 46px; height: 46px; flex: none; display: grid; place-items: center; background: var(--paper); border: 3px solid var(--ink); border-radius: 12px; }
+#propChip .prop-txt { display: flex; flex-direction: column; line-height: 1.15; }
+#propChip b { font: 800 15px var(--display); }
+#propChip .mono { font-size: 11px; opacity: .75; }
+#blind { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: #05060f; color: #fff; text-align: center; pointer-events: none; }
+#blind.hidden { display: none; }
+#blind b { font: 900 clamp(80px, 22vw, 190px)/1 var(--display); color: #ffd23f; text-shadow: 0 6px 0 rgba(0, 0, 0, .4); }
+#blind span { font: 800 clamp(16px, 3.4vw, 26px) var(--display); opacity: .92; padding: 0 20px; }
+@media (max-width: 700px) { #propChip { bottom: 230px; left: 10px; } }
+
+.vote-row.modes.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 560px) { .vote-row.modes.four { grid-template-columns: minmax(0, 1fr); } }

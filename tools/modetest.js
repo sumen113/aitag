@@ -16,14 +16,14 @@ let clk = Date.now(); Date.now = () => clk;
 const step = (r) => { clk += 1000 / 60; if (!r.idleTest) for (const p of r.players.values()) p.lastActiveAt = clk; r.tick(); };     // test players count as playing unless a test is about idling
 const run = (r, s, stop) => { for (let i = 0; i < s * 60; i++) { step(r); if (stop && stop()) return; } };
 
-// under 7 players there is only classic tag
+// under 7 players only classic tag and Prop Hunt (which needs just 4) are on offer
 let r = mk('vote', 6); r.tick();
-ok(r.state === T.STATE.VOTE && r.vote.modes.join() === 'classic', 'vote has no special modes below 7 players');
+ok(r.state === T.STATE.VOTE && r.vote.modes.join() === 'classic,prophunt', 'vote has no infection/potato below 7 players (Prop Hunt is there from 4)');
 r = mk('potato', 6); run(r, 6, () => r.state === T.STATE.PLAY);
 ok(r.mode === 'classic', 'a fixed Hot Potato server plays classic tag below 7 players');
 // vote: tally decides mode + map, big map only for infection
 r = mk('vote', 7); r.tick();
-ok(r.state === T.STATE.VOTE && r.vote.maps.length === 3 && r.vote.modes.length === 3, 'vote opens with 3 arenas and 3 modes at 7+ players');
+ok(r.state === T.STATE.VOTE && r.vote.maps.length === 3 && r.vote.modes.length === 4, 'vote opens with 3 arenas and 4 modes at 7+ players');
 const ps = [...r.players.values()];
 const pi = r.vote.modes.indexOf('potato'); ps.forEach((p) => { r.castVote(p, 'd', pi); r.castVote(p, 'm', 1); });
 const wantMap = r.vote.maps[1];
@@ -207,8 +207,8 @@ ok(av.cd === 15 && T.CHARS.find((c) => c.id === 'frog').cd === 14, 'avocado rech
 r.queueInputs(av, [[2, 0, 0, 1, 3, 4]]); const q = av.queue[av.queue.length - 1]; ok(Math.abs(q.ax - 0.6) < 0.011 && Math.abs(q.ay - 0.8) < 0.011, 'server normalises the aim vector');
 r.queueInputs(av, [[3, 0, 0, 1, 'x', null]]); ok(av.queue[av.queue.length - 1].ax === undefined, 'junk aim is ignored');
 
-// ---- arenas: nine of them, each playable, and the floor mechanics push the way they should
-ok(T.MAPS.length === 8 && T.BIG_MAPS.length === 1 && T.MAPS.concat(T.BIG_MAPS).every((m) => T.MAP_BY_ID[m.id] === m), '9 arenas in total (8 regular + Outbreak)');
+// ---- arenas: ten of them, each playable, and the floor mechanics push the way they should
+ok(T.MAPS.length === 8 && T.BIG_MAPS.length === 2 && T.MAPS.concat(T.BIG_MAPS).every((m) => T.MAP_BY_ID[m.id] === m), '10 arenas in total (8 regular + Outbreak + Storehouse)');
 const sim = (map, x, y, secs, inp) => {
   const p = T.newSim(1, 0, x, y), ctx = { map, goos: [], itBoost: 1 };
   for (let i = 0; i < secs * 60; i++) T.stepPlayer(p, Object.assign({ s: i, x: 0, y: 0, a: 0 }, inp), ctx, null);
@@ -226,7 +226,7 @@ const pin = T.MAP_BY_ID.pinball, bz = pin.zones.find((z) => z.k === 'bump');
 qq = sim(pin, bz.x + 40, bz.y, 0.5);
 ok(Math.hypot(qq.x - bz.x, qq.y - bz.y) > Math.hypot(40, 0), 'a bumper kicks a player outwards');
 for (const m of T.MAPS.concat(T.BIG_MAPS)) {
-  const r2 = new Room('m' + m.id, { kind: 'custom', name: 't', max: 8, mode: m.big ? 'infection' : 'classic', roundTime: 120, bots: 3, map: m.id, mapMode: m.id });
+  const r2 = new Room('m' + m.id, { kind: 'custom', name: 't', max: 8, mode: m.id === 'storehouse' ? 'prophunt' : m.big ? 'infection' : 'classic', roundTime: 120, bots: 3, map: m.id, mapMode: m.id });
   for (let i = 0; i < 5; i++) r2.addHuman({ readyState: 1, send() {}, rtt: 0 }, 'P' + i, 0, 0, 0, 0);
   for (let i = 0; i < 60 * 14; i++) r2.tick();
   const bad = [...r2.players.values()].filter((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < -50 || p.y < -50 || p.x > m.w + 50 || p.y > m.h + 50);
